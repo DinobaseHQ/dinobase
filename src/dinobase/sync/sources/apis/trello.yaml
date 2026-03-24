@@ -1,0 +1,502 @@
+name: trello
+description: "Trello project management (boards, lists, cards, members, labels, checklists, actions)"
+
+# ── Credentials ────────────────────────────────────────────────────────────────
+# Trello uses two query parameters for every request (not headers):
+#   key   = 32-character API key from https://trello.com/power-ups/admin
+#   token = OAuth token generated from the same page
+#
+# Both are required on every call; the client injects `key` via the api_key auth
+# type (location: query) and `token` is passed as a default resource param so
+# that every endpoint receives it automatically.
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: TRELLO_API_KEY
+    prompt: "Trello API key (32-char hex; from https://trello.com/power-ups/admin)"
+    secret: true
+
+  - name: token
+    flag: "--token"
+    env: TRELLO_TOKEN
+    prompt: "Trello API token (OAuth token from https://trello.com/power-ups/admin)"
+    secret: true
+
+# ── Client ─────────────────────────────────────────────────────────────────────
+client:
+  base_url: "https://api.trello.com/1/"
+
+  # Trello authenticates via query parameters, not headers.
+  # `key` is injected as a query param by the api_key auth type.
+  # `token` is injected via resource_defaults.endpoint.params (see below)
+  # because dlt's api_key auth only supports a single credential param.
+  auth:
+    type: api_key
+    name: key
+    api_key: "{api_key}"
+    location: query
+
+  # Trello uses ID-cursor pagination on action/activity endpoints (before/since).
+  # For list resources (boards, lists, cards, etc.) the API returns the full set
+  # for the given board in one call (no page tokens needed). Those resources set
+  # paginator: none individually.
+  #
+  # The global paginator here covers the actions resource, which is the only
+  # resource that genuinely needs cursor-based navigation. Actions are ordered
+  # newest-first; to walk backward through history supply `before=<oldest_id>`.
+  # Trello's cursor page cursor lives in the last item's `id` field; there is no
+  # explicit next-page token in the response envelope.
+  #
+  # Maximum limit per request: 1000 (Trello hard cap).
+  paginator:
+    type: cursor
+    cursor_path: "[-1].id"     # id of the last action in the current page
+    cursor_param: "before"     # pass it as ?before=<id> to fetch the next page
+
+# ── Resource Defaults ──────────────────────────────────────────────────────────
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    params:
+      # Inject the Trello OAuth token as a query param on every request.
+      # This complements the `key` param injected by the auth block above.
+      token: "{token}"
+
+# ── Resources (Read Endpoints) ─────────────────────────────────────────────────
+resources:
+
+  # ── Boards ──────────────────────────────────────────────────────────────────
+  # GET /members/me/boards
+  # Returns all boards visible to the authenticated user.
+  # Response: JSON array of Board objects (no envelope key).
+  # No pagination: all boards are returned in a single call.
+  # filter=all returns open and closed boards.
+  - name: boards
+    endpoint:
+      path: "members/me/boards"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        filter: "all"
+        fields: "id,name,desc,closed,idOrganization,url,shortUrl,prefs,labelNames,starred,pinned,dateLastActivity"
+
+  # ── Lists ───────────────────────────────────────────────────────────────────
+  # GET /boards/{id}/lists
+  # Returns all lists on a board (Trello list = column on the board).
+  # Response: JSON array of List objects (no envelope key).
+  # Requires board_id from the boards resource.
+  # filter=all returns open and archived lists.
+  - name: lists
+    endpoint:
+      path: "boards/{id}/lists"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        filter: "all"
+        fields: "id,name,closed,idBoard,pos,subscribed"
+    parent:
+      resource: boards
+      field: id
+      param: id
+
+  # ── Cards ───────────────────────────────────────────────────────────────────
+  # GET /boards/{id}/cards
+  # Returns all cards on a board (open and archived).
+  # Response: JSON array of Card objects (no envelope key).
+  # filter=all includes both open and closed/archived cards.
+  # Incremental sync: Trello exposes dateLastActivity on each card; use it to
+  # detect changes. The `since` param filters cards by last-activity date.
+  # Note: `since` on /boards/{id}/cards filters by dateLastActivity >= since.
+  - name: cards
+    endpoint:
+      path: "boards/{id}/cards"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        filter: "all"
+        fields: "id,name,desc,closed,idBoard,idList,idMembers,idLabels,idChecklists,pos,due,dueComplete,dueReminder,dateLastActivity,url,shortUrl,shortLink,badges,cover,manualCoverAttachment,subscribed,creationMethod"
+    parent:
+      resource: boards
+      field: id
+      param: id
+    incremental:
+      cursor_path: dateLastActivity
+      param: since
+      initial_value: "1970-01-01T00:00:00.000Z"
+
+  # ── Members ─────────────────────────────────────────────────────────────────
+  # GET /boards/{id}/members
+  # Returns all members who have access to the board.
+  # Response: JSON array of Member objects (no envelope key).
+  # No pagination needed; board membership lists are small.
+  - name: members
+    endpoint:
+      path: "boards/{id}/members"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        fields: "id,username,fullName,initials,avatarUrl,activityBlocked,idMemberReferrer"
+    parent:
+      resource: boards
+      field: id
+      param: id
+
+  # ── Labels ──────────────────────────────────────────────────────────────────
+  # GET /boards/{id}/labels
+  # Returns all label definitions for a board.
+  # Response: JSON array of Label objects (no envelope key).
+  # Labels are a small fixed set per board (at most ~20); no pagination required.
+  # limit=1000 prevents the API default of 50 from truncating custom labels.
+  - name: labels
+    endpoint:
+      path: "boards/{id}/labels"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        fields: "id,name,color,idBoard"
+        limit: 1000
+    parent:
+      resource: boards
+      field: id
+      param: id
+
+  # ── Checklists ──────────────────────────────────────────────────────────────
+  # GET /boards/{id}/checklists
+  # Returns all checklists on a board across all cards.
+  # Response: JSON array of Checklist objects (no envelope key).
+  # checkItems=all returns all check items regardless of state (complete/incomplete).
+  # No pagination; checklists for a board fit in a single response.
+  - name: checklists
+    endpoint:
+      path: "boards/{id}/checklists"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        fields: "id,name,idCard,idBoard,pos"
+        checkItems: "all"
+        checkItem_fields: "id,name,state,pos,due,idMember"
+    parent:
+      resource: boards
+      field: id
+      param: id
+
+  # ── Actions ─────────────────────────────────────────────────────────────────
+  # GET /boards/{id}/actions
+  # Returns the board's activity log (card moves, comments, member changes, etc.)
+  # Response: JSON array of Action objects ordered newest-first (no envelope key).
+  #
+  # Pagination: Trello uses ID-cursor pagination on action endpoints.
+  #   - First request: no `before` param → returns the N most recent actions.
+  #   - Subsequent pages: pass `before=<id of last action from previous page>` to
+  #     fetch actions older than that ID.
+  #   - Stop when fewer than `limit` actions are returned (last page).
+  # Maximum limit: 1000 per request.
+  #
+  # Incremental sync: the `since` param accepts an action ID or ISO 8601 datetime.
+  # We use dateLastActivity on the action's `date` field as the cursor. Passing
+  # `since=<ISO datetime>` returns only actions newer than that timestamp.
+  # This means full history is fetched on first run (initial_value = epoch) and
+  # only new actions are fetched on subsequent runs.
+  #
+  # filter=all returns every action type. Narrow with a comma-separated list if
+  # only specific action types are needed (e.g. "commentCard,createCard").
+  - name: actions
+    endpoint:
+      path: "boards/{id}/actions"
+      data_selector: "$"
+      # Actions use cursor pagination (before=<last_id>); global paginator applies.
+      params:
+        filter: "all"
+        fields: "id,idMemberCreator,data,type,date,memberCreator"
+        limit: 1000
+    parent:
+      resource: boards
+      field: id
+      param: id
+    incremental:
+      cursor_path: date
+      param: since
+      initial_value: "1970-01-01T00:00:00.000Z"
+
+# ── Write Endpoints ────────────────────────────────────────────────────────────
+# Trello write endpoints also require key + token as query params. The auth
+# block injects `key`; callers must append `?token=<token>` or set it as a
+# default param in the request builder.
+#
+# All bodies are sent as JSON (Content-Type: application/json).
+write_endpoints:
+
+  # ── Cards ──────────────────────────────────────────────────────────────────
+
+  # POST /cards
+  # Create a new card. idList (the target list ID) is required.
+  # Optional: name, desc, pos (top/bottom/float), due (ISO 8601), dueReminder,
+  #   dueComplete, idMembers (array), idLabels (array), urlSource.
+  - name: create_card
+    description: "Create a new card. idList is required. Optional: name, desc, pos, due, dueReminder, dueComplete, idMembers, idLabels."
+    method: POST
+    path: "cards"
+    body:
+      required:
+        - idList
+      optional:
+        - name
+        - desc
+        - pos
+        - due
+        - dueReminder
+        - dueComplete
+        - idMembers
+        - idLabels
+        - urlSource
+
+  # PUT /cards/{id}
+  # Update an existing card. All fields are optional.
+  - name: update_card
+    description: "Update an existing card by ID. All fields are optional: name, desc, closed, idList, pos, due, dueReminder, dueComplete, idMembers, idLabels, address, locationName, coordinates."
+    method: PUT
+    path: "cards/{id}"
+    body:
+      optional:
+        - name
+        - desc
+        - closed
+        - idList
+        - pos
+        - due
+        - dueReminder
+        - dueComplete
+        - idMembers
+        - idLabels
+        - address
+        - locationName
+        - coordinates
+
+  # DELETE /cards/{id}
+  # Permanently delete a card. This cannot be undone.
+  - name: delete_card
+    description: "Permanently delete a card by ID. This action is irreversible."
+    method: DELETE
+    path: "cards/{id}"
+
+  # POST /cards/{id}/actions/comments
+  # Add a comment to a card. text is required.
+  - name: add_card_comment
+    description: "Add a comment to a card. text (the comment body) is required."
+    method: POST
+    path: "cards/{id}/actions/comments"
+    body:
+      required:
+        - text
+
+  # DELETE /cards/{id}/actions/{actionId}/comments
+  # Delete a comment from a card.
+  - name: delete_card_comment
+    description: "Delete a comment from a card. Requires card id and actionId."
+    method: DELETE
+    path: "cards/{id}/actions/{actionId}/comments"
+
+  # ── Lists ──────────────────────────────────────────────────────────────────
+
+  # POST /lists
+  # Create a new list on a board. idBoard and name are required.
+  # pos: position (top, bottom, or a positive number).
+  - name: create_list
+    description: "Create a new list on a board. idBoard and name are required. Optional: pos (top/bottom/float)."
+    method: POST
+    path: "lists"
+    body:
+      required:
+        - idBoard
+        - name
+      optional:
+        - pos
+
+  # PUT /lists/{id}
+  # Update an existing list.
+  - name: update_list
+    description: "Update a list by ID. Optional: name, closed (archive/unarchive), pos, subscribed."
+    method: PUT
+    path: "lists/{id}"
+    body:
+      optional:
+        - name
+        - closed
+        - pos
+        - subscribed
+
+  # PUT /lists/{id}/closed
+  # Archive or unarchive a list (value=true to archive, value=false to unarchive).
+  - name: archive_list
+    description: "Archive or unarchive a list. value=true archives, value=false unarchives."
+    method: PUT
+    path: "lists/{id}/closed"
+    body:
+      required:
+        - value    # boolean: true = archive, false = unarchive
+
+  # ── Boards ────────────────────────────────────────────────────────────────
+
+  # POST /boards
+  # Create a new board. name is required.
+  # defaultLists: create the default To Do/Doing/Done lists (true by default).
+  - name: create_board
+    description: "Create a new board. name is required. Optional: desc, idOrganization, defaultLists (bool), prefs_permissionLevel, prefs_voting, prefs_comments, prefs_background."
+    method: POST
+    path: "boards"
+    body:
+      required:
+        - name
+      optional:
+        - desc
+        - idOrganization
+        - defaultLists
+        - prefs_permissionLevel
+        - prefs_voting
+        - prefs_comments
+        - prefs_background
+
+  # PUT /boards/{id}
+  # Update an existing board.
+  - name: update_board
+    description: "Update a board by ID. Optional: name, desc, closed, prefs/permissionLevel, prefs/voting, prefs/comments, prefs/background, labelNames/green etc."
+    method: PUT
+    path: "boards/{id}"
+    body:
+      optional:
+        - name
+        - desc
+        - closed
+        - subscribed
+        - prefs/permissionLevel
+        - prefs/voting
+        - prefs/comments
+        - prefs/background
+        - prefs/cardAging
+        - prefs/calendarFeedEnabled
+        - labelNames/green
+        - labelNames/yellow
+        - labelNames/orange
+        - labelNames/red
+        - labelNames/purple
+        - labelNames/blue
+
+  # DELETE /boards/{id}
+  # Permanently delete a board and all its lists and cards.
+  - name: delete_board
+    description: "Permanently delete a board and all its contents. This action is irreversible."
+    method: DELETE
+    path: "boards/{id}"
+
+  # ── Labels ────────────────────────────────────────────────────────────────
+
+  # POST /labels
+  # Create a new label on a board. idBoard, name (may be empty), and color are required.
+  # Valid colors: yellow, purple, blue, red, green, orange, black, sky, pink, lime, null.
+  - name: create_label
+    description: "Create a new label on a board. idBoard and color are required. name may be empty. Valid colors: yellow, purple, blue, red, green, orange, black, sky, pink, lime, null."
+    method: POST
+    path: "labels"
+    body:
+      required:
+        - idBoard
+        - color
+      optional:
+        - name
+
+  # PUT /labels/{id}
+  # Update an existing label.
+  - name: update_label
+    description: "Update a label by ID. Optional: name, color."
+    method: PUT
+    path: "labels/{id}"
+    body:
+      optional:
+        - name
+        - color
+
+  # DELETE /labels/{id}
+  # Delete a label from a board. Removes it from all cards.
+  - name: delete_label
+    description: "Delete a label by ID. Removes it from all cards that have it."
+    method: DELETE
+    path: "labels/{id}"
+
+  # ── Checklists ────────────────────────────────────────────────────────────
+
+  # POST /checklists
+  # Create a new checklist on a card.
+  - name: create_checklist
+    description: "Create a new checklist on a card. idCard is required. Optional: name, pos, idChecklistSource (copy from another checklist)."
+    method: POST
+    path: "checklists"
+    body:
+      required:
+        - idCard
+      optional:
+        - name
+        - pos
+        - idChecklistSource
+
+  # PUT /checklists/{id}
+  # Update a checklist's name or position.
+  - name: update_checklist
+    description: "Update a checklist by ID. Optional: name, pos."
+    method: PUT
+    path: "checklists/{id}"
+    body:
+      optional:
+        - name
+        - pos
+
+  # DELETE /checklists/{id}
+  # Delete a checklist from a card.
+  - name: delete_checklist
+    description: "Delete a checklist by ID. Removes it and all its items from the card."
+    method: DELETE
+    path: "checklists/{id}"
+
+  # POST /checklists/{id}/checkItems
+  # Add a check item to a checklist.
+  - name: create_check_item
+    description: "Add a check item to a checklist. name is required. Optional: pos, checked, due, dueReminder, idMember."
+    method: POST
+    path: "checklists/{id}/checkItems"
+    body:
+      required:
+        - name
+      optional:
+        - pos
+        - checked
+        - due
+        - dueReminder
+        - idMember
+
+  # PUT /cards/{idCard}/checkItem/{idCheckItem}
+  # Update a check item on a card (change state, name, position, etc.).
+  - name: update_check_item
+    description: "Update a check item on a card. idCard and idCheckItem are path params. Optional: name, state (incomplete/complete), pos, due, dueReminder, idMember."
+    method: PUT
+    path: "cards/{idCard}/checkItem/{idCheckItem}"
+    body:
+      optional:
+        - name
+        - state    # "incomplete" or "complete"
+        - pos
+        - due
+        - dueReminder
+        - idMember
+
+  # DELETE /checklists/{id}/checkItems/{idCheckItem}
+  # Delete a check item from a checklist.
+  - name: delete_check_item
+    description: "Delete a check item from a checklist. Requires checklist id and idCheckItem."
+    method: DELETE
+    path: "checklists/{id}/checkItems/{idCheckItem}"

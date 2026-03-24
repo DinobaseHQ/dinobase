@@ -1,0 +1,161 @@
+name: recurly
+description: "Recurly billing (accounts, subscriptions, invoices, plans, items, transactions, credit_payments, coupons)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: RECURLY_API_KEY
+    prompt: "Recurly API key"
+    secret: true
+
+client:
+  base_url: "https://v3.recurly.com/"
+  # Recurly v3 uses HTTP Basic auth with the API key as the password and an empty username.
+  # The Authorization header is: Basic base64("<api_key>:")
+  auth:
+    type: http_basic
+    password: "{api_key}"
+    username: ""
+  # Required to pin the response schema to the 2021-02-25 API version.
+  headers:
+    Accept: "application/vnd.recurly.v2021-02-25+json"
+  # Recurly list responses return {"object":"list","has_more":bool,"next":"<full URL>","data":[...]}.
+  # The "next" field is a full absolute URL to the next page; absent or null when has_more is false.
+  paginator:
+    type: json_link
+    next_url_path: "next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # All Recurly v3 list responses wrap records in the "data" array.
+    data_selector: "data"
+    params:
+      # Maximum records per page (Recurly cap is 200).
+      limit: 200
+
+resources:
+
+  # ── Accounts ──────────────────────────────────────────────────────────────────
+  # GET /accounts — cursor-paginated list of all accounts.
+  # Supports begin_time (ISO 8601) to filter records updated on or after the given time.
+  # sort defaults to "created_at"; use "updated_at" with order=asc for incremental.
+  - name: accounts
+    endpoint:
+      path: "accounts"
+      params:
+        sort: "updated_at"
+        order: "asc"
+        begin_time: "{incremental.start_value}"
+    incremental:
+      cursor_path: "updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Subscriptions ──────────────────────────────────────────────────────────────
+  # GET /subscriptions — cursor-paginated list of all subscriptions across all accounts.
+  # begin_time filters by updated_at when sort=updated_at.
+  - name: subscriptions
+    endpoint:
+      path: "subscriptions"
+      params:
+        sort: "updated_at"
+        order: "asc"
+        begin_time: "{incremental.start_value}"
+    incremental:
+      cursor_path: "updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Invoices ───────────────────────────────────────────────────────────────────
+  # GET /invoices — all invoices (charges and credits) across all accounts.
+  # No incremental filter applied; full merge sync via primary key.
+  - name: invoices
+    endpoint:
+      path: "invoices"
+
+  # ── Plans ─────────────────────────────────────────────────────────────────────
+  # GET /plans — all billing plans defined in the site.
+  # Small, slowly-changing catalog; full merge sync is appropriate.
+  - name: plans
+    endpoint:
+      path: "plans"
+
+  # ── Items ─────────────────────────────────────────────────────────────────────
+  # GET /items — all items (catalog items for line-item charges).
+  # Small catalog; full merge sync via id primary key.
+  - name: items
+    endpoint:
+      path: "items"
+
+  # ── Transactions ──────────────────────────────────────────────────────────────
+  # GET /transactions — all payment transactions across all accounts.
+  # Supports begin_time/end_time and sort. Full merge sync here;
+  # transactions are immutable once settled.
+  - name: transactions
+    endpoint:
+      path: "transactions"
+
+  # ── Credit Payments ───────────────────────────────────────────────────────────
+  # GET /credit_payments — credits applied to account balances.
+  # Full merge sync; records are append-only once created.
+  - name: credit_payments
+    endpoint:
+      path: "credit_payments"
+
+  # ── Coupons ───────────────────────────────────────────────────────────────────
+  # GET /coupons — all coupon definitions (discount codes).
+  # Small, slowly-changing catalog; full merge sync via id primary key.
+  - name: coupons
+    endpoint:
+      path: "coupons"
+
+write_endpoints:
+
+  # ── Accounts ──────────────────────────────────────────────────────────────────
+
+  - name: create_account
+    description: "Create a new account. code (unique identifier) is required."
+    method: POST
+    path: "accounts"
+
+  - name: update_account
+    description: "Update an existing account by account_id or account code."
+    method: PUT
+    path: "accounts/{account_id}"
+
+  - name: deactivate_account
+    description: "Deactivate (soft-delete) an account. Cancels active subscriptions."
+    method: DELETE
+    path: "accounts/{account_id}"
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+
+  - name: create_subscription
+    description: "Create a new subscription for an account. account and plan_code are required."
+    method: POST
+    path: "subscriptions"
+
+  - name: update_subscription
+    description: "Update a subscription's plan, quantity, add-ons, or custom fields."
+    method: PUT
+    path: "subscriptions/{subscription_id}"
+
+  - name: cancel_subscription
+    description: "Cancel a subscription. It will expire at the end of the current billing period by default."
+    method: DELETE
+    path: "subscriptions/{subscription_id}"
+
+  - name: reactivate_subscription
+    description: "Reactivate a canceled subscription before it expires."
+    method: PUT
+    path: "subscriptions/{subscription_id}/reactivate"
+
+  - name: pause_subscription
+    description: "Pause a subscription at the next renewal. Pass remaining_pause_cycles in the body."
+    method: PUT
+    path: "subscriptions/{subscription_id}/pause"
+
+  - name: resume_subscription
+    description: "Resume a paused subscription immediately."
+    method: PUT
+    path: "subscriptions/{subscription_id}/resume"

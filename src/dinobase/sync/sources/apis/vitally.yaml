@@ -1,0 +1,234 @@
+name: vitally
+description: "Vitally customer success platform (accounts, users, nps_responses, conversations, tasks, notes, custom_objects, organizations)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: VITALLY_API_KEY
+    prompt: "Vitally API key (Settings → Integrations → REST API)"
+    secret: true
+  - name: subdomain
+    flag: "--subdomain"
+    env: VITALLY_SUBDOMAIN
+    prompt: "Vitally subdomain (e.g. 'mycompany' from mycompany.vitally.io)"
+    secret: false
+
+client:
+  # US base URL: https://{subdomain}.rest.vitally.io/
+  # EU base URL: https://rest.vitally-eu.io/ (omit subdomain credential and change base_url)
+  base_url: "https://{subdomain}.rest.vitally.io/"
+  # Vitally uses HTTP Basic authentication: API key as username, empty string as password.
+  # The Authorization header is: Basic base64({api_key}:)
+  # Despite some docs using the term "Bearer", the actual scheme is HTTP Basic.
+  auth:
+    type: http_basic
+    username: "{api_key}"
+    password: ""
+  # Vitally uses cursor-based pagination on all list endpoints.
+  # Responses include a top-level "results" array and a "next" cursor string.
+  # Pass "next" as the "from" query parameter on the next request.
+  # When "next" is null the current page is the last one.
+  paginator:
+    type: cursor
+    cursor_path: "next"
+    cursor_param: "from"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # All Vitally list responses wrap records in a top-level "results" array.
+    data_selector: "results"
+    params:
+      limit: 100
+
+resources:
+
+  # ── Organizations ────────────────────────────────────────────────────────────
+  # GET /resources/organizations
+  # Returns all organizations (top-level account groupings). Cursor paginated.
+  # Response field: "results"
+  - name: organizations
+    endpoint:
+      path: "resources/organizations"
+
+  # ── Accounts ────────────────────────────────────────────────────────────────
+  # GET /resources/accounts
+  # Returns all accounts. Cursor paginated, sorted by updatedAt by default.
+  # Supports ?status=active (default) | churned | activeOrChurned.
+  # Response field: "results"
+  - name: accounts
+    endpoint:
+      path: "resources/accounts"
+      params:
+        status: "activeOrChurned"
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  # GET /resources/users
+  # Returns all users across all accounts. Cursor paginated.
+  # Response field: "results"
+  - name: users
+    endpoint:
+      path: "resources/users"
+
+  # ── Conversations ────────────────────────────────────────────────────────────
+  # GET /resources/conversations
+  # Returns all conversations (historical records; does not include messages inline).
+  # Cursor paginated, sorted by updatedAt by default.
+  # Response field: "results"
+  # Note: GET /resources/conversations/:id includes full message array.
+  - name: conversations
+    endpoint:
+      path: "resources/conversations"
+
+  # ── Tasks ────────────────────────────────────────────────────────────────────
+  # GET /resources/tasks
+  # Returns all tasks. Cursor paginated, sorted by updatedAt by default.
+  # Optional filter: ?archived=true to include archived/deleted tasks.
+  # Response field: "results"
+  - name: tasks
+    endpoint:
+      path: "resources/tasks"
+      params:
+        archived: false
+
+  # ── Notes ────────────────────────────────────────────────────────────────────
+  # GET /resources/notes
+  # Returns all notes. Cursor paginated, sorted by updatedAt by default.
+  # Optional filter: ?archived=true to include archived/deleted notes.
+  # Response field: "results"
+  - name: notes
+    endpoint:
+      path: "resources/notes"
+      params:
+        archived: false
+
+  # ── NPS Responses ────────────────────────────────────────────────────────────
+  # GET /resources/npsResponses
+  # Returns NPS survey responses. Cursor paginated.
+  # ?target=accounts (default) | organization
+  # Response field: "results"
+  - name: nps_responses
+    endpoint:
+      path: "resources/npsResponses"
+
+  # ── Custom Objects ────────────────────────────────────────────────────────────
+  # GET /resources/customObjects
+  # Returns custom object type definitions (schema/metadata, not instances).
+  # Cursor paginated.
+  # Response field: "results"
+  - name: custom_objects
+    endpoint:
+      path: "resources/customObjects"
+
+write_endpoints:
+
+  # ── Accounts ──────────────────────────────────────────────────────────────────
+
+  # Create a new account.
+  # POST /resources/accounts
+  # Required: externalId (string), name (string)
+  # Optional: organizationId (string), traits (object)
+  - name: create_account
+    description: "Create a new account. externalId and name are required."
+    method: POST
+    path: "resources/accounts"
+
+  # Update an existing account by Vitally ID or externalId.
+  # PUT /resources/accounts/:id
+  # Optional: name (string), traits (object — merged; set key to null to remove), organizationId (string)
+  - name: update_account
+    description: "Update an existing account by Vitally ID or externalId."
+    method: PUT
+    path: "resources/accounts/{id}"
+
+  # Delete an account permanently.
+  # DELETE /resources/accounts/:id
+  # Warning: permanently destroys the record and all associated data in Vitally.
+  - name: delete_account
+    description: "Permanently delete an account and all its associated data."
+    method: DELETE
+    path: "resources/accounts/{id}"
+
+  # ── Users ─────────────────────────────────────────────────────────────────────
+
+  # Create a new user.
+  # POST /resources/users
+  # Required: externalId (string), accountIds OR organizationIds (array<string>)
+  # Optional: name, email, avatar, traits, joinDate, unsubscribedFromConversations
+  - name: create_user
+    description: "Create a new user. externalId and accountIds (or organizationIds) are required."
+    method: POST
+    path: "resources/users"
+
+  # Update an existing user by Vitally ID or externalId.
+  # PUT /resources/users/:id
+  # Optional: accountIds, organizationIds, name, email, avatar, traits, joinDate, unsubscribedFromConversations
+  - name: update_user
+    description: "Update an existing user by Vitally ID or externalId."
+    method: PUT
+    path: "resources/users/{id}"
+
+  # Delete a user by Vitally ID or externalId.
+  # DELETE /resources/users/:id
+  # Optional query param: deleteOn (timestamp for scheduled deletion)
+  - name: delete_user
+    description: "Delete a user by Vitally ID or externalId. Use deleteOn query param to schedule deletion."
+    method: DELETE
+    path: "resources/users/{id}"
+
+  # ── Notes ─────────────────────────────────────────────────────────────────────
+
+  # Create a new note.
+  # POST /resources/notes
+  # Required: accountId OR organizationId (string), note (string, HTML supported), noteDate (ISO 8601)
+  # Optional: externalId, subject, authorId, categoryId, tags (array), traits (object)
+  - name: create_note
+    description: "Create a note on an account or organization. accountId (or organizationId), note body, and noteDate are required."
+    method: POST
+    path: "resources/notes"
+
+  # Update an existing note by Vitally ID or externalId.
+  # PUT /resources/notes/:id
+  # All fields from create are optional on update. Include full tags array to preserve existing tags.
+  - name: update_note
+    description: "Update an existing note by Vitally ID or externalId."
+    method: PUT
+    path: "resources/notes/{id}"
+
+  # Delete a note by Vitally ID.
+  # DELETE /resources/notes/:id
+  # Sets archivedAt on the record.
+  - name: delete_note
+    description: "Delete (archive) a note by Vitally ID."
+    method: DELETE
+    path: "resources/notes/{id}"
+
+  # ── Tasks ─────────────────────────────────────────────────────────────────────
+
+  # Create a new task.
+  # POST /resources/tasks
+  # Required: name (string), accountId (string) OR organizationId (string)
+  # Optional: externalId, description (HTML), assignedToId, completedById, dueDate,
+  #           completedAt, categoryId, tags (array), traits (object)
+  - name: create_task
+    description: "Create a task linked to an account or organization. name and accountId (or organizationId) are required."
+    method: POST
+    path: "resources/tasks"
+
+  # Update an existing task by Vitally ID or externalId.
+  # PUT /resources/tasks/:id
+  # Optional query param: source (required when using externalId as :id)
+  # All create fields are optional on update.
+  - name: update_task
+    description: "Update an existing task by Vitally ID or externalId."
+    method: PUT
+    path: "resources/tasks/{id}"
+
+  # Delete a task by Vitally ID.
+  # DELETE /resources/tasks/:id
+  # Only accepts Vitally-generated IDs (not externalId).
+  - name: delete_task
+    description: "Permanently delete a task by Vitally-assigned ID."
+    method: DELETE
+    path: "resources/tasks/{id}"

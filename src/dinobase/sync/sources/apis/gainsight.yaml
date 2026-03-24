@@ -1,0 +1,310 @@
+name: gainsight
+description: >
+  Gainsight NXT Customer Success platform — companies, relationships, call-to-actions (CTAs),
+  success plans, users, custom objects, surveys, health scores, timeline activities, and
+  renewal opportunities. Covers the Company/Relationship Object API (v1), Cockpit API (v2),
+  Success Plan API (v2), User Management API (v1), and Custom Object API (v1).
+
+# Generate your Access Key in Gainsight:
+#   Administration → Connectors 2.0 → Gainsight API connector → Authentication: Access_Key
+#   Only one Access Key can exist per organization; it does not expire.
+# Your domain is the hostname of your Gainsight tenant, e.g. "acme.gainsightcloud.com".
+credentials:
+  - name: access_key
+    flag: "--access-key"
+    env: GAINSIGHT_ACCESS_KEY
+    prompt: "Gainsight Access Key (from Connectors 2.0)"
+    secret: true
+  - name: domain
+    flag: "--domain"
+    env: GAINSIGHT_DOMAIN
+    prompt: "Gainsight tenant domain (e.g. acme.gainsightcloud.com)"
+    secret: false
+
+client:
+  # All Gainsight REST API calls go to the tenant's own domain.
+  # The domain credential replaces the hostname in every request.
+  base_url: "https://{domain}/"
+  auth:
+    # Gainsight uses a plain header named "Accesskey" (capital A, lowercase key).
+    # This is confirmed in the Company, Relationship, CTA, Success Plan, User, and
+    # Custom Object API docs.  The key does not expire.
+    type: custom_header
+    header_name: "Accesskey"
+    header_value: "{access_key}"
+  # Gainsight list/query endpoints are POST-based and accept pageSize + pageNumber
+  # (Cockpit/Success Plan/User APIs) or limit + offset (Object/Custom Object APIs).
+  # There is no cursor or link-header mechanism. The paginator here covers the
+  # POST-based "fetch" endpoints; per-resource overrides handle the offset variant.
+  paginator:
+    type: page_number
+    page_param: "pageNumber"
+    page_size_param: "pageSize"
+    page_size: 100
+    # Gainsight returns { result: true, data: { records/users/..., count } }.
+    # Pagination stops when the returned record count is less than pageSize.
+
+resource_defaults:
+  primary_key: Gsid
+  write_disposition: merge
+  endpoint:
+    # Gainsight query endpoints use POST with a JSON body.
+    method: POST
+    # List responses always wrap the array under data.records.
+    # Endpoints that differ (e.g. users list → data.users) override this below.
+    data_selector: "data.records"
+
+resources:
+  # ── Companies ──────────────────────────────────────────────────────────────
+  # POST /v1/data/objects/query/Company
+  # Read/query company records.  Max 5000 per call; uses offset-based pagination.
+  # Request body: { select, where, orderBy, limit, offset }
+  # Response: { result, data: { records: [...], count } }
+  # Rate limits: 100 req/min, 50 000 req/day.
+  - name: companies
+    endpoint:
+      path: "v1/data/objects/query/Company"
+      data_selector: "data.records"
+      paginator:
+        # Object API uses limit+offset, not pageNumber.
+        # Offset advances by <limit> on each page; stop when count < limit.
+        type: offset
+        limit: 1000
+        limit_param: "limit"
+        offset_param: "offset"
+      # Pass select/where/orderBy via the POST body.
+      # An empty body returns all fields and all records.
+      body:
+        select: []
+        orderBy:
+          ModifiedDate: "desc"
+
+  # ── Relationships ──────────────────────────────────────────────────────────
+  # POST /v1/data/objects/query/relationship
+  # Returns all relationship records across all relationship types.
+  # Max 5000 per call; offset-based pagination.
+  # Response: { result, data: { records: [...], count } }
+  - name: relationships
+    endpoint:
+      path: "v1/data/objects/query/relationship"
+      data_selector: "data.records"
+      paginator:
+        type: offset
+        limit: 1000
+        limit_param: "limit"
+        offset_param: "offset"
+      body:
+        select: []
+        orderBy:
+          ModifiedDate: "desc"
+
+  # ── Call-to-Actions (CTAs) ─────────────────────────────────────────────────
+  # POST /v2/cockpit/cta/list
+  # Returns CTA records with optional field selection and filtering.
+  # Pagination via pageSize + pageNumber in the request body.
+  # Max 1000 per page.
+  # Response: { result, data: [...] }  — data is a direct array here, not wrapped.
+  # Note: The CTA list endpoint returns data as a root array (not data.records).
+  - name: ctas
+    endpoint:
+      path: "v2/cockpit/cta/list"
+      data_selector: "data"
+      body:
+        select: []
+        pageSize: 100
+        pageNumber: 1
+
+  # ── Success Plans ──────────────────────────────────────────────────────────
+  # POST /v2/successPlan/list/
+  # Returns success plan records.  Max 1000 per request.
+  # Pagination via pageSize + pageNumber in the request body.
+  # Response: { result, data: [...] }
+  - name: success_plans
+    endpoint:
+      path: "v2/successPlan/list/"
+      data_selector: "data"
+      body:
+        select: []
+        pageSize: 100
+        pageNumber: 1
+
+  # ── Users ──────────────────────────────────────────────────────────────────
+  # POST /v1/users/services/list
+  # Returns user records.  Pagination via limit + page (zero-indexed) in body.
+  # Response: { result, data: { page, size, total, users: [...] } }
+  # Rate limits: 100 req/hr, 1000 req/day (more conservative than object APIs).
+  - name: users
+    primary_key: Gsid
+    endpoint:
+      path: "v1/users/services/list"
+      data_selector: "data.users"
+      paginator:
+        # User list uses { limit, page } (zero-indexed page) in the POST body.
+        # No URL query-param pagination.
+        type: page_number
+        page_param: "page"
+        page_size_param: "limit"
+        page_size: 50
+      body:
+        orderBy:
+          field: "ModifiedDate"
+          direction: "descending"
+
+  # ── Custom Objects ─────────────────────────────────────────────────────────
+  # POST /v1/data/objects/query/{objectName}
+  # Custom object names include the __gc suffix (e.g. MyObject__gc).
+  # The object name must be supplied at sync configuration time via the
+  # "custom_object_name" parameter; set it to your specific object's API name.
+  # Max 5000 records per call; offset-based pagination.
+  # Response: { result, data: { records: [...], count } }
+  - name: custom_objects
+    endpoint:
+      path: "v1/data/objects/query/{custom_object_name}"
+      data_selector: "data.records"
+      params:
+        # custom_object_name must be set to the target object's API name,
+        # including the __gc suffix, e.g. "SubscriptionData__gc".
+        custom_object_name: "CustomObject__gc"
+      paginator:
+        type: offset
+        limit: 1000
+        limit_param: "limit"
+        offset_param: "offset"
+      body:
+        select: []
+        orderBy:
+          ModifiedDate: "desc"
+
+  # ── Surveys ────────────────────────────────────────────────────────────────
+  # Gainsight Survey (NPS / CES / CSAT) response data is surfaced through the
+  # Custom Object API under the standard "survey_participant" object.
+  # POST /v1/data/objects/query/survey_participant
+  # Response: { result, data: { records: [...], count } }
+  # Each record includes participantGsid, surveyId, score, submitDate, etc.
+  - name: surveys
+    endpoint:
+      path: "v1/data/objects/query/survey_participant"
+      data_selector: "data.records"
+      paginator:
+        type: offset
+        limit: 1000
+        limit_param: "limit"
+        offset_param: "offset"
+      body:
+        select: []
+        orderBy:
+          submitDate: "desc"
+
+  # ── Health Scores ──────────────────────────────────────────────────────────
+  # Health score history is stored in the standard "company_health_score" object.
+  # POST /v1/data/objects/query/company_health_score
+  # Response: { result, data: { records: [...], count } }
+  # Each record includes Gsid, CompanyId, Score, ScorecardName, MeasureDate, etc.
+  # For relationship-level scores, use /v1/data/objects/query/relationship_health_score.
+  - name: health_scores
+    endpoint:
+      path: "v1/data/objects/query/company_health_score"
+      data_selector: "data.records"
+      paginator:
+        type: offset
+        limit: 1000
+        limit_param: "limit"
+        offset_param: "offset"
+      body:
+        select: []
+        orderBy:
+          MeasureDate: "desc"
+
+write_endpoints:
+  # ── Companies ─────────────────────────────────────────────────────────────
+  # POST /v1/data/objects/Company
+  # Insert new company records.  Max 50 records per call.
+  # Body: { records: [...], lookups: {} }
+  - name: create_companies
+    description: >
+      Insert one or more company records (max 50 per call).
+      Each record must include at least the Name field.
+      Optionally include a lookups object to resolve GSID references by name.
+    method: POST
+    path: "v1/data/objects/Company"
+
+  # PUT /v1/data/objects/Company?keys=fieldName1,fieldName2
+  # Update or upsert company records by matching on the specified key fields.
+  # Max 50 records per call; up to 3 key fields; key operator is always AND.
+  # Body: { records: [...], lookups: {} }
+  - name: update_companies
+    description: >
+      Update existing company records matched by the 'keys' query parameter
+      (comma-separated field names, up to 3; e.g. keys=Name or keys=SfdcAccountId).
+      Max 50 records per call. Unmatched records are skipped (not upserted).
+    method: PUT
+    path: "v1/data/objects/Company"
+
+  # DELETE /v1/data/objects/Company/{GSID}
+  # Delete a single company record by its Gainsight System ID (GSID).
+  - name: delete_company
+    description: "Delete a single company record by its GSID."
+    method: DELETE
+    path: "v1/data/objects/Company/{gsid}"
+
+  # ── Call-to-Actions (CTAs) ─────────────────────────────────────────────────
+  # POST /v2/cockpit/cta/
+  # Create new CTA records.
+  # Body: { requests: [{ referenceId, ... }], lookups: {}, linkedObjects: [] }
+  # referenceId is a caller-supplied unique ID used to correlate the response.
+  - name: create_ctas
+    description: >
+      Create one or more CTAs. Each item in the 'requests' array must include
+      a referenceId (your unique identifier for correlation) and required CTA
+      fields such as Name, CompanyId or RelationshipId, Type, Status, OwnerId,
+      and DueDate.
+    method: POST
+    path: "v2/cockpit/cta/"
+
+  # PUT /v2/cockpit/cta/
+  # Update existing CTA records.
+  # Body: { requests: [{ referenceId, Gsid, ... }], lookups: {} }
+  # Gsid (the CTA's system ID) must be provided inside each request object.
+  - name: update_ctas
+    description: >
+      Update one or more existing CTAs. Each item in the 'requests' array must
+      include both a referenceId and the CTA's Gsid. Only provided fields are
+      updated (partial update).
+    method: PUT
+    path: "v2/cockpit/cta/"
+
+  # ── Success Plans ──────────────────────────────────────────────────────────
+  # POST /v2/successPlan/
+  # Create a new success plan.
+  # Body: { requests: [{ referenceId, Name, CompanyId, TypeId, StatusId, OwnerId, DueDate }] }
+  - name: create_success_plan
+    description: >
+      Create a new success plan. Required fields in each request object:
+      referenceId (caller-supplied correlation ID), Name, CompanyId or
+      RelationshipId, TypeId, StatusId, OwnerId, DueDate.
+      To create with objectives in one call, use create_success_plan_with_objectives.
+    method: POST
+    path: "v2/successPlan/"
+
+  # POST /v2/successPlan?withObjectives=true
+  # Create a success plan and its objectives in a single API call.
+  # Body: { requests: [{ referenceId, Name, ..., objectives: [...] }] }
+  - name: create_success_plan_with_objectives
+    description: >
+      Create a success plan together with its objectives in a single call.
+      Include an 'objectives' array inside each plan request object.
+    method: POST
+    path: "v2/successPlan/"
+    params:
+      withObjectives: "true"
+
+  # PUT /v2/successPlan/
+  # Update an existing success plan.
+  # Body: { requests: [{ referenceId, Gsid, ... }] }
+  - name: update_success_plan
+    description: >
+      Update one or more existing success plans. Each request object must
+      include a referenceId and the plan's Gsid. Only provided fields are
+      changed.
+    method: PUT
+    path: "v2/successPlan/"

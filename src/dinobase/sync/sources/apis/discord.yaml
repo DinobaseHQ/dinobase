@@ -1,0 +1,216 @@
+name: discord
+description: "Discord (guilds, channels, members, messages, roles)"
+
+# ── Credentials ────────────────────────────────────────────────────────────────
+# Bot tokens are created in the Discord Developer Portal under
+# Applications > Bot > Token. They require the "Bot" prefix in the
+# Authorization header — NOT "Bearer". Do not share your bot token.
+credentials:
+  - name: token
+    flag: "--token"
+    env: DISCORD_TOKEN
+    prompt: "Discord bot token (from Developer Portal > Applications > Bot)"
+    secret: true
+
+# ── Client ─────────────────────────────────────────────────────────────────────
+client:
+  base_url: "https://discord.com/api/v10/"
+
+  # Discord Bot token auth.
+  # The Authorization header MUST use the "Bot" prefix, not "Bearer".
+  # Example: Authorization: Bot MTk4Nj...
+  # OAuth2 user tokens would use "Bearer" instead, but bot tokens are the
+  # standard integration pattern and the only type supported here.
+  auth:
+    type: custom_header
+    header_name: "Authorization"
+    header_value: "Bot {token}"
+
+  # ── Pagination ───────────────────────────────────────────────────────────────
+  # Discord uses snowflake-ID cursor pagination, not page numbers or offsets.
+  # Snowflake IDs are 64-bit integers with an embedded timestamp, so sorting
+  # by ID is equivalent to sorting by creation time.
+  #
+  # List endpoints accept three mutually exclusive anchor params:
+  #   before  – return records with IDs strictly less than this value
+  #   after   – return records with IDs strictly greater than this value
+  #   around  – return records centred on this ID (messages only)
+  #
+  # The standard forward-paging pattern is:
+  #   1. Fetch page with limit=N (no cursor on first request).
+  #   2. Take the *last* item's id from the response array.
+  #   3. Pass it as `after` on the next request.
+  #   4. Stop when the response contains fewer items than `limit`.
+  #
+  # cursor_path "$[-1].id" extracts the id of the last element in the array.
+  # This default paginator applies to guilds and members; messages override
+  # cursor_param to "before" for reverse-chronological (newest-first) fetching.
+  paginator:
+    type: cursor
+    cursor_path: "$[-1].id"
+    cursor_param: "after"
+
+# ── Resource Defaults ──────────────────────────────────────────────────────────
+# Discord list endpoints return bare JSON arrays — no wrapping object, no
+# "data" key. data_selector is intentionally absent from resource_defaults.
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+#
+# RATE LIMIT WARNING — READ CAREFULLY BEFORE ADJUSTING LIMITS OR CONCURRENCY:
+#
+#   Discord enforces strict, multi-layered rate limits:
+#
+#   1. GLOBAL LIMIT: 50 requests per second across ALL routes for a given bot
+#      token. Exceeding this returns HTTP 429 with a "global": true body field.
+#
+#   2. PER-ROUTE BUCKETS: Each endpoint has its own bucket identified by the
+#      X-RateLimit-Bucket response header. Limits vary widely:
+#        - GET /users/@me/guilds          ~  5 req / 5 s
+#        - GET /guilds/{id}/members       ~  1 req / 1 s  (privileged intent)
+#        - GET /channels/{id}/messages    ~  5 req / 5 s
+#        - POST /channels/{id}/messages   ~  5 req / 5 s  per channel
+#
+#   3. CLOUDFLARE BLOCKS: Sending too many 401/403/429 responses (threshold:
+#      ~10 000 per 10 minutes) causes Cloudflare to temporarily block the IP.
+#
+#   4. BOT TOKEN REVOCATION: Repeated global-limit violations can result in
+#      the bot token being revoked by Discord.
+#
+#   Mitigation strategies:
+#     - Honour X-RateLimit-Remaining / X-RateLimit-Reset-After headers.
+#     - Back off on HTTP 429 using the retry_after field in the response body.
+#     - Avoid parallel requests across guild-scoped child resources (channels,
+#       members, messages) — they share per-resource buckets.
+#     - Use the largest permitted limit param (200 for guilds, 1000 for
+#       members, 100 for messages) to minimise total request count.
+#     - The GUILD_MEMBERS privileged intent must be enabled in the Developer
+#       Portal for /guilds/{guild_id}/members to return results.
+
+resources:
+  # ── Guilds ──────────────────────────────────────────────────────────────────
+  # Returns the guilds (servers) the bot belongs to.
+  # Max 200 per page; the paginator drives subsequent pages via after={last_id}.
+  # Response: bare array of partial guild objects (id, name, icon, owner,
+  # permissions, features, approximate_member_count if with_counts=true).
+  - name: guilds
+    endpoint:
+      path: "users/@me/guilds"
+      params:
+        limit: 200
+        with_counts: true
+
+  # ── Channels (per guild) ─────────────────────────────────────────────────────
+  # GET /guilds/{guild_id}/channels returns ALL channels in one response —
+  # Discord does not paginate this endpoint. The result is a flat array that
+  # includes text, voice, category, announcement, thread-parent, and stage
+  # channels. Thread channels are excluded (use /guilds/{id}/threads for those).
+  # Requires VIEW_CHANNEL permission on each channel to appear in the list.
+  # The guild_id path variable must be provided by the caller at sync time.
+  - name: channels
+    parent: guilds
+    parent_key: guild_id
+    endpoint:
+      path: "guilds/{guild_id}/channels"
+    # No pagination: the full channel list is returned in a single request.
+    paginator:
+      type: none
+
+  # ── Members (per guild) ──────────────────────────────────────────────────────
+  # Lists members of a guild up to 1 000 per page.
+  # IMPORTANT: Requires the GUILD_MEMBERS privileged gateway intent to be
+  # enabled in the Discord Developer Portal (Bot > Privileged Gateway Intents).
+  # Without it this endpoint returns an empty array for bots.
+  # Response: array of guild member objects (user sub-object, roles array,
+  # nick, avatar, joined_at, premium_since, deaf, mute, pending, flags).
+  - name: members
+    parent: guilds
+    parent_key: guild_id
+    endpoint:
+      path: "guilds/{guild_id}/members"
+      params:
+        limit: 1000
+
+  # ── Messages (per channel) ───────────────────────────────────────────────────
+  # Retrieves messages from a text channel in reverse-chronological order
+  # (newest first). Max 100 per page.
+  #
+  # Requires VIEW_CHANNEL + READ_MESSAGE_HISTORY permissions on the channel.
+  # Returns an empty array (not an error) if READ_MESSAGE_HISTORY is missing.
+  #
+  # Pagination note: messages use "before" (not "after") to page backwards
+  # through history. cursor_path "$[-1].id" picks the oldest message on each
+  # page; passing it as `before` on the next request returns the next older
+  # batch. Pagination stops when fewer than `limit` messages are returned.
+  #
+  # Response: array of message objects (id, channel_id, author, content,
+  # timestamp, edited_timestamp, attachments, embeds, reactions, etc.).
+  - name: messages
+    parent: channels
+    parent_key: channel_id
+    endpoint:
+      path: "channels/{channel_id}/messages"
+      params:
+        limit: 100
+    # Override the default "after" cursor direction to "before" so we page
+    # backwards (newest → oldest). cursor_path still grabs the last element's
+    # id, which is the oldest message on the current page.
+    paginator:
+      type: cursor
+      cursor_path: "$[-1].id"
+      cursor_param: "before"
+
+  # ── Roles (per guild) ────────────────────────────────────────────────────────
+  # Returns all role objects defined in a guild in a single unpaginated response.
+  # Roles define permissions and are referenced by member objects.
+  # Response: array of role objects (id, name, color, hoist, icon,
+  # unicode_emoji, position, permissions, managed, mentionable, tags).
+  - name: roles
+    parent: guilds
+    parent_key: guild_id
+    endpoint:
+      path: "guilds/{guild_id}/roles"
+    # No pagination: all roles are returned in a single request.
+    paginator:
+      type: none
+
+# ── Write Endpoints ────────────────────────────────────────────────────────────
+#
+# RATE LIMIT WARNING:
+#   Write operations share the same per-route buckets described above.
+#   POST /channels/{channel_id}/messages is limited to ~5 requests per 5 s
+#   per channel and shares the global 50 req/s ceiling.
+#   POST /guilds/{guild_id}/channels requires MANAGE_CHANNELS permission.
+#   All write endpoints return HTTP 429 with a retry_after (seconds, float)
+#   when the bucket is exhausted. Always retry with that delay.
+
+write_endpoints:
+  # ── Messages ───────────────────────────────────────────────────────────────
+  # Send a message to a text or DM channel.
+  # At least one of: content, embeds, sticker_ids, components, or files.
+  # content max 2 000 characters. Max 10 embeds. Max 3 sticker IDs.
+  # Max request size: 25 MiB (including file attachments via multipart/form-data).
+  - name: create_message
+    description: >
+      Post a message to a channel. At least one of content, embeds,
+      sticker_ids, or components is required. content is capped at 2 000
+      characters. Use message_reference to reply to an existing message.
+    method: POST
+    path: "channels/{channel_id}/messages"
+
+  # ── Channels ───────────────────────────────────────────────────────────────
+  # Create a new channel inside a guild.
+  # Requires the MANAGE_CHANNELS permission on the guild.
+  # name (1-100 characters) is the only required field.
+  # type: 0=text, 2=voice, 4=category, 5=announcement, 13=stage, 15=forum.
+  # Omitting type defaults to 0 (text channel).
+  - name: create_channel
+    description: >
+      Create a new channel in a guild. name (1-100 chars) is required.
+      type defaults to 0 (text). Requires MANAGE_CHANNELS permission.
+      Optional fields: type, topic, bitrate, user_limit, rate_limit_per_user,
+      position, permission_overwrites, parent_id, nsfw, default_auto_archive_duration.
+    method: POST
+    path: "guilds/{guild_id}/channels"

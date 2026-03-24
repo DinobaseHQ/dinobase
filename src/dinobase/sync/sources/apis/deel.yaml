@@ -1,0 +1,254 @@
+name: deel
+description: "Deel HR and payroll platform (contracts, people, invoices, payments, organizations, legal_entities, time_off)"
+
+credentials:
+  - name: token
+    flag: "--token"
+    env: DEEL_API_TOKEN
+    prompt: "Deel API token (personal token or organization token)"
+    secret: true
+
+client:
+  base_url: "https://api.letsdeel.com/rest/v2/"
+  # Deel REST API v2 uses Bearer token authentication.
+  # Pass the token (personal or organization) in the Authorization header.
+  # Required token scopes vary per resource (e.g. contracts:read, accounting:read,
+  # people:read, time-off:read, organizations:read).
+  auth:
+    type: bearer
+    token: "{token}"
+  # Deel uses offset-based pagination for list endpoints.
+  # Pass ?limit=N&offset=N as query parameters.
+  # Responses return a top-level "data" array and a "page" object containing
+  # "total_rows" (total record count) and "cursor" (opaque cursor string).
+  # The runtime stops pagination when fewer than `limit` records are returned
+  # or when offset >= page.total_rows.
+  # Max page size accepted by Deel is 99 records per request.
+  paginator:
+    type: offset
+    limit: 99
+    limit_param: "limit"
+    offset_param: "offset"
+    total_path: "page.total_rows"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # All Deel list responses wrap results in the top-level "data" array.
+    data_selector: "data"
+    params:
+      limit: 99
+
+resources:
+
+  # ── Contracts ────────────────────────────────────────────────────────────────
+  # GET /rest/v2/contracts — lists all contracts across the organisation.
+  # Supports filtering by types, statuses, countries, currencies, team_id.
+  # Note: Deel also supports cursor-based pagination for this endpoint via the
+  # after_cursor param (response: page.cursor). The offset paginator set in the
+  # client block drives pagination here; switch to cursor if offset is not
+  # supported for a specific account tier.
+  # Response: {"data": [...], "page": {"total_rows": N, "cursor": "..."}}
+  - name: contracts
+    endpoint:
+      path: "contracts"
+      params:
+        # Return all contract types in a single sync.
+        # Valid values include: ongoing_time_based, milestones, pay_as_you_go,
+        #   global_payroll, eor, direct_employee, peo.
+        # Omit to retrieve all types.
+        order_direction: "asc"
+
+  # ── People ────────────────────────────────────────────────────────────────────
+  # GET /rest/v2/people — lists all workers (employees and contractors) in the
+  # organisation's HRIS. Returns profile data including name, emails, employment
+  # records, and start/end dates.
+  # Response: {"data": [...], "page": {"total_rows": N, "cursor": "..."}}
+  - name: people
+    endpoint:
+      path: "people"
+
+  # ── Invoices ─────────────────────────────────────────────────────────────────
+  # GET /rest/v2/invoices — lists all worker salary/contractor invoices that
+  # have been paid within the organisation.
+  # Supports filtering by issued_from_date, issued_to_date, entities.
+  # Uses limit/offset pagination; max limit 99.
+  # Requires token scope: accounting:read
+  # Response: {"data": [...], "page": {"total_rows": N, "cursor": "..."}}
+  - name: invoices
+    endpoint:
+      path: "invoices"
+      params:
+        # Retrieve all invoice types (company-level and worker-level).
+        entities: "company"
+    incremental:
+      cursor_path: "issued_at"
+      param: "issued_from_date"
+      initial_value: "2020-01-01"
+
+  # ── Payments ─────────────────────────────────────────────────────────────────
+  # GET /rest/v2/payments — retrieves a list of payments made to Deel for
+  # worker salaries, contractor invoices, and fees.
+  # Includes payment method, status, currency, and breakdown details.
+  # Requires token scope: accounting:read
+  # Response: {"data": [...], "page": {"total_rows": N, "cursor": "..."}}
+  - name: payments
+    endpoint:
+      path: "payments"
+
+  # ── Organizations ─────────────────────────────────────────────────────────────
+  # GET /rest/v2/organizations — retrieves high-level details about the
+  # authenticated organisation (name, country, billing info, settings).
+  # Typically returns a single record or a small list; full-page sync is used.
+  # Response: {"data": [...], "page": {"total_rows": N}}
+  - name: organizations
+    endpoint:
+      path: "organizations"
+
+  # ── Legal Entities ────────────────────────────────────────────────────────────
+  # GET /rest/v2/legal-entities — lists all legal entities registered within
+  # the organisation (used for EOR and global payroll contracts).
+  # Each entity includes name, country, registration details, and status.
+  # Response: {"data": [...], "page": {"total_rows": N}}
+  - name: legal_entities
+    endpoint:
+      path: "legal-entities"
+
+  # ── Time Off ─────────────────────────────────────────────────────────────────
+  # GET /rest/v2/time_offs — lists time-off requests across the organisation.
+  # Results include request status, type, start/end dates, and worker details.
+  # Requires token scope: time-off:read
+  # Note: some Deel plans expose time-off requests at a profile-scoped path:
+  #   /rest/v2/time_offs/profile/{hris_profile_id}
+  # This resource uses the organisation-level endpoint for bulk sync.
+  # Response: {"data": [...], "page": {"total_rows": N, "cursor": "..."}}
+  - name: time_off
+    endpoint:
+      path: "time_offs"
+    incremental:
+      cursor_path: "updated_at"
+      param: "updated_from"
+      initial_value: "2020-01-01T00:00:00Z"
+
+write_endpoints:
+
+  # ── Contracts ─────────────────────────────────────────────────────────────────
+
+  # Create a new independent contractor (IC) contract.
+  # POST /rest/v2/contracts
+  # Required fields vary by contract type (type, worker details, compensation,
+  # start_date, job_title, seniority, country). Refer to Deel docs for the full
+  # schema per contract type (ic, eor, global_payroll, direct_employee).
+  - name: create_contract
+    description: "Create a new contract (IC, EOR, global payroll, or direct employee)"
+    method: POST
+    path: "contracts"
+    body:
+      required:
+        - type
+        - job_title
+        - start_date
+        - country_code
+      optional:
+        - worker_email
+        - first_name
+        - last_name
+        - compensation
+        - currency
+        - team_id
+        - department_id
+        - external_id
+        - notice_period_days
+        - seniority
+        - scope_of_work
+
+  # Amend an existing contract (adjust compensation, title, start date, etc.).
+  # POST /rest/v2/contracts/{contract_id}/amendments
+  # Required: amendment details (effective_date and at least one changed field).
+  - name: create_contract_amendment
+    description: "Submit an amendment to an existing contract"
+    method: POST
+    path: "contracts/{contract_id}/amendments"
+    body:
+      required:
+        - effective_date
+      optional:
+        - job_title
+        - compensation
+        - currency
+        - seniority
+        - department_id
+        - team_id
+
+  # Terminate a contract.
+  # POST /rest/v2/contracts/{contract_id}/terminations
+  # Required: termination_date. Optional: reason, notice_period.
+  - name: terminate_contract
+    description: "Terminate an existing contract"
+    method: POST
+    path: "contracts/{contract_id}/terminations"
+    body:
+      required:
+        - termination_date
+      optional:
+        - reason
+        - notice_period_days
+        - comment
+
+  # Update mutable fields on a contract (PATCH).
+  # PATCH /rest/v2/contracts/{contract_id}
+  # Supported fields depend on contract type and current status.
+  - name: update_contract
+    description: "Update mutable fields on an existing contract"
+    method: PATCH
+    path: "contracts/{contract_id}"
+    body:
+      optional:
+        - job_title
+        - team_id
+        - department_id
+        - external_id
+        - scope_of_work
+
+  # ── Time Off ──────────────────────────────────────────────────────────────────
+
+  # Create a new time-off request for a worker.
+  # POST /rest/v2/time_offs
+  # Required: hris_profile_id (worker), time_off_type_id, start_date, end_date.
+  # Optional: reason, status (if the caller has approval permissions).
+  - name: create_time_off
+    description: "Create a time-off request for a worker"
+    method: POST
+    path: "time_offs"
+    body:
+      required:
+        - hris_profile_id
+        - time_off_type_id
+        - start_date
+        - end_date
+      optional:
+        - reason
+        - status
+
+  # Update an existing time-off request (e.g. approve, reject, or modify dates).
+  # PATCH /rest/v2/time_offs/{time_off_id}
+  # Supported fields: status (approved/rejected), start_date, end_date, reason.
+  - name: update_time_off
+    description: "Update or approve/reject a time-off request"
+    method: PATCH
+    path: "time_offs/{time_off_id}"
+    body:
+      optional:
+        - status
+        - start_date
+        - end_date
+        - reason
+
+  # Delete a pending time-off request.
+  # DELETE /rest/v2/time_offs/{time_off_id}
+  # Only pending (not yet approved) requests can be deleted via the API.
+  - name: delete_time_off
+    description: "Delete a pending time-off request"
+    method: DELETE
+    path: "time_offs/{time_off_id}"

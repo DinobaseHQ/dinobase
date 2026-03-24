@@ -1,0 +1,224 @@
+name: sanity
+description: "Sanity CMS Content Lake (documents via export and GROQ query, image assets, file assets, datasets, mutations)"
+
+credentials:
+  - name: api_token
+    flag: "--api-token"
+    env: SANITY_API_TOKEN
+    prompt: "Sanity API token (from sanity.io/manage → project → API → Tokens)"
+    secret: true
+  - name: project_id
+    flag: "--project-id"
+    env: SANITY_PROJECT_ID
+    prompt: "Sanity project ID (e.g. 'abc123xy')"
+    secret: false
+  - name: dataset
+    flag: "--dataset"
+    env: SANITY_DATASET
+    prompt: "Sanity dataset name (e.g. 'production')"
+    secret: false
+
+client:
+  # Base URL is project-scoped; the project_id is part of the subdomain.
+  # API version is pinned to 2021-06-07, the earliest stable date-versioned release.
+  # Use the standard api.sanity.io host (not apicdn.sanity.io) so that
+  # all requests are served fresh and drafts/system documents are visible.
+  base_url: "https://{project_id}.api.sanity.io/v2021-06-07/"
+  auth:
+    type: bearer
+    token: "{api_token}"
+  # The export endpoint uses cursor-mode pagination: Sanity streams NDJSON for
+  # up to 30 seconds per request, then returns a JSON sentinel object of the form
+  # {"nextCursor": "<value>"} when more documents remain.  Pass the cursor value
+  # as ?nextCursor=<value> on the next request.  When the sentinel is absent the
+  # stream is complete.
+  # The GROQ query endpoint does NOT paginate natively; pagination is achieved
+  # inside the GROQ query itself using array slice notation [offset..limit].
+  # The assets and datasets endpoints also do not use the standard paginator.
+  paginator:
+    type: cursor
+    cursor_path: "nextCursor"
+    cursor_param: "nextCursor"
+
+resource_defaults:
+  # Sanity documents use _id (string) as the primary key.
+  primary_key: "_id"
+  write_disposition: merge
+
+resources:
+  # ── Documents via Export endpoint ─────────────────────────────────────────────
+  # GET /data/export/<dataset>
+  # Returns all documents the token can access as an NDJSON stream.
+  # Each line in the stream is a complete JSON document (no wrapper object).
+  # Cursor-mode pagination: pass ?nextCursor= (empty string to initiate) and
+  # repeat with the returned cursor until no cursor is returned.
+  # Optional: ?types=<comma-separated list> to limit to specific _type values.
+  # This is the preferred bulk-export path — more efficient than paginated GROQ
+  # for large datasets and includes drafts and system documents (drafts.*).
+  # data_selector is null because the response body is raw NDJSON, not a JSON
+  # envelope with a named array field.
+  - name: documents_export
+    endpoint:
+      path: "data/export/{dataset}"
+      data_selector: null
+      params:
+        # Initiate cursor-mode export; empty string triggers cursor flow.
+        nextCursor: ""
+
+  # ── Documents via GROQ query endpoint ──────────────────────────────────────────
+  # GET /data/query/<dataset>?query=<GROQ>
+  # Executes arbitrary GROQ queries against the dataset.
+  # The response envelope is: {"ms": N, "query": "...", "result": [...]}
+  # data_selector targets the "result" field.
+  # GROQ does not have a server-side pagination token; pagination is expressed
+  # inside the query using array slice notation: *[_type == "..."][offset..limit]
+  # The default query fetches all published documents (draft.* excluded) ordered
+  # by _id for stable incremental paging.  Override via connector params if needed.
+  # Incremental sync on _updatedAt: Sanity sets _updatedAt on every document write.
+  # Pass a GROQ condition like [_updatedAt > $since] to narrow the window.
+  - name: documents_query
+    endpoint:
+      path: "data/query/{dataset}"
+      data_selector: "result"
+      params:
+        # Fetch all non-draft documents, newest-updated first.
+        # Clients that need a specific type should override: *[_type == "article"]
+        query: "*[!(_id in path(\"drafts.**\"))] | order(_updatedAt desc)"
+    incremental:
+      cursor_path: "_updatedAt"
+      param: "since"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Image assets ───────────────────────────────────────────────────────────────
+  # Sanity stores uploaded images as documents of type "sanity.imageAsset".
+  # They live in the Content Lake alongside regular documents and are accessible
+  # via the GROQ query endpoint.
+  # Fields: _id, _type ("sanity.imageAsset"), assetId, url, originalFilename,
+  #         size, mimeType, sha1hash, extension, metadata (dimensions, palette,
+  #         lqip, exif, location).
+  # data_selector targets the "result" array returned by the query endpoint.
+  - name: image_assets
+    endpoint:
+      path: "data/query/{dataset}"
+      data_selector: "result"
+      params:
+        query: "*[_type == \"sanity.imageAsset\"] | order(_updatedAt desc)"
+    incremental:
+      cursor_path: "_updatedAt"
+      param: "since"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── File assets ────────────────────────────────────────────────────────────────
+  # Analogous to image assets but for non-image binary uploads.
+  # Type is "sanity.fileAsset".
+  # Fields: _id, _type ("sanity.fileAsset"), assetId, url, originalFilename,
+  #         size, mimeType, sha1hash, extension.
+  - name: file_assets
+    endpoint:
+      path: "data/query/{dataset}"
+      data_selector: "result"
+      params:
+        query: "*[_type == \"sanity.fileAsset\"] | order(_updatedAt desc)"
+    incremental:
+      cursor_path: "_updatedAt"
+      param: "since"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Datasets ───────────────────────────────────────────────────────────────────
+  # GET /datasets
+  # Returns all datasets for the project as a JSON array.
+  # Response is a bare JSON array (no data envelope), so data_selector is null.
+  # There is no pagination — the list is typically very small (< 10 entries).
+  # Each dataset object: {name, aclMode ("public" | "private" | "custom"), createdAt}
+  # This is a project-level endpoint (no dataset in path).
+  - name: datasets
+    primary_key: "name"
+    endpoint:
+      path: "datasets"
+      data_selector: null
+
+write_endpoints:
+  # ── Mutations endpoint ─────────────────────────────────────────────────────────
+  # All writes go through POST /data/mutate/<dataset>.
+  # The request body is a JSON object with a "mutations" array; all mutations in
+  # the array are applied as a single atomic transaction (all-or-nothing).
+  # Common query parameters:
+  #   returnIds=true       — include the _id of each affected document in the response
+  #   returnDocuments=true — include the full document body in the response
+  #   visibility=sync      — wait for the write to be fully committed before returning
+  #                          (async / deferred options also available)
+  # The response shape: {"transactionId": "...", "results": [{"id": "...", "operation": "..."}]}
+
+  # create: insert a new document.  Fails if a document with the same _id already exists.
+  # Required body: {"mutations": [{"create": {"_type": "...", ...fields...}}]}
+  # If _id is omitted, Sanity generates a random UUID.
+  - name: create_document
+    description: "Create a new document. Fails if a document with the same _id already exists. Omit _id to auto-generate."
+    method: POST
+    path: "data/mutate/{dataset}"
+    params:
+      returnIds: "true"
+      visibility: "sync"
+
+  # createOrReplace: idempotent upsert — creates the document if it does not exist,
+  # or replaces it entirely if it does.  _id and _type are required in the body.
+  # Required body: {"mutations": [{"createOrReplace": {"_id": "...", "_type": "...", ...fields...}}]}
+  - name: create_or_replace_document
+    description: "Idempotent upsert: create the document if it does not exist, or fully replace it if it does. _id and _type are required."
+    method: POST
+    path: "data/mutate/{dataset}"
+    params:
+      returnIds: "true"
+      visibility: "sync"
+
+  # createIfNotExists: create only when the _id is absent; silently no-ops otherwise.
+  # Required body: {"mutations": [{"createIfNotExists": {"_id": "...", "_type": "...", ...}}]}
+  - name: create_document_if_not_exists
+    description: "Create a document only if the _id does not already exist. Silently skips if it does."
+    method: POST
+    path: "data/mutate/{dataset}"
+    params:
+      returnIds: "true"
+      visibility: "sync"
+
+  # patch: partially update an existing document.
+  # Supported patch operations: set, setIfMissing, unset, inc, dec, insert, diffMatchPatch.
+  # Supports optimistic locking via ifRevisionID to prevent lost updates.
+  # Required body:
+  #   {"mutations": [{"patch": {"id": "<docId>", "set": {"field": "value"}, ...}}]}
+  - name: patch_document
+    description: "Partially update an existing document. Supports set, setIfMissing, unset, inc, dec, insert, diffMatchPatch operations. Use ifRevisionID for optimistic locking."
+    method: POST
+    path: "data/mutate/{dataset}"
+    params:
+      returnIds: "true"
+      returnDocuments: "true"
+      visibility: "sync"
+
+  # delete: remove a document by _id or by GROQ query.
+  # By ID:    {"mutations": [{"delete": {"id": "<docId>"}}]}
+  # By query: {"mutations": [{"delete": {"query": "*[_type == 'article']"}}]}
+  # The purge flag removes the document from transaction history as well.
+  # Query-based delete is limited to 10 000 documents per call.
+  - name: delete_document
+    description: "Delete a document by _id or by GROQ query. Add purge=true in params to remove from transaction history. Query deletes are limited to 10 000 documents."
+    method: POST
+    path: "data/mutate/{dataset}"
+    params:
+      returnIds: "true"
+      visibility: "sync"
+
+  # ── Asset upload ───────────────────────────────────────────────────────────────
+  # POST /assets/images/<dataset>  — upload an image binary.
+  # POST /assets/files/<dataset>   — upload a non-image binary.
+  # The request body is the raw binary content; set Content-Type to the MIME type.
+  # Response: {"document": {"_id": "...", "_type": "sanity.imageAsset", "url": "...", ...}}
+  - name: upload_image_asset
+    description: "Upload a binary image file. Set Content-Type header to the MIME type (e.g. image/jpeg). Returns the new sanity.imageAsset document."
+    method: POST
+    path: "assets/images/{dataset}"
+
+  - name: upload_file_asset
+    description: "Upload a non-image binary file. Set Content-Type header to the MIME type (e.g. application/pdf). Returns the new sanity.fileAsset document."
+    method: POST
+    path: "assets/files/{dataset}"

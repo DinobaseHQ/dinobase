@@ -1,0 +1,146 @@
+name: bitbucket
+description: "Bitbucket Cloud (repositories, pull requests, issues, pipelines, deployments, downloads, workspace members)"
+
+# Bitbucket Cloud uses HTTP Basic auth: username + app password.
+# App passwords are created at https://bitbucket.org/account/settings/app-passwords/
+# Required scopes depend on resources accessed (e.g. repository, pullrequest, issue, pipeline).
+credentials:
+  - name: username
+    flag: "--username"
+    env: BITBUCKET_USERNAME
+    prompt: "Bitbucket username"
+    secret: false
+  - name: app_password
+    flag: "--app-password"
+    env: BITBUCKET_APP_PASSWORD
+    prompt: "Bitbucket app password"
+    secret: true
+  - name: workspace
+    flag: "--workspace"
+    env: BITBUCKET_WORKSPACE
+    prompt: "Bitbucket workspace slug (e.g. my-team)"
+    secret: false
+
+client:
+  base_url: "https://api.bitbucket.org/2.0/"
+  # HTTP Basic auth: username as the user field, app_password as the password field.
+  auth:
+    type: http_basic
+    username: "{username}"
+    password: "{app_password}"
+  # Bitbucket uses URL-based cursor pagination.
+  # Each paginated response includes a "next" field with the full URL for the next page.
+  # The "values" array holds the records; "page", "pagelen", and "size" are metadata.
+  paginator:
+    type: json_link
+    next_url_path: "next"
+
+resource_defaults:
+  primary_key: uuid
+  write_disposition: merge
+  endpoint:
+    data_selector: "values"
+
+resources:
+  # All repositories in the workspace the authenticated user can access.
+  # Supports role filter (owner, admin, contributor, member) and q/sort query params.
+  - name: repositories
+    endpoint:
+      path: "repositories/{workspace}"
+      params:
+        pagelen: 100
+
+  # Pull requests for a repository. Supports state filter and updated_on for incremental sync.
+  # The q parameter uses Bitbucket's query language (e.g. updated_on > "2024-01-01T00:00:00+00:00").
+  # Sort by -updated_on ensures most-recently-updated records are returned first.
+  - name: pull_requests
+    endpoint:
+      path: "repositories/{workspace}/{repo_slug}/pullrequests"
+      params:
+        state: "OPEN,MERGED,DECLINED,SUPERSEDED"
+        sort: "-updated_on"
+        pagelen: 50
+    incremental:
+      cursor_path: updated_on
+      param: q
+      param_format: 'updated_on > "{cursor_value}"'
+      initial_value: "2000-01-01T00:00:00+00:00"
+
+  # Issues for a repository (requires issue tracker enabled on the repo).
+  # Supports q and sort query parameters.
+  - name: issues
+    endpoint:
+      path: "repositories/{workspace}/{repo_slug}/issues"
+      params:
+        pagelen: 50
+
+  # Pipelines for a repository. Returns pipeline run history.
+  # Supports sort (e.g. -created_on) and filter query parameters.
+  - name: pipelines
+    endpoint:
+      path: "repositories/{workspace}/{repo_slug}/pipelines"
+      params:
+        sort: "-created_on"
+        pagelen: 50
+
+  # Deployments for a repository (environments + deployment history).
+  # Returns all deployments across all environments in the repository.
+  - name: deployments
+    endpoint:
+      path: "repositories/{workspace}/{repo_slug}/deployments"
+      params:
+        pagelen: 50
+
+  # Downloads attached to a repository (uploaded binary artifacts).
+  # Returns file metadata; actual file content must be fetched via the download link.
+  - name: downloads
+    endpoint:
+      path: "repositories/{workspace}/{repo_slug}/downloads"
+      params:
+        pagelen: 50
+
+  # Members of the workspace. Requires the "account" OAuth scope.
+  # Returns workspace membership records including the user's account details.
+  - name: workspace_members
+    endpoint:
+      path: "workspaces/{workspace}/members"
+      params:
+        pagelen: 100
+
+write_endpoints:
+  # Pull requests
+  - name: create_pull_request
+    description: "Create a new pull request in a repository"
+    method: POST
+    path: "repositories/{workspace}/{repo_slug}/pullrequests"
+
+  - name: update_pull_request
+    description: "Update an existing pull request (title, description, reviewers, destination)"
+    method: PUT
+    path: "repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}"
+
+  - name: decline_pull_request
+    description: "Decline (close) an open pull request"
+    method: POST
+    path: "repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline"
+
+  - name: merge_pull_request
+    description: "Merge an open pull request"
+    method: POST
+    path: "repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge"
+
+  # Issues
+  - name: create_issue
+    description: "Create a new issue in a repository (requires issue tracker enabled)"
+    method: POST
+    path: "repositories/{workspace}/{repo_slug}/issues"
+
+  - name: update_issue
+    description: "Update an existing issue (title, content, status, priority, kind, assignee)"
+    method: PUT
+    path: "repositories/{workspace}/{repo_slug}/issues/{issue_id}"
+
+  - name: delete_issue
+    description: "Delete an issue permanently"
+    method: DELETE
+    path: "repositories/{workspace}/{repo_slug}/issues/{issue_id}"

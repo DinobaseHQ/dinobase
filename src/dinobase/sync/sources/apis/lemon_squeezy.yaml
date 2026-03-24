@@ -1,0 +1,190 @@
+name: lemon_squeezy
+description: "Lemon Squeezy e-commerce (stores, products, orders, subscriptions, customers, license keys, discounts)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: LEMONSQUEEZY_API_KEY
+    prompt: "Lemon Squeezy API key"
+    secret: true
+
+client:
+  base_url: "https://api.lemonsqueezy.com/v1/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  headers:
+    # Lemon Squeezy follows the JSON:API spec — both Accept and Content-Type
+    # must use the vnd.api+json media type.
+    Accept: "application/vnd.api+json"
+    Content-Type: "application/vnd.api+json"
+  # Lemon Squeezy uses page-number pagination via page[number] / page[size].
+  # Each response body includes links.first / links.last but NOT links.next,
+  # so we drive pagination with page_number and let the engine stop when
+  # currentPage == lastPage (meta.page).
+  paginator:
+    type: page_number
+    page_param: "page[number]"
+    page_size_param: "page[size]"
+    page_size: 100
+    base_page: 1
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # JSON:API format: the list of items is always in the top-level "data" array.
+    # Each item's domain fields live under item.attributes; relationships are
+    # under item.relationships.
+    data_selector: "data"
+
+resources:
+
+  # ── Stores ───────────────────────────────────────────────────────────────────
+  # GET /v1/stores — returns all stores on the account.
+  # No filter parameters; small result set, no incremental needed.
+  - name: stores
+    endpoint:
+      path: "stores"
+
+  # ── Products ─────────────────────────────────────────────────────────────────
+  # GET /v1/products — paginated list ordered by name ASC.
+  # Filter: filter[store_id]. No date-based incremental filter available.
+  - name: products
+    endpoint:
+      path: "products"
+
+  # ── Variants ─────────────────────────────────────────────────────────────────
+  # GET /v1/variants — paginated list.
+  # Filters: filter[product_id], filter[status].
+  - name: variants
+    endpoint:
+      path: "variants"
+
+  # ── Files ────────────────────────────────────────────────────────────────────
+  # GET /v1/files — paginated list of digital files attached to variants.
+  # Filter: filter[variant_id]. No incremental filter available.
+  - name: files
+    endpoint:
+      path: "files"
+
+  # ── Orders ───────────────────────────────────────────────────────────────────
+  # GET /v1/orders — paginated list ordered by created_at DESC.
+  # Filters: filter[store_id], filter[user_email], filter[order_number].
+  # No updated_at query filter is available; full refresh via merge on id.
+  - name: orders
+    endpoint:
+      path: "orders"
+
+  # ── Order Items ───────────────────────────────────────────────────────────────
+  # GET /v1/order-items — paginated list of line items within orders.
+  # Filters: filter[order_id], filter[product_id], filter[variant_id].
+  - name: order_items
+    endpoint:
+      path: "order-items"
+
+  # ── Subscriptions ────────────────────────────────────────────────────────────
+  # GET /v1/subscriptions — paginated list ordered by created_at DESC.
+  # Filters: filter[store_id], filter[order_id], filter[order_item_id],
+  #          filter[product_id], filter[variant_id], filter[user_email],
+  #          filter[status].
+  # No updated_at query filter available; incremental tracked via updated_at
+  # field in the response (client-side cursor).
+  - name: subscriptions
+    endpoint:
+      path: "subscriptions"
+    incremental:
+      cursor_path: "attributes.updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Subscription Items ────────────────────────────────────────────────────────
+  # GET /v1/subscription-items — items (price + quantity) within subscriptions.
+  # Filters: filter[subscription_id], filter[price_id].
+  - name: subscription_items
+    endpoint:
+      path: "subscription-items"
+
+  # ── Subscription Invoices ─────────────────────────────────────────────────────
+  # GET /v1/subscription-invoices — invoices generated for subscriptions.
+  # Filters: filter[store_id], filter[status], filter[refunded],
+  #          filter[subscription_id].
+  # Ordered by created_at DESC; no date-based filter param available.
+  - name: subscription_invoices
+    endpoint:
+      path: "subscription-invoices"
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # GET /v1/customers — paginated list ordered by created_at DESC.
+  # Filters: filter[store_id], filter[email].
+  # updated_at field is present in the response; used for incremental cursor.
+  - name: customers
+    endpoint:
+      path: "customers"
+    incremental:
+      cursor_path: "attributes.updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Discounts ─────────────────────────────────────────────────────────────────
+  # GET /v1/discounts — paginated list ordered by created_at DESC.
+  # Filter: filter[store_id]. No date-based incremental filter available.
+  - name: discounts
+    endpoint:
+      path: "discounts"
+
+  # ── License Keys ──────────────────────────────────────────────────────────────
+  # GET /v1/license-keys — paginated list ordered by id DESC.
+  # Filters: filter[store_id], filter[order_id], filter[order_item_id],
+  #          filter[product_id], filter[status].
+  # updated_at is present on the object; used as incremental cursor.
+  - name: license_keys
+    endpoint:
+      path: "license-keys"
+    incremental:
+      cursor_path: "attributes.updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+write_endpoints:
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+  # PATCH /v1/subscriptions/{id} — update billing anchor, plan, pause/resume,
+  # trial end date, and custom data. Body must use JSON:API format.
+
+  - name: update_subscription
+    description: "Update a subscription's plan, billing anchor, trial end, or custom data (JSON:API body required)."
+    method: PATCH
+    path: "subscriptions/{id}"
+
+  # DELETE /v1/subscriptions/{id} — cancel a subscription immediately.
+  # A cancelled subscription transitions to status=cancelled and is not billed again.
+
+  - name: cancel_subscription
+    description: "Cancel a subscription immediately. The subscription moves to status=cancelled."
+    method: DELETE
+    path: "subscriptions/{id}"
+
+  # ── Discounts ─────────────────────────────────────────────────────────────────
+  # POST /v1/discounts — create a new discount code.
+  # Required attributes: store_id, name, code, amount, amount_type.
+  # Optional: is_limited_redemptions, max_redemptions, expires_at,
+  #           duration, duration_in_months, variant_ids, etc.
+
+  - name: create_discount
+    description: "Create a discount code. Requires store_id, name, code, amount, and amount_type in a JSON:API body."
+    method: POST
+    path: "discounts"
+
+  # DELETE /v1/discounts/{id} — permanently delete a discount.
+
+  - name: delete_discount
+    description: "Permanently delete a discount by ID."
+    method: DELETE
+    path: "discounts/{id}"
+
+  # ── License Keys ──────────────────────────────────────────────────────────────
+  # PATCH /v1/license-keys/{id} — update a license key's status, activation
+  # limit, expiry date, or disabled flag. Body must use JSON:API format.
+
+  - name: update_license_key
+    description: "Update a license key's status, activation limit, expiry, or disabled flag (JSON:API body required)."
+    method: PATCH
+    path: "license-keys/{id}"

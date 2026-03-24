@@ -1,0 +1,78 @@
+name: twilio
+description: "Twilio (messages, calls, accounts, phone numbers)"
+
+credentials:
+  - name: account_sid
+    flag: "--account-sid"
+    env: TWILIO_ACCOUNT_SID
+    prompt: "Twilio Account SID"
+    secret: false
+  - name: auth_token
+    flag: "--auth-token"
+    env: TWILIO_AUTH_TOKEN
+    prompt: "Twilio Auth Token"
+    secret: true
+
+client:
+  base_url: "https://api.twilio.com/2010-04-01/"
+  auth:
+    type: http_basic
+    username: "{account_sid}"
+    password: "{auth_token}"
+  # Twilio uses URI-based pagination via next_page_uri field in the response body.
+  # Follow next_page_uri until it is null.
+  paginator:
+    type: json_link
+    next_url_path: "next_page_uri"
+
+resource_defaults:
+  primary_key: sid
+  write_disposition: merge
+
+# Each resource wraps its array in a key matching the resource name.
+resources:
+  - name: messages
+    endpoint:
+      path: "Accounts/{account_sid}/Messages.json"
+      data_selector: "messages"
+    # Incremental: filter by DateSent >= last run to avoid re-fetching old records.
+    incremental:
+      cursor_path: "date_sent"
+      initial_value: "2010-01-01"
+
+  - name: calls
+    endpoint:
+      path: "Accounts/{account_sid}/Calls.json"
+      data_selector: "calls"
+    # Incremental: filter by DateCreated >= last run.
+    incremental:
+      cursor_path: "date_created"
+      initial_value: "2010-01-01"
+
+  - name: accounts
+    endpoint:
+      path: "Accounts.json"
+      data_selector: "accounts"
+
+  - name: incoming_phone_numbers
+    endpoint:
+      path: "Accounts/{account_sid}/IncomingPhoneNumbers.json"
+      data_selector: "incoming_phone_numbers"
+
+  - name: recordings
+    endpoint:
+      path: "Accounts/{account_sid}/Recordings.json"
+      data_selector: "recordings"
+
+write_endpoints:
+  - name: send_message
+    description: "Send an SMS or MMS message"
+    method: POST
+    path: "Accounts/{account_sid}/Messages.json"
+    write: true
+
+  - name: make_call
+    description: "Initiate an outbound phone call"
+    method: POST
+    path: "Accounts/{account_sid}/Calls.json"
+    write: true

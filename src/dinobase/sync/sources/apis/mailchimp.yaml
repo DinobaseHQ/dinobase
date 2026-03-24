@@ -1,0 +1,121 @@
+name: mailchimp
+description: "Mailchimp (lists, campaigns, members, templates, automations)"
+
+# NOTE: The base_url uses {dc}, the datacenter prefix embedded in the API key.
+# Extract it from the API key by taking the suffix after the last dash.
+# Example: if api_key is "abc123-us1", then dc = "us1".
+# The dc credential below captures this separately so the runtime can interpolate it.
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: MAILCHIMP_API_KEY
+    prompt: "Mailchimp API key (includes datacenter suffix, e.g. abc123-us1)"
+    secret: true
+  - name: dc
+    flag: "--datacenter"
+    env: MAILCHIMP_DC
+    prompt: "Mailchimp datacenter prefix (last segment of API key after the dash, e.g. us1)"
+    secret: false
+
+client:
+  # Mailchimp routes requests to a datacenter-specific subdomain.
+  # {dc} must match the suffix of your API key (e.g. us1, us6, us10).
+  base_url: "https://{dc}.api.mailchimp.com/3.0/"
+  auth:
+    # HTTP Basic auth: any non-empty string as username, API key as password.
+    type: http_basic
+    username: "anystring"
+    password: "{api_key}"
+  # Mailchimp uses offset/count pagination.
+  # Default count is 10; maximum is 1000. Response always includes total_items.
+  paginator:
+    type: offset
+    limit: 1000
+    limit_param: "count"
+    offset_param: "offset"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # Lists (Audiences) — the top-level subscriber audiences in the account.
+  # GET /3.0/lists returns { lists: [...], total_items: N, _links: [...] }
+  - name: lists
+    endpoint:
+      path: lists
+      data_selector: lists
+
+  # Campaigns — all email campaigns in the account (regular, automated, etc.).
+  # Supports optional status filter (save, paused, schedule, sending, sent).
+  # GET /3.0/campaigns returns { campaigns: [...], total_items: N }
+  - name: campaigns
+    endpoint:
+      path: campaigns
+      data_selector: campaigns
+
+  # Members — subscribers belonging to a specific list.
+  # This is a child resource: path includes the parent list_id.
+  # GET /3.0/lists/{list_id}/members returns { members: [...], total_items: N }
+  # The {list_id} must be resolved at runtime by iterating over the lists resource.
+  - name: members
+    parent: lists
+    parent_key: id
+    endpoint:
+      path: lists/{list_id}/members
+      data_selector: members
+
+  # Templates — user-created and Mailchimp-provided email templates.
+  # GET /3.0/templates returns { templates: [...], total_items: N }
+  - name: templates
+    endpoint:
+      path: templates
+      data_selector: templates
+
+  # Classic Automations — triggered email workflows (welcome series, etc.).
+  # GET /3.0/automations returns { automations: [...], total_items: N }
+  # Note: this is the Classic Automations API; Customer Journeys are separate.
+  - name: automations
+    endpoint:
+      path: automations
+      data_selector: automations
+
+write_endpoints:
+  # Lists (Audiences)
+  - name: create_list
+    description: "Create a new audience (list)"
+    method: POST
+    path: lists
+
+  - name: update_list
+    description: "Update an existing audience (PATCH performs partial update)"
+    method: PATCH
+    path: lists/{list_id}
+
+  # Campaigns
+  - name: create_campaign
+    description: "Create a new campaign (type: regular, plaintext, absplit, rss, variate)"
+    method: POST
+    path: campaigns
+
+  - name: update_campaign
+    description: "Update an existing campaign's settings"
+    method: PATCH
+    path: campaigns/{campaign_id}
+
+  # Members — POST adds a new subscriber; PUT upserts by subscriber_hash (MD5 of lowercased email).
+  - name: add_member
+    description: "Add a new member to a list (status: subscribed, unsubscribed, cleaned, pending)"
+    method: POST
+    path: lists/{list_id}/members
+
+  - name: upsert_member
+    description: "Add or update a list member by subscriber_hash (MD5 of lowercased email address)"
+    method: PUT
+    path: lists/{list_id}/members/{subscriber_hash}
+
+  - name: update_member
+    description: "Partially update a list member's fields"
+    method: PATCH
+    path: lists/{list_id}/members/{subscriber_hash}

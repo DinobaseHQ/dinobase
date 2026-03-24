@@ -1,0 +1,236 @@
+name: chargebee
+description: "Chargebee billing (customers, subscriptions, invoices, plans, items, item_prices, credit_notes, orders, events)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: CHARGEBEE_API_KEY
+    prompt: "Chargebee API key"
+    secret: true
+  - name: site
+    flag: "--site"
+    env: CHARGEBEE_SITE
+    prompt: "Chargebee site name (e.g. 'mycompany' from mycompany.chargebee.com)"
+    secret: false
+
+client:
+  base_url: "https://{site}.chargebee.com/api/v2/"
+  # Chargebee uses HTTP Basic auth: API key as username, empty string as password.
+  # curl -u {api_key}: https://{site}.chargebee.com/api/v2/customers
+  auth:
+    type: http_basic
+    username: "{api_key}"
+    password: ""
+  # Chargebee cursor pagination: when more pages exist the response includes
+  # a top-level "next_offset" string. Pass it as ?offset= on the next request.
+  # Pagination stops when "next_offset" is absent from the response.
+  paginator:
+    type: cursor
+    cursor_path: "next_offset"
+    cursor_param: "offset"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # Chargebee list responses wrap results in a "list" array.
+    # Each element is a map of resource type to object, e.g.:
+    #   {"customer": {"id": "...", ...}, "card": {"...": "..."}}
+    # The runtime should unwrap the inner typed object after selecting "list".
+    data_selector: "list"
+    params:
+      limit: 100
+
+resources:
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # GET /api/v2/customers — cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] for stable incremental ordering.
+  # updated_at filter: updated_at[after]={unix_timestamp}.
+  # Each list item: {"customer": {...}, "card": {...}}
+  - name: customers
+    endpoint:
+      path: "customers"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "customer.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+  # GET /api/v2/subscriptions — cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"subscription": {...}, "customer": {...}}
+  - name: subscriptions
+    endpoint:
+      path: "subscriptions"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "subscription.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Invoices ──────────────────────────────────────────────────────────────────
+  # GET /api/v2/invoices — cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"invoice": {...}}
+  - name: invoices
+    endpoint:
+      path: "invoices"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "invoice.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Plans ────────────────────────────────────────────────────────────────────
+  # GET /api/v2/plans — legacy plan-based model endpoint (v1-compatibility).
+  # Cursor paginated, max 100/page. No updated_at filter supported.
+  # Each list item: {"plan": {...}}
+  - name: plans
+    endpoint:
+      path: "plans"
+
+  # ── Items ─────────────────────────────────────────────────────────────────────
+  # GET /api/v2/items — item-based model (v2). Cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"item": {...}}
+  - name: items
+    endpoint:
+      path: "items"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "item.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Item Prices ───────────────────────────────────────────────────────────────
+  # GET /api/v2/item_prices — pricing variants for items. Cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"item_price": {...}}
+  - name: item_prices
+    endpoint:
+      path: "item_prices"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "item_price.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Credit Notes ──────────────────────────────────────────────────────────────
+  # GET /api/v2/credit_notes — cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"credit_note": {...}}
+  - name: credit_notes
+    endpoint:
+      path: "credit_notes"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "credit_note.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Orders ────────────────────────────────────────────────────────────────────
+  # GET /api/v2/orders — cursor paginated, max 100/page.
+  # Supports sort_by[updated_at][asc] and updated_at[after] for incremental loads.
+  # Each list item: {"order": {...}}
+  - name: orders
+    endpoint:
+      path: "orders"
+      params:
+        sort_by[updated_at][asc]: true
+    incremental:
+      cursor_path: "order.updated_at"
+      param: "updated_at[after]"
+      initial_value: "0"
+
+  # ── Events ────────────────────────────────────────────────────────────────────
+  # GET /api/v2/events — audit log of all resource mutations. Cursor paginated, max 100/page.
+  # Supports sort_by[occurred_at][asc] and occurred_at[after] for incremental polling.
+  # Each list item: {"event": {"id": "...", "occurred_at": ..., "event_type": "...", "content": {...}}}
+  - name: events
+    endpoint:
+      path: "events"
+      params:
+        sort_by[occurred_at][asc]: true
+    incremental:
+      cursor_path: "event.occurred_at"
+      param: "occurred_at[after]"
+      initial_value: "0"
+
+write_endpoints:
+
+  # ── Customers ─────────────────────────────────────────────────────────────────
+
+  # Create a new customer.
+  # POST /api/v2/customers
+  # Required: (none — Chargebee generates an id if not provided)
+  # Common fields: first_name, last_name, email, phone, company, auto_collection,
+  #                net_term_days, billing_address, locale, taxability, vat_number
+  - name: create_customer
+    description: "Create a new customer record in Chargebee"
+    method: POST
+    path: "customers"
+
+  # Update an existing customer by ID.
+  # POST /api/v2/customers/{customer_id} — Chargebee uses POST (not PUT/PATCH) for updates.
+  # Common fields: first_name, last_name, email, phone, company, billing_address,
+  #                auto_collection, net_term_days, locale, taxability, vat_number,
+  #                fraud_flag, consolidated_invoicing, custom_fields
+  - name: update_customer
+    description: "Update an existing customer by ID"
+    method: POST
+    path: "customers/{customer_id}"
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+
+  # Create a new subscription for an existing customer.
+  # POST /api/v2/customers/{customer_id}/subscriptions (customer-scoped create).
+  # Required: plan_id (plan-based model) or subscription_items (item-based model).
+  # Common fields: plan_id, plan_quantity, addons, coupons, billing_cycles,
+  #                start_date, trial_end, po_number, payment_source_id
+  - name: create_subscription
+    description: "Create a new subscription for a customer"
+    method: POST
+    path: "customers/{customer_id}/subscriptions"
+
+  # Update an existing subscription by ID.
+  # POST /api/v2/subscriptions/{subscription_id} — Chargebee uses POST for updates.
+  # Common fields: plan_id, plan_quantity, addons, coupons, billing_cycles,
+  #                start_date, trial_end, po_number, replace_addon_list,
+  #                invoice_immediately, billing_alignment_mode, prorate
+  - name: update_subscription
+    description: "Update an existing subscription by ID"
+    method: POST
+    path: "subscriptions/{subscription_id}"
+
+  # Cancel a subscription immediately or at the end of the current term.
+  # POST /api/v2/subscriptions/{subscription_id}/cancel
+  # Optional: end_of_term (bool), cancel_at (unix timestamp), credit_option_for_current_term_charges,
+  #           unbilled_charges_option, account_receivables_handling, refundable_credits_handling
+  - name: cancel_subscription
+    description: "Cancel a subscription immediately or at end of term"
+    method: POST
+    path: "subscriptions/{subscription_id}/cancel"
+
+  # Pause a subscription (stops billing until resumed).
+  # POST /api/v2/subscriptions/{subscription_id}/pause
+  # Optional: pause_option (immediately|end_of_term), resume_date (unix timestamp)
+  - name: pause_subscription
+    description: "Pause a subscription to stop billing temporarily"
+    method: POST
+    path: "subscriptions/{subscription_id}/pause"
+
+  # Resume a paused subscription.
+  # POST /api/v2/subscriptions/{subscription_id}/resume
+  # Optional: resume_option (immediately|specified_date), resume_date, charges_handling
+  - name: resume_subscription
+    description: "Resume a previously paused subscription"
+    method: POST
+    path: "subscriptions/{subscription_id}/resume"

@@ -1,0 +1,165 @@
+name: woocommerce
+description: "WooCommerce (orders, products, customers, categories, coupons, shipping zones, payment gateways, tax rates)"
+
+# Credentials: consumer_key is the HTTP Basic username; consumer_secret is the
+# password. Both are generated in WooCommerce > Settings > Advanced > REST API.
+# store_url is the bare domain used to build the base URL, e.g. "mystore.com".
+credentials:
+  - name: consumer_key
+    flag: "--consumer-key"
+    env: WOOCOMMERCE_CONSUMER_KEY
+    prompt: "WooCommerce consumer key"
+    secret: false
+  - name: consumer_secret
+    flag: "--consumer-secret"
+    env: WOOCOMMERCE_CONSUMER_SECRET
+    prompt: "WooCommerce consumer secret"
+    secret: true
+  - name: store_url
+    flag: "--store-url"
+    env: WOOCOMMERCE_STORE_URL
+    prompt: "WooCommerce store URL (e.g. mystore.com)"
+    secret: false
+
+client:
+  base_url: "https://{store_url}/wp-json/wc/v3/"
+  # HTTP Basic: consumer_key as username, consumer_secret as password.
+  # Requires HTTPS. HTTP connections must use OAuth 1.0a instead.
+  auth:
+    type: http_basic
+    username: "{consumer_key}"
+    password: "{consumer_secret}"
+  # Page-number pagination: ?page= (1-based) + ?per_page= (max 100).
+  # Response headers X-WP-Total and X-WP-TotalPages report total counts.
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "per_page"
+    page_size: 100
+    base_page: 1
+    total_path_header: "X-WP-TotalPages"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  # WooCommerce list endpoints return bare JSON arrays — no data_selector needed.
+
+resources:
+
+  # ── Orders ───────────────────────────────────────────────────────────────────
+  # GET /orders — supports after/before (ISO 8601) to filter by date_modified.
+  # Sortable by date, id, include, title, slug; default order is desc by date.
+  # Use orderby=modified + order=asc for stable incremental reads.
+  - name: orders
+    endpoint:
+      path: "orders"
+      params:
+        orderby: "modified"
+        order: "asc"
+    incremental:
+      cursor_path: "date_modified"
+      start_param: "after"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+  # GET /products — supports after/before for date_modified filtering.
+  # Incrementally syncs new and updated products since last run.
+  - name: products
+    endpoint:
+      path: "products"
+      params:
+        orderby: "modified"
+        order: "asc"
+    incremental:
+      cursor_path: "date_modified"
+      start_param: "after"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # GET /customers — no date-filter param; full merge sync via id primary key.
+  - name: customers
+    endpoint:
+      path: "customers"
+
+  # ── Product Categories ────────────────────────────────────────────────────────
+  # GET /products/categories — flat list; no date filter. Small dataset, replace-safe.
+  - name: categories
+    endpoint:
+      path: "products/categories"
+
+  # ── Coupons ───────────────────────────────────────────────────────────────────
+  # GET /coupons — supports after/before for date_modified filtering.
+  - name: coupons
+    endpoint:
+      path: "coupons"
+
+  # ── Shipping Zones ────────────────────────────────────────────────────────────
+  # GET /shipping/zones — returns all zones in a single page; no date filter.
+  - name: shipping_zones
+    endpoint:
+      path: "shipping/zones"
+
+  # ── Payment Gateways ──────────────────────────────────────────────────────────
+  # GET /payment_gateways — returns all configured gateways in a single page.
+  - name: payment_gateways
+    endpoint:
+      path: "payment_gateways"
+
+  # ── Tax Rates ─────────────────────────────────────────────────────────────────
+  # GET /taxes — paginated list of all tax rates; no date filter.
+  - name: tax_rates
+    endpoint:
+      path: "taxes"
+
+write_endpoints:
+
+  # ── Orders ───────────────────────────────────────────────────────────────────
+
+  - name: create_order
+    description: "Create a new order"
+    method: POST
+    path: "orders"
+
+  - name: update_order
+    description: "Update an existing order by ID"
+    method: PUT
+    path: "orders/{order_id}"
+
+  - name: delete_order
+    description: "Delete an order by ID (pass ?force=true to permanently delete)"
+    method: DELETE
+    path: "orders/{order_id}"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+
+  - name: create_product
+    description: "Create a new product"
+    method: POST
+    path: "products"
+
+  - name: update_product
+    description: "Update an existing product by ID"
+    method: PUT
+    path: "products/{product_id}"
+
+  - name: delete_product
+    description: "Delete a product by ID (pass ?force=true to permanently delete)"
+    method: DELETE
+    path: "products/{product_id}"
+
+  # ── Customers ─────────────────────────────────────────────────────────────────
+
+  - name: create_customer
+    description: "Create a new customer"
+    method: POST
+    path: "customers"
+
+  - name: update_customer
+    description: "Update an existing customer by ID"
+    method: PUT
+    path: "customers/{customer_id}"
+
+  - name: delete_customer
+    description: "Delete a customer by ID (pass ?force=true to permanently delete)"
+    method: DELETE
+    path: "customers/{customer_id}"

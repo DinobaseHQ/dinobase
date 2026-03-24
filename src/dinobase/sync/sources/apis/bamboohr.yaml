@@ -1,0 +1,241 @@
+name: bamboohr
+description: "BambooHR HR platform (employees, employee directory, time off requests, time off types, employee tables, custom reports)"
+
+# BambooHR API authentication uses HTTP Basic auth.
+# The API key is sent as the username; the password is the literal string "x".
+# Generate an API key in: BambooHR account > Account > API Keys.
+# Base URL uses the company subdomain: https://{subdomain}.bamboohr.com/api/gateway.php/{subdomain}/v1/
+# Note: BambooHR also refers to the subdomain as "companyDomain" in their docs.
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: BAMBOOHR_API_KEY
+    prompt: "BambooHR API key"
+    secret: true
+  - name: subdomain
+    flag: "--subdomain"
+    env: BAMBOOHR_SUBDOMAIN
+    prompt: "BambooHR company subdomain (e.g. 'mycompany' from mycompany.bamboohr.com)"
+    secret: false
+
+client:
+  # The base URL includes the subdomain twice — once as the host and once as a path
+  # segment in the gateway URL pattern.
+  # Example: https://mycompany.bamboohr.com/api/gateway.php/mycompany/v1/
+  base_url: "https://{subdomain}.bamboohr.com/api/gateway.php/{subdomain}/v1/"
+  auth:
+    # BambooHR HTTP Basic auth: API key as username, literal "x" as password.
+    # curl -u "{api_key}:x" "https://{subdomain}.bamboohr.com/api/gateway.php/{subdomain}/v1/employees/directory"
+    type: http_basic
+    username: "{api_key}"
+    password: "x"
+  # BambooHR does not use standard cursor or offset pagination on most endpoints.
+  # The employees list endpoint supports ?limit and ?offset; most other endpoints
+  # return all matching records in a single response.
+  # Set a default paginator here for the employees list endpoint; individual
+  # resources that do not paginate override this with type: none.
+  paginator:
+    type: offset
+    limit: 100
+    limit_param: "limit"
+    offset_param: "offset"
+    # BambooHR does not return a "more" or "total" field on the employees list;
+    # iteration stops when a page returns fewer records than the limit.
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # Most BambooHR list responses return JSON directly as an array or wrap
+    # records in a top-level key. The data_selector is overridden per-resource.
+    params:
+      # Request JSON responses (BambooHR also supports XML).
+      format: "json"
+
+resources:
+  # ── Employees ────────────────────────────────────────────────────────────────
+  # GET /v1/employees
+  # Returns a paginated list of employees with a basic fieldset.
+  # Always-included fields: id, firstName, lastName, preferredName, photoUrl,
+  #   jobTitleName, status.
+  # Use the ?fields param to request up to 14 additional contact/social fields.
+  # Response: { "fields": [...], "employees": [...] }
+  # Supports offset pagination via ?limit and ?offset query parameters.
+  # Incremental sync via lastChanged is not available on the list endpoint;
+  # use the custom_reports resource (POST /v1/reports/custom) for incremental loads.
+  - name: employees
+    endpoint:
+      path: "employees"
+      data_selector: "employees"
+      params:
+        # Request a broad fieldset. BambooHR silently omits unknown or
+        # permission-restricted field names.
+        fields: "id,firstName,lastName,preferredName,displayName,photoUrl,jobTitle,department,division,location,workEmail,workPhone,mobilePhone,hireDate,originalHireDate,status,employmentHistoryStatus,employeeNumber,gender,dateOfBirth,maritalStatus,nationality,ethnicity,payType,payRate,payPeriod,currency,flsaCode,costCenter1,costCenter2,costCenter3,supervisor,supervisorId"
+
+  # ── Employee Directory ────────────────────────────────────────────────────────
+  # GET /v1/employees/directory
+  # Returns all active employees in the company directory along with a fieldset
+  # definition. The response is a single page (no pagination).
+  # Response: { "fields": [...], "employees": [...] }
+  # Returns 403 if directory/org-chart sharing is disabled in account settings.
+  # Returns 404 if the directory is empty.
+  - name: employee_directory
+    endpoint:
+      path: "employees/directory"
+      data_selector: "employees"
+      paginator:
+        type: none
+
+  # ── Time Off Requests ─────────────────────────────────────────────────────────
+  # GET /v1/time_off/requests
+  # Returns time off requests whose date range overlaps the query window.
+  # Required query params: start (YYYY-MM-DD), end (YYYY-MM-DD).
+  # Optional params: status (approved|denied|requested|canceled|superseded),
+  #   type (timeOffTypeId), employeeId, approvable (true|false).
+  # Response: flat JSON array of time off request objects.
+  # No pagination — all matching requests are returned in one response.
+  # The incremental block uses the request start date to page forward by year;
+  # set a wide default window and update via the cursor on each sync run.
+  - name: time_off_requests
+    endpoint:
+      path: "time_off/requests"
+      data_selector: "$"
+      paginator:
+        type: none
+      params:
+        # Default window: start of 2020 through today.
+        # Consumers should override start/end or rely on incremental to narrow the window.
+        start: "2020-01-01"
+        end: "2099-12-31"
+
+  # ── Time Off Types ────────────────────────────────────────────────────────────
+  # GET /v1/meta/time_off/types
+  # Returns all active time off types defined for the company.
+  # Optional: ?mode=request to filter to types the authenticated employee can request.
+  # Response: { "timeOffTypes": [...], "defaultHours": N }
+  # No pagination — returns all types in a single response.
+  - name: time_off_types
+    endpoint:
+      path: "meta/time_off/types"
+      data_selector: "timeOffTypes"
+      paginator:
+        type: none
+
+  # ── Employee Tables ───────────────────────────────────────────────────────────
+  # GET /v1/employees/{employeeId}/tables/{tableName}
+  # Returns all rows from a specific tabular data table for a given employee.
+  # Standard table names include: jobInfo, compensation, employmentStatus,
+  #   dependents, emergencyContacts, customTablesV2, training, assets.
+  # Response: { "title": "...", "fields": [...], "data": [...] }
+  # This resource uses employeeId=0 as a sentinel to fetch data for ALL employees
+  # (BambooHR supports "0" as a wildcard for the "all employees" variant on some tables).
+  # For per-employee table fetches, call with a specific employeeId path param.
+  # No pagination — all rows for the table are returned in one response.
+  - name: tables
+    endpoint:
+      path: "employees/all/tables/jobInfo"
+      data_selector: "data"
+      paginator:
+        type: none
+
+  # ── Custom Reports ────────────────────────────────────────────────────────────
+  # POST /v1/reports/custom
+  # Generates a report from a caller-specified list of field IDs.
+  # Returns all employees (active and inactive) unless filtered.
+  # Request body (JSON): { "title": "...", "fields": [...], "filters": { ... } }
+  # Content-Type must be exactly "application/json" (not with charset).
+  # Response: { "title": "...", "fields": [...], "employees": [...] }
+  # Unknown or permission-restricted field IDs are silently omitted (still returns 200).
+  # No pagination — the report returns all matching employees in one response.
+  # Use filters.lastChanged (ISO 8601 datetime) for incremental loads.
+  - name: custom_reports
+    endpoint:
+      path: "reports/custom"
+      method: POST
+      data_selector: "employees"
+      paginator:
+        type: none
+      # The request body specifies which fields to include in the report.
+      # This default set covers core HR fields; add or remove as needed.
+      json:
+        title: "All Employees"
+        fields:
+          - "id"
+          - "firstName"
+          - "lastName"
+          - "preferredName"
+          - "displayName"
+          - "jobTitle"
+          - "department"
+          - "division"
+          - "location"
+          - "workEmail"
+          - "workPhone"
+          - "mobilePhone"
+          - "hireDate"
+          - "originalHireDate"
+          - "status"
+          - "employmentHistoryStatus"
+          - "employeeNumber"
+          - "gender"
+          - "dateOfBirth"
+          - "maritalStatus"
+          - "nationality"
+          - "ethnicity"
+          - "payType"
+          - "payRate"
+          - "payPeriod"
+          - "currency"
+          - "supervisor"
+          - "supervisorId"
+          - "lastChanged"
+
+write_endpoints:
+  # ── Employees ─────────────────────────────────────────────────────────────────
+
+  # POST /v1/employees
+  # Creates a new employee record. BambooHR assigns the employee ID.
+  # Required fields: firstName, lastName.
+  # Common optional fields: hireDate, jobTitle, department, division, location,
+  #   workEmail, workPhone, mobilePhone, employeeNumber, gender, dateOfBirth,
+  #   maritalStatus, payType, payRate, payPeriod, currency, flsaCode.
+  # Response: 201 Created with a Location header pointing to the new employee URL.
+  # Body is a JSON object of field name/value pairs, e.g.:
+  #   { "firstName": "Jane", "lastName": "Smith", "hireDate": "2025-01-15" }
+  - name: create_employee
+    description: "Create a new employee. Required: firstName, lastName. Returns 201 with Location header."
+    method: POST
+    path: "employees"
+
+  # POST /v1/employees/{employeeId}
+  # Updates an existing employee by ID. Accepts a JSON object of field name/value pairs.
+  # Any subset of fields can be sent; only the supplied fields are modified.
+  # Discover available field names via GET /v1/meta/fields.
+  # Response: 200 OK on success (empty body).
+  - name: update_employee
+    description: "Update an existing employee by ID. Send any field name/value pairs; only supplied fields are changed."
+    method: POST
+    path: "employees/{employeeId}"
+
+  # ── Time Off Requests ──────────────────────────────────────────────────────────
+
+  # PUT /v1/employees/{employeeId}/time_off/request
+  # Creates a new time off request for a specific employee.
+  # Accepts JSON or XML. Content-Type must be application/json for JSON.
+  # Required fields: start (YYYY-MM-DD), end (YYYY-MM-DD), timeOffTypeId, status.
+  # status values: approved, denied, requested (defaults to "requested" if omitted).
+  # Optional fields: note (string), dates (array of { ymd, amount, type, unit }).
+  # Response: 200 OK with the created request object or an empty 201 Created.
+  - name: create_time_off_request
+    description: "Create a time off request for an employee. Required: start, end, timeOffTypeId. status defaults to 'requested'."
+    method: PUT
+    path: "employees/{employeeId}/time_off/request"
+
+  # PUT /v1/time_off/requests/{requestId}/status
+  # Updates the approval status of an existing time off request.
+  # Required body fields: status (approved|denied|requested|canceled), note (optional string).
+  # Response: 200 OK on success.
+  - name: update_time_off_request_status
+    description: "Approve, deny, or cancel a time off request by ID. Required: status (approved|denied|canceled|requested)."
+    method: PUT
+    path: "time_off/requests/{requestId}/status"

@@ -1,0 +1,247 @@
+name: customerio
+description: "Customer.io (people/customers, segments, campaigns, newsletters, messages, activities)"
+
+# Two credentials are needed because Customer.io has two separate APIs:
+#   App API  (api.customer.io)   — bearer token — used for reading data.
+#   Track API (track.customer.io) — HTTP Basic (site_id:api_key) — used for writing.
+credentials:
+  - name: app_api_key
+    flag: "--app-api-key"
+    env: CUSTOMERIO_APP_API_KEY
+    prompt: "Customer.io App API key (generated at Settings > API Credentials > App API Keys)"
+    secret: true
+  - name: site_id
+    flag: "--site-id"
+    env: CUSTOMERIO_SITE_ID
+    prompt: "Customer.io Site ID (found at Settings > API Credentials > Track API Keys)"
+    secret: false
+  - name: tracking_api_key
+    flag: "--tracking-api-key"
+    env: CUSTOMERIO_TRACKING_API_KEY
+    prompt: "Customer.io Tracking API key (found at Settings > API Credentials > Track API Keys)"
+    secret: true
+
+client:
+  # App API — read-only data retrieval.
+  # All endpoints are under /v1/ and use bearer authorization.
+  base_url: "https://api.customer.io/v1/"
+  auth:
+    type: bearer
+    token: "{app_api_key}"
+  # Activities and newsletters return a string `next` token in the response body.
+  # Pass it as ?start=<token> to retrieve the next page.
+  # Campaigns, segments, messages, and broadcasts return all results in one response
+  # (no server-side pagination on those list endpoints).
+  paginator:
+    type: cursor
+    cursor_path: "next"
+    cursor_param: "start"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # ── Customers / People ────────────────────────────────────────────────────
+  # GET /v1/customers?email=<addr>
+  # Without a filter this endpoint returns people matching the email query param.
+  # For a full people export use POST /v1/exports/customers (async job) instead.
+  # Response: { results: [ { id, ... } ] }
+  # No server-side pagination on the list response.
+  - name: customers
+    endpoint:
+      path: customers
+      data_selector: results
+
+  # ── Segments ──────────────────────────────────────────────────────────────
+  # GET /v1/segments
+  # Returns all segments in the workspace in a single response.
+  # Response: { segments: [ { id, name, state, type, ... } ] }
+  - name: segments
+    endpoint:
+      path: segments
+      data_selector: segments
+
+  # ── Campaigns ─────────────────────────────────────────────────────────────
+  # GET /v1/campaigns
+  # Returns all campaigns (automated message-triggered workflows) in the workspace.
+  # Response: { campaigns: [ { id, name, type, ... } ] }
+  # No pagination params accepted; full list returned in one shot.
+  - name: campaigns
+    endpoint:
+      path: campaigns
+      data_selector: campaigns
+
+  # ── Newsletters ───────────────────────────────────────────────────────────
+  # GET /v1/newsletters
+  # Returns one-time broadcast newsletters.
+  # Response: { newsletters: [ { id, name, type, sent_at, ... } ], next: "<token>" }
+  # `next` is a string cursor — absent on the final page.
+  - name: newsletters
+    endpoint:
+      path: newsletters
+      data_selector: newsletters
+
+  # ── Messages (Deliveries) ─────────────────────────────────────────────────
+  # GET /v1/messages
+  # Returns individual message deliveries across all channels.
+  # Response: { messages: [ { id, customer_id, subject, metrics, created, ... } ] }
+  # No pagination params on this top-level list endpoint.
+  - name: messages
+    endpoint:
+      path: messages
+      data_selector: messages
+
+  # ── Activities ────────────────────────────────────────────────────────────
+  # GET /v1/activities?limit=100&start=<token>
+  # Workspace-wide activity log (attribute changes, events, page views, etc.).
+  # Response: { activities: [ { id, type, customer_id, timestamp, ... } ], next: "<token>" }
+  # `next` is a cursor token; use it as ?start=<token> for the next page.
+  - name: activities
+    endpoint:
+      path: activities
+      data_selector: activities
+      params:
+        limit: 100
+
+  # ── Broadcasts ───────────────────────────────────────────────────────────
+  # GET /v1/broadcasts
+  # Returns API-triggered broadcast campaigns.
+  # Response: { broadcasts: [ { id, name, type, state, ... } ] }
+  - name: broadcasts
+    endpoint:
+      path: broadcasts
+      data_selector: broadcasts
+
+write_endpoints:
+  # ── Identify / Upsert Customer ────────────────────────────────────────────
+  # Track API: PUT https://track.customer.io/api/v1/customers/{identifier}
+  # Authentication: HTTP Basic — Site ID as username, Tracking API key as password.
+  # Creates a new person or updates existing attributes if the identifier already exists.
+  # {identifier} is the customer's unique ID (or email when using email-only workspaces).
+  # Body keys: id, email, created_at, and any custom attributes.
+  - name: identify_customer
+    description: "Create or update a person's profile in Customer.io. Provide the person's identifier in the path and any attributes in the request body. Uses the Track API (track.customer.io) with HTTP Basic auth (site_id:tracking_api_key)."
+    method: PUT
+    base_url: "https://track.customer.io/api/v1/"
+    path: customers/{identifier}
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Track Event (identified person) ──────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/customers/{identifier}/events
+  # Associates an event with an existing person.
+  # Body: { name: "event_name", type: "event"|"page"|"screen", timestamp: <unix>, data: { ... } }
+  - name: track_event
+    description: "Track a named event for an existing person. {identifier} is the person's ID (or email). Body must include 'name'; optionally include 'type', 'timestamp', and 'data'. Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: customers/{identifier}/events
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Track Anonymous Event ─────────────────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/events
+  # Records an event before a person is identified. Useful for anonymous pre-signup activity.
+  # Body: { name: "event_name", anonymous_id: "<id>", type: "event", data: { ... } }
+  - name: track_anonymous_event
+    description: "Track an event for an unidentified person. Include 'anonymous_id' to later merge with an identified person. Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: events
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Delete Customer ───────────────────────────────────────────────────────
+  # Track API: DELETE https://track.customer.io/api/v1/customers/{identifier}
+  # Permanently removes a person and all their data from the workspace.
+  - name: delete_customer
+    description: "Permanently delete a person and all their data. {identifier} is the person's unique ID. Uses the Track API with HTTP Basic auth."
+    method: DELETE
+    base_url: "https://track.customer.io/api/v1/"
+    path: customers/{identifier}
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Suppress Customer ─────────────────────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/customers/{identifier}/suppress
+  # Suppresses a person so they no longer receive messages.
+  - name: suppress_customer
+    description: "Suppress a person so they stop receiving messages. {identifier} is the person's unique ID. Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: customers/{identifier}/suppress
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Unsuppress Customer ───────────────────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/customers/{identifier}/unsuppress
+  # Re-enables a suppressed person so they can receive messages again.
+  - name: unsuppress_customer
+    description: "Remove suppression from a person so they can receive messages again. Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: customers/{identifier}/unsuppress
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Merge Duplicate People ────────────────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/merge_customers
+  # Merges two duplicate person profiles into one. The 'from' person is deleted.
+  # Body: { primary: { id|email|cio_id: "..." }, secondary: { id|email|cio_id: "..." } }
+  - name: merge_customers
+    description: "Merge two duplicate person profiles. The secondary (from) profile is deleted and its data merged into the primary (into) profile. Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: merge_customers
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Add People to a Manual Segment ───────────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/segments/{segment_id}/add_customers
+  # Body: { ids: ["person_id_1", "person_id_2"] }
+  - name: add_customers_to_segment
+    description: "Add people to a manual segment by their IDs. Body must include 'ids' (array of person IDs). Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: segments/{segment_id}/add_customers
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Remove People from a Manual Segment ──────────────────────────────────
+  # Track API: POST https://track.customer.io/api/v1/segments/{segment_id}/remove_customers
+  # Body: { ids: ["person_id_1", "person_id_2"] }
+  - name: remove_customers_from_segment
+    description: "Remove people from a manual segment by their IDs. Body must include 'ids' (array of person IDs). Uses the Track API with HTTP Basic auth."
+    method: POST
+    base_url: "https://track.customer.io/api/v1/"
+    path: segments/{segment_id}/remove_customers
+    auth:
+      type: http_basic
+      username: "{site_id}"
+      password: "{tracking_api_key}"
+
+  # ── Trigger API-Triggered Broadcast ──────────────────────────────────────
+  # App API: POST https://api.customer.io/v1/campaigns/{broadcast_id}/triggers
+  # Manually triggers a broadcast and optionally supplies template data.
+  # Body: { data: { ... }, recipients: { ... } }
+  - name: trigger_broadcast
+    description: "Trigger an API-triggered broadcast campaign. {broadcast_id} is the campaign ID. Optionally supply 'data' for liquid templating and 'recipients' to override the audience. Uses the App API with bearer auth."
+    method: POST
+    path: campaigns/{broadcast_id}/triggers

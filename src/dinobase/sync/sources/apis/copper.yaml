@@ -1,0 +1,327 @@
+name: copper
+description: "Copper CRM (leads, people, companies, opportunities, tasks, activities, pipelines, custom fields)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: COPPER_API_KEY
+    prompt: "Copper API key"
+    secret: true
+  # email is required by Copper in the X-PW-UserEmail header alongside the token.
+  - name: email
+    flag: "--email"
+    env: COPPER_EMAIL
+    prompt: "Copper account email address (must match the API key owner)"
+    secret: false
+
+client:
+  base_url: "https://api.copper.com/developer_api/v1/"
+  auth:
+    # Copper does not use Bearer or HTTP Basic auth.
+    # The API key goes in X-PW-AccessToken; no Authorization header is used.
+    type: custom_header
+    token: "{api_key}"
+    header: "X-PW-AccessToken"
+  headers:
+    # Required on every request — identifies this as a developer API integration.
+    X-PW-Application: "developer_api"
+    # Required on every request — must be the email of the user who owns the API key.
+    X-PW-UserEmail: "{email}"
+    Content-Type: "application/json"
+  paginator:
+    # Copper uses page-number pagination.
+    # page_number and page_size are sent in the POST body for search endpoints.
+    # The response header X-PW-TOTAL contains the total record count (upper bound).
+    # Max page_size is 200; Copper only exposes the first 100,000 records.
+    # Sorting by date_modified desc is recommended for stable pagination.
+    type: page_number
+    page_param: "page_number"
+    page_size_param: "page_size"
+    page_size: 200
+    base_page: 1
+    total_path_header: "X-PW-TOTAL"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # All Copper search endpoints return a bare JSON array (no wrapping object).
+    data_selector: null
+
+resources:
+  # ── Leads ─────────────────────────────────────────────────────────────────────
+  # POST /leads/search returns a bare JSON array of lead objects.
+  # Supports page_number / page_size in the POST body.
+  # Filter minimum_modified_date (Unix timestamp) enables incremental syncs.
+  - name: leads
+    endpoint:
+      path: "leads/search"
+      method: POST
+      body:
+        sort_by: "date_modified"
+        sort_direction: "desc"
+    incremental:
+      cursor_path: "date_modified"
+      param: "minimum_modified_date"
+
+  # ── People ────────────────────────────────────────────────────────────────────
+  # POST /people/search returns a bare JSON array of person objects.
+  # Filter minimum_modified_date (Unix timestamp) enables incremental syncs.
+  - name: people
+    endpoint:
+      path: "people/search"
+      method: POST
+      body:
+        sort_by: "date_modified"
+        sort_direction: "desc"
+    incremental:
+      cursor_path: "date_modified"
+      param: "minimum_modified_date"
+
+  # ── Companies ─────────────────────────────────────────────────────────────────
+  # POST /companies/search returns a bare JSON array of company objects.
+  # Filter minimum_modified_date (Unix timestamp) enables incremental syncs.
+  - name: companies
+    endpoint:
+      path: "companies/search"
+      method: POST
+      body:
+        sort_by: "date_modified"
+        sort_direction: "desc"
+    incremental:
+      cursor_path: "date_modified"
+      param: "minimum_modified_date"
+
+  # ── Opportunities ─────────────────────────────────────────────────────────────
+  # POST /opportunities/search returns a bare JSON array of opportunity objects.
+  # Filter minimum_modified_date (Unix timestamp) enables incremental syncs.
+  - name: opportunities
+    endpoint:
+      path: "opportunities/search"
+      method: POST
+      body:
+        sort_by: "date_modified"
+        sort_direction: "desc"
+    incremental:
+      cursor_path: "date_modified"
+      param: "minimum_modified_date"
+
+  # ── Tasks ─────────────────────────────────────────────────────────────────────
+  # POST /tasks/search returns a bare JSON array of task objects.
+  # Supports page_number / page_size in the POST body.
+  - name: tasks
+    endpoint:
+      path: "tasks/search"
+      method: POST
+      body:
+        sort_by: "date_modified"
+        sort_direction: "desc"
+
+  # ── Activities ────────────────────────────────────────────────────────────────
+  # POST /activities/search returns a bare JSON array of activity log objects.
+  # minimum_activity_date / maximum_activity_date are Unix timestamps.
+  # full_result: true improves performance but may return duplicate logs; omitted here.
+  - name: activities
+    endpoint:
+      path: "activities/search"
+      method: POST
+      body:
+        sort_direction: "desc"
+    incremental:
+      cursor_path: "activity_date"
+      param: "minimum_activity_date"
+
+  # ── Pipelines ────────────────────────────────────────────────────────────────
+  # GET /pipelines returns a bare JSON array of all pipeline objects.
+  # Each pipeline includes its stages array inline.
+  # Small static list; no pagination needed in practice.
+  - name: pipelines
+    endpoint:
+      path: "pipelines"
+      method: GET
+
+  # ── Custom Field Definitions ──────────────────────────────────────────────────
+  # GET /custom_field_definitions returns a bare JSON array.
+  # Each entry describes a custom field: id, name, data_type, available_on, options.
+  # Small, rarely-changing list; no pagination needed in practice.
+  - name: custom_fields
+    endpoint:
+      path: "custom_field_definitions"
+      method: GET
+
+write_endpoints:
+  # ── Leads ─────────────────────────────────────────────────────────────────────
+  - name: create_lead
+    description: "Create a new lead. name is required. Address, email, phone numbers, assignee, status, and custom fields are optional."
+    method: POST
+    path: "leads"
+    body:
+      required:
+        - name
+      optional:
+        - address
+        - assignee_id
+        - company_name
+        - customer_source_id
+        - details
+        - email
+        - monetary_value
+        - phone_numbers
+        - socials
+        - status
+        - tags
+        - title
+        - websites
+        - custom_fields
+
+  - name: update_lead
+    description: "Update an existing lead by ID. Only fields specified in the request body are changed. Pass null to clear a field."
+    method: PUT
+    path: "leads/{id}"
+    body:
+      optional:
+        - address
+        - assignee_id
+        - company_name
+        - customer_source_id
+        - details
+        - email
+        - monetary_value
+        - name
+        - phone_numbers
+        - socials
+        - status
+        - tags
+        - title
+        - websites
+        - custom_fields
+
+  # ── People ────────────────────────────────────────────────────────────────────
+  - name: create_person
+    description: "Create a new person (contact). name is required. Emails, phone numbers, company, title, and custom fields are optional."
+    method: POST
+    path: "people"
+    body:
+      required:
+        - name
+      optional:
+        - address
+        - assignee_id
+        - company_id
+        - contact_type_id
+        - details
+        - emails
+        - phone_numbers
+        - socials
+        - tags
+        - title
+        - websites
+        - custom_fields
+
+  - name: update_person
+    description: "Update an existing person by ID. Only fields specified in the request body are changed. Pass null to clear a field."
+    method: PUT
+    path: "people/{id}"
+    body:
+      optional:
+        - address
+        - assignee_id
+        - company_id
+        - contact_type_id
+        - details
+        - emails
+        - name
+        - phone_numbers
+        - socials
+        - tags
+        - title
+        - websites
+        - custom_fields
+
+  # ── Companies ─────────────────────────────────────────────────────────────────
+  - name: create_company
+    description: "Create a new company. name is required. email_domain is a unique key — no two companies can share the same domain."
+    method: POST
+    path: "companies"
+    body:
+      required:
+        - name
+      optional:
+        - address
+        - assignee_id
+        - contact_type_id
+        - details
+        - email_domain
+        - phone_numbers
+        - primary_contact_id
+        - socials
+        - tags
+        - websites
+        - custom_fields
+
+  - name: update_company
+    description: "Update an existing company by ID. Only fields specified in the request body are changed. Pass null to clear a field."
+    method: PUT
+    path: "companies/{id}"
+    body:
+      optional:
+        - address
+        - assignee_id
+        - contact_type_id
+        - details
+        - email_domain
+        - name
+        - phone_numbers
+        - primary_contact_id
+        - socials
+        - tags
+        - websites
+        - custom_fields
+
+  # ── Opportunities ─────────────────────────────────────────────────────────────
+  - name: create_opportunity
+    description: "Create a new opportunity. name and primary_contact_id are required. Pipeline, stage, monetary value, close date, and custom fields are optional."
+    method: POST
+    path: "opportunities"
+    body:
+      required:
+        - name
+        - primary_contact_id
+      optional:
+        - assignee_id
+        - close_date
+        - company_id
+        - customer_source_id
+        - details
+        - loss_reason_id
+        - monetary_value
+        - pipeline_id
+        - pipeline_stage_id
+        - priority
+        - status
+        - tags
+        - win_probability
+        - custom_fields
+
+  - name: update_opportunity
+    description: "Update an existing opportunity by ID. Only fields specified in the request body are changed. Setting a won/lost status also sets close_date automatically."
+    method: PUT
+    path: "opportunities/{id}"
+    body:
+      optional:
+        - assignee_id
+        - close_date
+        - company_id
+        - customer_source_id
+        - details
+        - loss_reason_id
+        - monetary_value
+        - name
+        - pipeline_id
+        - pipeline_stage_id
+        - primary_contact_id
+        - priority
+        - status
+        - tags
+        - win_probability
+        - custom_fields

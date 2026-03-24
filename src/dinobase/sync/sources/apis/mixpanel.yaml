@@ -1,0 +1,393 @@
+name: mixpanel
+description: "Mixpanel analytics (raw event export, user profiles, funnels, retention, cohorts, annotations)"
+
+# ── Credentials ────────────────────────────────────────────────────────────────
+# Mixpanel supports two auth methods:
+#
+# 1. Service Accounts (recommended): HTTP Basic auth where
+#    username = service_account_username, password = service_account_secret.
+#    project_id is required alongside service account credentials.
+#
+# 2. Project Secret (deprecated, retires March 2027): HTTP Basic auth where
+#    username = api_secret, password = "" (empty string).
+#    project_id is encoded in the secret itself.
+#
+# This connector uses Service Account auth for all Query API and Annotation API
+# endpoints (mixpanel.com/api, mixpanel.com/api/app), and Project Secret auth
+# for the Export API (data.mixpanel.com/api/2.0/export) — which only supports
+# Project Secret as of the current documentation.
+#
+# Ingestion endpoints (track, engage, import) are authenticated via the project
+# token embedded in the request body; no Authorization header is required.
+credentials:
+  - name: service_account_username
+    flag: "--service-account-username"
+    env: MIXPANEL_SERVICE_ACCOUNT_USERNAME
+    prompt: "Mixpanel service account username"
+    secret: false
+
+  - name: service_account_secret
+    flag: "--service-account-secret"
+    env: MIXPANEL_SERVICE_ACCOUNT_SECRET
+    prompt: "Mixpanel service account secret"
+    secret: true
+
+  - name: project_id
+    flag: "--project-id"
+    env: MIXPANEL_PROJECT_ID
+    prompt: "Mixpanel project ID (integer)"
+    secret: false
+
+  - name: api_secret
+    flag: "--api-secret"
+    env: MIXPANEL_API_SECRET
+    prompt: "Mixpanel project secret (for Export API; deprecated but still required for raw export)"
+    secret: true
+
+  - name: project_token
+    flag: "--project-token"
+    env: MIXPANEL_PROJECT_TOKEN
+    prompt: "Mixpanel project token (for Ingestion API: track, engage, import)"
+    secret: false
+
+# ── Client ─────────────────────────────────────────────────────────────────────
+# Mixpanel has three distinct API surfaces with different base URLs:
+#
+#   Query API:      https://mixpanel.com/api/query/   (funnels, retention, engage, cohorts)
+#   Annotation API: https://mixpanel.com/api/app/     (annotations)
+#   Export API:     https://data.mixpanel.com/api/2.0/ (raw JSONL event export)
+#   Ingestion API:  https://api.mixpanel.com/          (track, engage write, import)
+#
+# EU / India residency variants:
+#   Query:      eu.mixpanel.com / in.mixpanel.com
+#   Export:     data-eu.mixpanel.com / data-in.mixpanel.com
+#   Ingestion:  api-eu.mixpanel.com / api-in.mixpanel.com
+#
+# The client base_url below targets the Query API. Resources that hit a different
+# base URL override it at the endpoint level via base_url.
+#
+# Auth: Service Account credentials via HTTP Basic (username:secret).
+# The Export API only accepts Project Secret auth; its resources override auth.
+#
+# Pagination:
+#   - Query API (funnels, retention, cohorts): No pagination; full result set
+#     returned in a single response.
+#   - Engage (user profiles): Page-based via page + session_id. page_size = 1000
+#     (API maximum). The session_id from page 0 must be echoed on subsequent
+#     requests. No standard "next URL" field; the runtime must implement this
+#     manually using the total count.
+#   - Export API (raw events): No pagination; controlled via from_date/to_date
+#     date-range parameters. The response is JSONL, not JSON.
+#   - Annotations: No pagination; returns all annotations for the date range.
+#
+# The paginator block below is intentionally absent because no endpoint uses a
+# uniform URL-link or cursor scheme. Per-resource pagination notes are inline.
+client:
+  base_url: "https://mixpanel.com/api/query/"
+  auth:
+    # Service Account: HTTP Basic with username = service_account_username,
+    # password = service_account_secret.
+    type: http_basic
+    username: "{service_account_username}"
+    password: "{service_account_secret}"
+  # No global paginator: Mixpanel APIs use incompatible pagination strategies
+  # (date-range windows for export, session+page for engage, none for others).
+  # Each resource documents its own pagination approach.
+
+# ── Resource Defaults ──────────────────────────────────────────────────────────
+resource_defaults:
+  # Most Mixpanel read resources return analytics aggregates, not entity rows
+  # with stable primary keys. Export events use $insert_id for deduplication;
+  # engage profiles use $distinct_id. Funnels/retention/cohorts use id.
+  # Each resource overrides as needed.
+  primary_key: id
+  write_disposition: replace
+  endpoint:
+    params:
+      project_id: "{project_id}"
+
+# ── Resources (Read Endpoints) ─────────────────────────────────────────────────
+resources:
+
+  # ── Raw Event Export ─────────────────────────────────────────────────────────
+  # GET https://data.mixpanel.com/api/2.0/export
+  #
+  # Returns raw events as JSONL (newline-delimited JSON) — one JSON object per
+  # line. This is NOT standard JSON; the response body cannot be parsed with a
+  # standard JSON decoder. Each line has the shape:
+  #   {"event": "<name>", "properties": {"time": <unix>, "$insert_id": "<id>", ...}}
+  #
+  # Auth: HTTP Basic with api_secret as username, empty password.
+  # (Service Account auth is NOT supported on the Export API.)
+  #
+  # No pagination. Control the window via from_date / to_date (yyyy-mm-dd).
+  # Maximum: 100 000 events per call; narrow the date window for larger exports.
+  # Rate limits: 60 queries/hour, 3 queries/second, 100 concurrent.
+  #
+  # primary_key: "$insert_id" from within the properties object uniquely
+  # identifies each event for deduplication purposes.
+  - name: export
+    description: "Raw event export (JSONL). Response is newline-delimited JSON, one event per line."
+    primary_key: null
+    write_disposition: append
+    endpoint:
+      base_url: "https://data.mixpanel.com/api/2.0/"
+      path: "export"
+      method: GET
+      # Override auth: Export API only accepts Project Secret (api_secret as
+      # HTTP Basic username with an empty password).
+      auth:
+        type: http_basic
+        username: "{api_secret}"
+        password: ""
+      # response_format signals to the runtime that this endpoint returns JSONL,
+      # not standard JSON. Each non-empty line is a discrete event record.
+      response_format: jsonl
+      params:
+        from_date: null   # Required at sync time: yyyy-mm-dd (inclusive, UTC)
+        to_date: null     # Required at sync time: yyyy-mm-dd (inclusive, UTC)
+        # Optional params (set at sync time as needed):
+        # limit: 100000   # Max events to return (hard cap: 100 000)
+        # event: null     # JSON-encoded array of event names to filter, e.g. '["Signup","Login"]'
+        # where: null     # Filter expression, e.g. 'properties["$country_code"] == "US"'
+        # time_in_ms: false  # Set true for millisecond-precision timestamps
+
+  # ── Engage (User Profiles Query) ──────────────────────────────────────────────
+  # POST https://mixpanel.com/api/query/engage
+  #
+  # Returns user profile records with their custom properties.
+  # Response envelope: { page, page_size, session_id, status, total, results: [...] }
+  # Each result: { "$distinct_id": "...", "$properties": { ... } }
+  #
+  # Pagination: page-based. page=0 returns the first 1000 profiles and a
+  # session_id. To continue, submit subsequent requests with the same session_id
+  # and incrementing page values until (page + 1) * page_size >= total.
+  # page_size is fixed at 1000 (API maximum).
+  #
+  # Rate limits: 60 queries/hour, 5 concurrent queries.
+  - name: engage
+    description: "User profile records (Mixpanel People). Page-based: use session_id from response for continuation."
+    primary_key: "$distinct_id"
+    write_disposition: merge
+    endpoint:
+      path: "engage"
+      method: POST
+      data_selector: "results"
+      # Pagination note: no automatic paginator available for Mixpanel's session+page
+      # scheme. The runtime must:
+      #   1. POST with page=0 (no session_id on the first call).
+      #   2. Extract session_id from the response.
+      #   3. Repeat with session_id + incrementing page until exhausted.
+      # page_size defaults to 1000 on the server side.
+      params:
+        # Optional body params (set at sync time as needed):
+        # where: null          # Filter expression, e.g. 'properties["$country_code"] == "US"'
+        # output_properties: null  # JSON array of property names to return
+        # filter_by_cohort: null   # JSON object: {"id": <cohort_id>}
+
+  # ── Funnels ───────────────────────────────────────────────────────────────────
+  # GET https://mixpanel.com/api/query/funnels
+  #
+  # Returns conversion data for a saved funnel report.
+  # funnel_id, from_date, and to_date are required at sync time.
+  # No pagination; full result set is returned in one response.
+  #
+  # Rate limits: 60 queries/hour, 5 concurrent queries.
+  - name: funnels
+    description: "Saved funnel report data. funnel_id, from_date, and to_date are required params."
+    primary_key: null
+    write_disposition: replace
+    endpoint:
+      path: "funnels"
+      method: GET
+      params:
+        funnel_id: null   # Required at sync time: integer ID of the saved funnel
+        from_date: null   # Required: yyyy-mm-dd (inclusive)
+        to_date: null     # Required: yyyy-mm-dd (inclusive)
+        # Optional params:
+        # unit: "day"          # Interval unit: "day", "week", "month"
+        # interval: 1          # Number of days per bucket
+        # length: null         # Funnel completion window in length_unit units (max 90 days)
+        # length_unit: "day"   # "second", "minute", "hour", "day"
+        # on: null             # Property expression for segmentation
+        # where: null          # Filter expression
+        # limit: 255           # Top N property values (max 10 000)
+
+  # ── Retention ────────────────────────────────────────────────────────────────
+  # GET https://mixpanel.com/api/query/retention
+  #
+  # Returns retention cohort data. from_date and to_date are required.
+  # Response maps dates to retention counts: { "YYYY-MM-DD": { counts: [...], first: N }, ... }
+  # No pagination; full result set returned in one response.
+  #
+  # Rate limits: 60 queries/hour, 5 concurrent queries.
+  - name: retention
+    description: "Retention report data. from_date and to_date are required params."
+    primary_key: null
+    write_disposition: replace
+    endpoint:
+      path: "retention"
+      method: GET
+      params:
+        from_date: null   # Required: yyyy-mm-dd (inclusive)
+        to_date: null     # Required: yyyy-mm-dd (inclusive)
+        # Optional params:
+        # retention_type: "birth"   # "birth" (first-time) or "compounded" (recurring)
+        # born_event: null          # Required when retention_type is "birth"
+        # event: null               # Event for returning-user counts
+        # unit: "day"               # "day", "week", "month"
+        # interval: 1               # Bucket size in units (max 90 days)
+        # interval_count: 1         # Number of buckets to return
+        # unbounded_retention: false
+        # on: null                  # Property expression for segmentation
+        # limit: null               # Top N segmentation values
+
+  # ── Cohorts ──────────────────────────────────────────────────────────────────
+  # POST https://mixpanel.com/api/query/cohorts/list
+  #
+  # Returns all saved cohorts in the project as a JSON array.
+  # No pagination; the full list is returned in one response.
+  # Response: array of { id, name, count, description, created, project_id, is_visible }
+  #
+  # Rate limits: 60 queries/hour, 5 concurrent queries.
+  - name: cohorts
+    description: "All saved cohorts in the project (static and dynamic)."
+    primary_key: id
+    write_disposition: replace
+    endpoint:
+      path: "cohorts/list"
+      method: POST
+      # Response is a bare array, not wrapped in an envelope key.
+      data_selector: "$"
+
+  # ── Annotations ──────────────────────────────────────────────────────────────
+  # GET https://mixpanel.com/api/app/projects/{project_id}/annotations
+  #
+  # Returns annotation objects for the given date range.
+  # Base URL differs from the Query API: uses /api/app/ not /api/query/.
+  # No pagination; returns all matching annotations in one response.
+  # Response: JSON array of { id, date, description, tags, user: {...} }
+  #
+  # Requires at least Analyst role.
+  - name: annotations
+    description: "Project annotations (timeline notes). Optional fromDate/toDate params in yyyy-mm-dd."
+    primary_key: id
+    write_disposition: replace
+    endpoint:
+      base_url: "https://mixpanel.com/api/app/"
+      path: "projects/{project_id}/annotations"
+      method: GET
+      # project_id is in the path; do not also send it as a query param.
+      params: {}
+      # Optional params (set at sync time as needed):
+      # fromDate: null   # yyyy-mm-dd
+      # toDate: null     # yyyy-mm-dd
+
+# ── Write Endpoints ────────────────────────────────────────────────────────────
+write_endpoints:
+
+  # ── Track Events (Ingestion API) ──────────────────────────────────────────────
+  # POST https://api.mixpanel.com/track
+  #
+  # Real-time event ingestion. Accepts a JSON array of event objects.
+  # No Authorization header required; authentication is via the project token
+  # embedded in each event's properties object.
+  # Body: JSON array of { event: string, properties: { token, distinct_id, time, $insert_id, ... } }
+  # Response: 1 (success) or 0 (failure) by default; JSON object with verbose=1.
+  # Max batch size: 50 events.
+  - name: track_events
+    description: "Send real-time events to Mixpanel. Auth via project token in request body. Accepts a JSON array of up to 50 event objects, each with 'event' and 'properties' (including token, distinct_id, time, $insert_id)."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "track"
+    # No Authorization header; token goes in the request body per event.
+    auth: none
+    params:
+      verbose: 1   # Return JSON {status, error} instead of bare 1/0
+
+  # ── Import Events (Ingestion API) ─────────────────────────────────────────────
+  # POST https://api.mixpanel.com/import
+  #
+  # Batch historical event import. Supports standard JSON array or JSONL
+  # (application/x-ndjson). Uses Service Account or Project Secret auth.
+  # Required query params: strict=1, project_id.
+  # Body: JSON array of event objects (or JSONL with Content-Type: application/x-ndjson).
+  # Each event must include: event, properties.time, properties.distinct_id,
+  # properties.$insert_id.
+  # Max payload: 2 097 152 bytes (~2 MB). Accept gzip encoding.
+  # Response: { code: 200, num_records_imported: N, status: "OK" }
+  - name: import_events
+    description: "Batch-import historical events. Service Account or Project Secret auth. Body: JSON array (or JSONL) of event objects. Each must have event, properties.time, properties.distinct_id, properties.$insert_id. Query params: strict=1, project_id."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "import"
+    params:
+      strict: "1"
+      project_id: "{project_id}"
+
+  # ── Engage / User Profile Updates (Ingestion API) ────────────────────────────
+  # POST https://api.mixpanel.com/engage
+  #
+  # Create or update user profiles. Auth via project token in the request body.
+  # Body: JSON array of profile update objects, each containing:
+  #   $token, $distinct_id, and one operation:
+  #   $set, $set_once, $add, $union, $append, $remove, $unset, or $delete.
+  # Optional query params: ip=0|1, strict=0|1, verbose=0|1.
+  # Response: 1 (success) by default; JSON with verbose=1.
+  - name: engage_profiles_set
+    description: "Set user profile properties (overwrite). Auth via project token in body. Body: JSON array of { $token, $distinct_id, $set: { prop: value, ... } }."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "engage"
+    auth: none
+    params:
+      verbose: 1
+
+  - name: engage_profiles_set_once
+    description: "Set user profile properties only if they do not already exist. Body: JSON array of { $token, $distinct_id, $set_once: { prop: value, ... } }."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "engage"
+    auth: none
+    params:
+      verbose: 1
+
+  - name: engage_profiles_unset
+    description: "Permanently remove specific properties from user profiles. Body: JSON array of { $token, $distinct_id, $unset: [\"prop1\", \"prop2\"] }."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "engage"
+    auth: none
+    params:
+      verbose: 1
+
+  - name: engage_profiles_delete
+    description: "Delete entire user profiles from Mixpanel People. Body: JSON array of { $token, $distinct_id, $delete: \"\" }."
+    method: POST
+    base_url: "https://api.mixpanel.com/"
+    path: "engage"
+    auth: none
+    params:
+      verbose: 1
+
+  # ── Annotations ──────────────────────────────────────────────────────────────
+  # POST/PATCH https://mixpanel.com/api/app/projects/{project_id}/annotations
+  #
+  # Requires at least Analyst role. Service Account auth (HTTP Basic).
+  - name: create_annotation
+    description: "Create a new annotation on the project timeline. Body: { date: 'YYYY-MM-DD HH:mm:ss', description: string, tags: [number] }."
+    method: POST
+    base_url: "https://mixpanel.com/api/app/"
+    path: "projects/{project_id}/annotations"
+
+  - name: update_annotation
+    description: "Update an existing annotation. Body: { description: string, tags: [number] }."
+    method: PATCH
+    base_url: "https://mixpanel.com/api/app/"
+    path: "projects/{project_id}/annotations/{annotation_id}"
+
+  - name: delete_annotation
+    description: "Delete an annotation by ID. Returns { status: 'ok', results: { id: number } }."
+    method: DELETE
+    base_url: "https://mixpanel.com/api/app/"
+    path: "projects/{project_id}/annotations/{annotation_id}"
