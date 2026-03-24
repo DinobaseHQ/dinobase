@@ -1,0 +1,181 @@
+name: opsgenie
+description: "Opsgenie (alerts, incidents, services, teams, users, schedules, escalations, integrations)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: OPSGENIE_API_KEY
+    prompt: "Opsgenie API key"
+    secret: true
+
+client:
+  base_url: "https://api.opsgenie.com/"
+  # Opsgenie uses "GenieKey" auth scheme: Authorization: GenieKey <key>
+  auth:
+    type: custom_header
+    header_name: "Authorization"
+    header_value: "GenieKey {api_key}"
+  # Opsgenie offset pagination: offset + limit (default 20, max 100).
+  # Responses include a "paging" object with next/first/last URLs.
+  # Hard cap: offset + limit must be < 20000.
+  paginator:
+    type: offset
+    limit: 100
+    limit_param: "limit"
+    offset_param: "offset"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "data"
+
+resources:
+  # Alerts: triggered and resolved alert events.
+  # GET /v2/alerts
+  # Supports offset pagination. Incremental via query param using ISO-8601 createdAt filter.
+  # Response: {"data": [...], "paging": {"next": ..., "first": ..., "last": ...}, ...}
+  - name: alerts
+    endpoint:
+      path: "v2/alerts"
+      params:
+        # Sort ascending by createdAt so incremental cursor advances correctly.
+        sort: "createdAt"
+        order: "asc"
+    incremental:
+      cursor_path: "createdAt"
+      param: "query"
+      param_format: "createdAt > {value}"
+      initial_value: "2024-01-01T00:00:00Z"
+
+  # Incidents: major incidents tracked separately from alerts.
+  # GET /v1/incidents
+  # Response: {"data": [...], "paging": {...}, ...}
+  - name: incidents
+    endpoint:
+      path: "v1/incidents"
+
+  # Services: business services that can be impacted by incidents.
+  # GET /v1/services
+  # Response: {"data": [...], "paging": {...}, ...}
+  - name: services
+    endpoint:
+      path: "v1/services"
+
+  # Teams: groups of users that own schedules and escalation policies.
+  # GET /v2/teams
+  # Note: this endpoint returns all teams in a single response (no pagination).
+  # Response: {"data": [...], ...}
+  - name: teams
+    endpoint:
+      path: "v2/teams"
+
+  # Users: all users in the Opsgenie account.
+  # GET /v2/users
+  # Supports offset pagination (default limit 100).
+  # Response: {"data": [...], "paging": {...}, "totalCount": N, ...}
+  - name: users
+    endpoint:
+      path: "v2/users"
+
+  # Schedules: on-call rotation schedules.
+  # GET /v2/schedules
+  # Note: this endpoint returns all schedules in a single response (no pagination).
+  # Response: {"data": [...], ...}
+  - name: schedules
+    endpoint:
+      path: "v2/schedules"
+
+  # Escalations: escalation policies defining on-call notification chains.
+  # GET /v2/escalations
+  # Response: {"data": [...], ...}
+  - name: escalations
+    endpoint:
+      path: "v2/escalations"
+
+  # Integrations: configured alert source integrations.
+  # GET /v2/integrations
+  # Response: {"data": [...], ...}
+  - name: integrations
+    endpoint:
+      path: "v2/integrations"
+
+write_endpoints:
+  # Alerts — create, acknowledge, close
+
+  # Create a new alert. Only "message" is required (max 130 chars).
+  # Responds HTTP 202 (async); use the returned requestId to check status.
+  - name: create_alert
+    description: "Create a new alert"
+    method: POST
+    path: "v2/alerts"
+    body:
+      required:
+        - message
+      optional:
+        - alias
+        - description
+        - responders
+        - visibleTo
+        - actions
+        - tags
+        - details
+        - entity
+        - source
+        - priority
+        - user
+        - note
+
+  # Acknowledge an open alert by its identifier.
+  # POST /v2/alerts/:identifier/acknowledge
+  # Path param: identifier (id, tinyId, or alias — set identifierType query param accordingly)
+  - name: acknowledge_alert
+    description: "Acknowledge an open alert"
+    method: POST
+    path: "v2/alerts/{identifier}/acknowledge"
+    body:
+      optional:
+        - user
+        - source
+        - note
+
+  # Close an open alert by its identifier.
+  # POST /v2/alerts/:identifier/close
+  - name: close_alert
+    description: "Close an open alert"
+    method: POST
+    path: "v2/alerts/{identifier}/close"
+    body:
+      optional:
+        - user
+        - source
+        - note
+
+  # Incidents — create, close
+
+  # Create a new incident. "message" is required (max 130 chars).
+  # POST /v1/incidents
+  - name: create_incident
+    description: "Create a new incident"
+    method: POST
+    path: "v1/incidents"
+    body:
+      required:
+        - message
+      optional:
+        - description
+        - responders
+        - tags
+        - details
+        - priority
+        - impactedServices
+
+  # Close an active incident by its identifier.
+  # POST /v1/incidents/:identifier/close
+  - name: close_incident
+    description: "Close an active incident"
+    method: POST
+    path: "v1/incidents/{identifier}/close"
+    body:
+      optional:
+        - note

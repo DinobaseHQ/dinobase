@@ -1,0 +1,243 @@
+name: cloudflare
+description: "Cloudflare API v4 (accounts, zones, dns_records, firewall_rules, page_rules, workers, certificates)"
+
+credentials:
+  - name: api_token
+    flag: "--api-token"
+    env: CLOUDFLARE_API_TOKEN
+    prompt: "Cloudflare API token (dash.cloudflare.com → My Profile → API Tokens → Create Token)"
+    secret: true
+
+client:
+  base_url: "https://api.cloudflare.com/client/v4/"
+  auth:
+    type: bearer
+    token: "{api_token}"
+  # Cloudflare API v4 uses page-number pagination for most list endpoints.
+  # Requests accept `page` (1-based) and `per_page` query params.
+  # Responses wrap records in `result` and include a `result_info` object:
+  #   { count, page, per_page, total_count, total_pages }
+  # Pagination ends when result_info.page == result_info.total_pages (or result is empty).
+  # Some endpoints (workers/scripts, page_rules) return all items in a single response
+  # with no result_info; the paginator safely handles empty pages.
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "per_page"
+    page_size: 100
+    base_page: 1
+    total_path: "result_info.total_pages"
+    current_page_path: "result_info.page"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # All Cloudflare v4 list responses wrap the array in "result".
+    data_selector: "result"
+
+resources:
+
+  # ── Accounts ─────────────────────────────────────────────────────────────────
+  # GET /accounts
+  # Lists all accounts the authenticated token has access to.
+  # Supports page / per_page pagination; result_info includes total_count and total_pages.
+  # Required scope: Account Settings:Read
+  - name: accounts
+    endpoint:
+      path: "accounts"
+      params:
+        direction: "asc"
+
+  # ── Zones ─────────────────────────────────────────────────────────────────────
+  # GET /zones
+  # Lists all zones (domains) the token can manage.
+  # Supports page / per_page; result_info includes total_count and total_pages.
+  # Filter by account, name, or status. Required scope: Zone:Read
+  - name: zones
+    endpoint:
+      path: "zones"
+      params:
+        direction: "asc"
+
+  # ── DNS Records ───────────────────────────────────────────────────────────────
+  # GET /zones/{zone_id}/dns_records
+  # Lists all DNS records for a specific zone.
+  # Nested under zones — callers must supply {zone_id} from the zones resource.
+  # Supports page / per_page; result_info includes total_count and total_pages.
+  # Filterable by type, name, content, proxied, tag, comment.
+  # Required scope: Zone:DNS:Read
+  - name: dns_records
+    endpoint:
+      path: "zones/{zone_id}/dns_records"
+      params:
+        direction: "asc"
+
+  # ── Firewall Rules ────────────────────────────────────────────────────────────
+  # GET /zones/{zone_id}/firewall/rules
+  # Lists all firewall rules for a zone.
+  # Nested under zones — callers must supply {zone_id}.
+  # Supports page / per_page; result_info includes count and total_count.
+  # Filterable by id, action, description, paused.
+  # Required scope: Zone:Firewall Services:Read
+  # NOTE: Cloudflare is migrating firewall rules to WAF custom rules
+  # (zones/{zone_id}/rulesets). Firewall rules remain available for
+  # accounts that have not migrated.
+  - name: firewall_rules
+    endpoint:
+      path: "zones/{zone_id}/firewall/rules"
+
+  # ── Page Rules ────────────────────────────────────────────────────────────────
+  # GET /zones/{zone_id}/pagerules
+  # Lists all page rules for a zone. Returns all rules in a single response
+  # (no pagination; result_info is not present). The default page_size paginator
+  # stops naturally when the result array is empty on subsequent pages.
+  # Sortable by status or priority. Filterable by status (active, disabled).
+  # Required scope: Zone:Page Rules:Read
+  - name: page_rules
+    endpoint:
+      path: "zones/{zone_id}/pagerules"
+      params:
+        direction: "asc"
+        order: "priority"
+        status: "active"
+
+  # ── Workers Scripts ────────────────────────────────────────────────────────────
+  # GET /accounts/{account_id}/workers/scripts
+  # Lists all Workers scripts for an account.
+  # Nested under accounts — callers must supply {account_id}.
+  # Returns all scripts in a single response; no result_info pagination.
+  # The paginator stops naturally when result is empty on the second page.
+  # Filterable by tags (comma-separated tag:allowed pairs).
+  # Required scope: Account:Workers Scripts:Read
+  - name: workers
+    endpoint:
+      path: "accounts/{account_id}/workers/scripts"
+
+  # ── SSL / TLS Certificate Packs ───────────────────────────────────────────────
+  # GET /zones/{zone_id}/ssl/certificate_packs
+  # Lists all SSL certificate packs for a zone.
+  # Nested under zones — callers must supply {zone_id}.
+  # Supports page / per_page; result_info includes total_count and total_pages.
+  # Filter by deploy (staging, production) and status (omit for active-only, pass
+  # status=all to include provisioning/pending packs).
+  # Required scope: Zone:SSL and Certificates:Read
+  - name: certificates
+    endpoint:
+      path: "zones/{zone_id}/ssl/certificate_packs"
+      params:
+        status: "all"
+
+write_endpoints:
+
+  # ── DNS Records ───────────────────────────────────────────────────────────────
+
+  # POST /zones/{zone_id}/dns_records
+  # Creates a new DNS record in the specified zone.
+  # Required body fields: name, type, content, ttl.
+  # ttl must be 1 (automatic) or 60-86400 seconds.
+  # Required scope: Zone:DNS:Edit
+  - name: create_dns_record
+    description: "Create a DNS record in a zone. Required fields: name, type, content, ttl."
+    method: POST
+    path: "zones/{zone_id}/dns_records"
+
+  # PUT /zones/{zone_id}/dns_records/{dns_record_id}
+  # Fully overwrites an existing DNS record. All writable fields must be supplied.
+  # Required body fields: name, type, content, ttl.
+  # Required scope: Zone:DNS:Edit
+  - name: update_dns_record
+    description: "Overwrite an existing DNS record by ID. All writable fields required: name, type, content, ttl."
+    method: PUT
+    path: "zones/{zone_id}/dns_records/{dns_record_id}"
+
+  # PATCH /zones/{zone_id}/dns_records/{dns_record_id}
+  # Partially updates an existing DNS record. Only supplied fields are changed.
+  # Required scope: Zone:DNS:Edit
+  - name: patch_dns_record
+    description: "Partially update a DNS record by ID. Only supplied fields are modified."
+    method: PATCH
+    path: "zones/{zone_id}/dns_records/{dns_record_id}"
+
+  # DELETE /zones/{zone_id}/dns_records/{dns_record_id}
+  # Permanently deletes a DNS record. This action cannot be undone.
+  # Required scope: Zone:DNS:Edit
+  - name: delete_dns_record
+    description: "Permanently delete a DNS record by ID."
+    method: DELETE
+    path: "zones/{zone_id}/dns_records/{dns_record_id}"
+
+  # ── Page Rules ────────────────────────────────────────────────────────────────
+
+  # POST /zones/{zone_id}/pagerules
+  # Creates a new page rule in the specified zone.
+  # Required body fields: targets (array of URL target objects), actions (array).
+  # Each target: { "target": "url", "constraint": { "operator": "matches", "value": "<pattern>" } }
+  # Each action: { "id": "<action_id>", "value": <action_value> }
+  # Required scope: Zone:Page Rules:Edit
+  - name: create_page_rule
+    description: "Create a page rule in a zone. Required fields: targets (URL patterns), actions."
+    method: POST
+    path: "zones/{zone_id}/pagerules"
+
+  # PUT /zones/{zone_id}/pagerules/{pagerule_id}
+  # Fully replaces a page rule. All fields must be supplied.
+  # Required body fields: targets, actions.
+  # Required scope: Zone:Page Rules:Edit
+  - name: update_page_rule
+    description: "Fully replace a page rule by ID. Required fields: targets, actions."
+    method: PUT
+    path: "zones/{zone_id}/pagerules/{pagerule_id}"
+
+  # PATCH /zones/{zone_id}/pagerules/{pagerule_id}
+  # Partially updates a page rule (e.g. change status or priority only).
+  # Required scope: Zone:Page Rules:Edit
+  - name: patch_page_rule
+    description: "Partially update a page rule by ID (e.g. status, priority, or individual actions)."
+    method: PATCH
+    path: "zones/{zone_id}/pagerules/{pagerule_id}"
+
+  # DELETE /zones/{zone_id}/pagerules/{pagerule_id}
+  # Permanently deletes a page rule. This action cannot be undone.
+  # Required scope: Zone:Page Rules:Edit
+  - name: delete_page_rule
+    description: "Permanently delete a page rule by ID."
+    method: DELETE
+    path: "zones/{zone_id}/pagerules/{pagerule_id}"
+
+  # ── Firewall Rules ────────────────────────────────────────────────────────────
+
+  # POST /zones/{zone_id}/firewall/rules
+  # Creates one or more firewall rules. Body must be a JSON array of rule objects.
+  # Each rule requires: action (object with code), filter (FirewallFilter with expression).
+  # Optional: description, paused, priority, products, ref.
+  # Required scope: Zone:Firewall Services:Edit
+  - name: create_firewall_rule
+    description: "Create one or more firewall rules (JSON array body). Each rule requires: action, filter."
+    method: POST
+    path: "zones/{zone_id}/firewall/rules"
+
+  # PUT /zones/{zone_id}/firewall/rules
+  # Batch-updates one or more firewall rules. Body is a JSON array; each object must include id.
+  # Required scope: Zone:Firewall Services:Edit
+  - name: update_firewall_rules
+    description: "Batch-update firewall rules (JSON array body). Each object must include id."
+    method: PUT
+    path: "zones/{zone_id}/firewall/rules"
+
+  # PATCH /zones/{zone_id}/firewall/rules
+  # Batch-patches one or more firewall rules. Only supplied fields are updated.
+  # Body is a JSON array; each object must include id.
+  # Required scope: Zone:Firewall Services:Edit
+  - name: patch_firewall_rules
+    description: "Batch-patch firewall rules (JSON array body). Only supplied fields are updated; each must include id."
+    method: PATCH
+    path: "zones/{zone_id}/firewall/rules"
+
+  # DELETE /zones/{zone_id}/firewall/rules
+  # Deletes one or more firewall rules. Pass id as a query parameter (repeatable).
+  # Required scope: Zone:Firewall Services:Edit
+  - name: delete_firewall_rule
+    description: "Delete one or more firewall rules. Pass the rule id(s) as query parameters."
+    method: DELETE
+    path: "zones/{zone_id}/firewall/rules"

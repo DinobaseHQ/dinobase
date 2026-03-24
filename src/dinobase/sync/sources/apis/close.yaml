@@ -1,0 +1,202 @@
+name: close
+description: "Close CRM (leads, contacts, opportunities, activities, tasks)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: CLOSE_API_KEY
+    prompt: "Close API key"
+    secret: true
+
+client:
+  base_url: https://api.close.com/api/v1/
+  auth:
+    type: http_basic
+    # Close uses the API key as the HTTP Basic username; password is empty.
+    username: "{api_key}"
+    password: ""
+  paginator:
+    # Close uses offset-based pagination via _skip/_limit.
+    # Responses include a "has_more" boolean and a "data" array.
+    # Default limit 100; max varies per resource (typically 100-200).
+    type: offset
+    limit: 100
+    limit_param: "_limit"
+    offset_param: "_skip"
+    has_more_path: "has_more"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "data"
+
+resources:
+  # Leads: core CRM object. Supports incremental sync via date_updated__gt.
+  - name: leads
+    endpoint:
+      path: "lead/"
+      params:
+        _order_by: "date_updated"
+    incremental:
+      cursor_path: "date_updated"
+      param: "date_updated__gt"
+
+  # Contacts: belong to leads. Offset pagination only.
+  - name: contacts
+    endpoint:
+      path: "contact/"
+
+  # Opportunities: sales pipeline records with date_updated incremental support.
+  - name: opportunities
+    endpoint:
+      path: "opportunity/"
+      params:
+        _order_by: "date_updated"
+    incremental:
+      cursor_path: "date_updated"
+      param: "date_updated__gt"
+
+  # Activities: all activity types (calls, emails, notes, SMS, etc.).
+  # Use date_created__gt for incremental; activity_at tracks when it occurred.
+  - name: activities
+    endpoint:
+      path: "activity/"
+      params:
+        _order_by: "date_created"
+    incremental:
+      cursor_path: "date_created"
+      param: "date_created__gt"
+
+  # Tasks: to-do items linked to leads.
+  - name: tasks
+    endpoint:
+      path: "task/"
+
+  # Users: all members of the same organizations.
+  - name: users
+    endpoint:
+      path: "user/"
+
+  # Pipelines: named groups of opportunity statuses.
+  # Small static-ish list; no pagination needed in practice.
+  - name: pipelines
+    endpoint:
+      path: "pipeline/"
+
+  # Lead statuses: organisation-level lead status definitions.
+  - name: lead_statuses
+    endpoint:
+      path: "status/lead/"
+
+  # Opportunity statuses: per-pipeline opportunity status definitions.
+  - name: opportunity_statuses
+    endpoint:
+      path: "status/opportunity/"
+
+write_endpoints:
+  # Create a lead. Contacts, custom fields, and address can be nested.
+  - name: create_lead
+    path: "lead/"
+    method: POST
+    body:
+      required:
+        - name
+      optional:
+        - status_id
+        - contacts
+        - addresses
+        - url
+        - description
+
+  # Update a lead (non-destructive PATCH semantics via PUT).
+  - name: update_lead
+    path: "lead/{id}/"
+    method: PUT
+    body:
+      optional:
+        - name
+        - status_id
+        - contacts
+        - addresses
+        - url
+        - description
+
+  # Create a contact. Pass lead_id to attach to an existing lead.
+  - name: create_contact
+    path: "contact/"
+    method: POST
+    body:
+      optional:
+        - lead_id
+        - name
+        - title
+        - phones
+        - emails
+        - urls
+
+  # Update a contact.
+  - name: update_contact
+    path: "contact/{id}/"
+    method: PUT
+    body:
+      optional:
+        - name
+        - title
+        - phones
+        - emails
+        - urls
+
+  # Create an opportunity. lead_id is optional; a new lead is created if omitted.
+  - name: create_opportunity
+    path: "opportunity/"
+    method: POST
+    body:
+      optional:
+        - lead_id
+        - status_id
+        - value
+        - value_currency
+        - value_period
+        - confidence
+        - note
+        - date_won
+
+  # Update an opportunity. Setting a won/lost status_id auto-sets date_won.
+  - name: update_opportunity
+    path: "opportunity/{id}/"
+    method: PUT
+    body:
+      optional:
+        - status_id
+        - value
+        - value_currency
+        - value_period
+        - confidence
+        - note
+        - date_won
+
+  # Create a task. _type is required; supported: "lead", "outgoing_call".
+  - name: create_task
+    path: "task/"
+    method: POST
+    body:
+      required:
+        - _type
+      optional:
+        - lead_id
+        - assigned_to
+        - date
+        - text
+        - is_complete
+
+  # Update a task (assigned_to, date, is_complete; text for lead-type tasks).
+  - name: update_task
+    path: "task/{id}/"
+    method: PUT
+    body:
+      optional:
+        - assigned_to
+        - date
+        - is_complete
+        - text

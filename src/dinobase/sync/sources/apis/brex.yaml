@@ -1,0 +1,196 @@
+name: brex
+description: "Brex corporate cards and spend management (accounts, transactions, cards, users, departments, locations, vendors)"
+
+credentials:
+  - name: api_token
+    flag: "--token"
+    env: BREX_API_TOKEN
+    prompt: "Brex API token (OAuth2 bearer token from developer.brex.com)"
+    secret: true
+
+client:
+  base_url: "https://platform.brexapis.com"
+  auth:
+    type: bearer
+    token: "{api_token}"
+  # Brex uses cursor-based pagination across all list endpoints.
+  # List responses include a top-level "next_cursor" field (null when on the last page).
+  # Pass it as ?cursor= on the next request. All list endpoints also accept a ?limit= param.
+  paginator:
+    type: cursor
+    cursor_path: "next_cursor"
+    cursor_param: "cursor"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # Brex list responses wrap results in an "items" array at the top level.
+    # All paginated list endpoints share this shape: {"items": [...], "next_cursor": "..."|null}
+    data_selector: "items"
+    params:
+      limit: 100
+
+resources:
+
+  # ── Card Accounts ─────────────────────────────────────────────────────────────
+  # GET /v2/accounts/card — returns all card accounts (no pagination, small list).
+  # Response is a plain array (not wrapped in "items"), so data_selector is overridden.
+  # Each object includes id, status, current_balance, available_balance, account_limit.
+  - name: card_accounts
+    endpoint:
+      path: "v2/accounts/card"
+      data_selector: ""
+    write_disposition: replace
+
+  # ── Cash Accounts ─────────────────────────────────────────────────────────────
+  # GET /v2/accounts/cash — lists cash accounts; response wrapped in Page_CashAccount_ (items).
+  # Each CashAccount: id, name, status, current_balance, available_balance,
+  # account_number, routing_number, primary flag.
+  - name: cash_accounts
+    endpoint:
+      path: "v2/accounts/cash"
+    write_disposition: replace
+
+  # ── Card Transactions ─────────────────────────────────────────────────────────
+  # GET /v2/transactions/card/primary — lists all settled card transactions on the primary card account.
+  # Cursor paginated; supports ?posted_at_start (ISO 8601) for incremental filtering.
+  # Types: PURCHASE, REFUND, CHARGEBACK, REWARDS_CREDIT, COLLECTION, BNPL_FEE.
+  # Each record: id, card_id, amount, description, merchant, initiated_at, posted_at, type.
+  - name: card_transactions
+    endpoint:
+      path: "v2/transactions/card/primary"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: "posted_at"
+      param: "posted_at_start"
+      initial_value: "2020-01-01T00:00:00.000Z"
+
+  # ── Cards ────────────────────────────────────────────────────────────────────
+  # GET /v2/cards — lists all cards across the account with optional ?user_id filter.
+  # Cursor paginated. Each Card: id, owner (user_id), status (ACTIVE/INACTIVE/TERMINATED),
+  # card_type (VIRTUAL/PHYSICAL), spend_controls, last_four, expiration_date.
+  - name: cards
+    endpoint:
+      path: "v2/cards"
+      params:
+        limit: 100
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  # GET /v2/users — lists all users in the account.
+  # Optional filters: ?email, ?remote_display_id, ?expand[].
+  # Each UserResponse: id, first_name, last_name, email, status, department_id,
+  # location_id, manager_id, remote_display_id, metadata.
+  - name: users
+    endpoint:
+      path: "v2/users"
+      params:
+        limit: 100
+
+  # ── Departments ──────────────────────────────────────────────────────────────
+  # GET /v2/departments — lists all departments; optional ?name filter.
+  # Cursor paginated. Each DepartmentResponse: id, name, description.
+  - name: departments
+    endpoint:
+      path: "v2/departments"
+      params:
+        limit: 100
+    write_disposition: replace
+
+  # ── Locations ────────────────────────────────────────────────────────────────
+  # GET /v2/locations — lists all locations; optional ?name filter.
+  # Cursor paginated. Each LocationResponse: id, name, description.
+  - name: locations
+    endpoint:
+      path: "v2/locations"
+      params:
+        limit: 100
+    write_disposition: replace
+
+  # ── Vendors ──────────────────────────────────────────────────────────────────
+  # GET /v1/vendors — lists all vendors for the account (Payments API, versioned at v1).
+  # Cursor paginated; optional ?name filter for vendor lookup.
+  # Each VendorResponse: id, company_name, email, phone, payment_accounts.
+  - name: vendors
+    endpoint:
+      path: "v1/vendors"
+      params:
+        limit: 100
+
+write_endpoints:
+
+  # ── Cards ─────────────────────────────────────────────────────────────────────
+
+  - name: create_card
+    description: "Create a new virtual or physical card for a user with optional spend controls"
+    method: POST
+    path: "v2/cards"
+
+  - name: update_card
+    description: "Update an existing card's spend controls or metadata by card ID"
+    method: PUT
+    path: "v2/cards/{id}"
+
+  - name: lock_card
+    description: "Lock a card to prevent new purchases (card remains active but frozen)"
+    method: POST
+    path: "v2/cards/{id}/lock"
+
+  - name: unlock_card
+    description: "Unlock a previously locked card to restore purchase capability"
+    method: POST
+    path: "v2/cards/{id}/unlock"
+
+  - name: terminate_card
+    description: "Permanently terminate a card. Requires a reason. This action is irreversible."
+    method: POST
+    path: "v2/cards/{id}/terminate"
+
+  # ── Users ──────────────────────────────────────────────────────────────────────
+
+  - name: invite_user
+    description: "Invite a new employee to Brex. Requires first_name, last_name, email, and manager_id."
+    method: POST
+    path: "v2/users"
+
+  - name: update_user
+    description: "Update an existing user's profile, department, location, or manager by user ID"
+    method: PUT
+    path: "v2/users/{id}"
+
+  - name: set_user_limit
+    description: "Set or update a user's monthly card spend limit by user ID"
+    method: POST
+    path: "v2/users/{id}/limit"
+
+  # ── Vendors ───────────────────────────────────────────────────────────────────
+
+  - name: create_vendor
+    description: "Create a new vendor/payee. Requires company_name (must be unique). Idempotency-Key header required."
+    method: POST
+    path: "v1/vendors"
+
+  - name: update_vendor
+    description: "Update an existing vendor's details (name, email, phone, payment accounts) by vendor ID"
+    method: PUT
+    path: "v1/vendors/{id}"
+
+  - name: delete_vendor
+    description: "Delete a vendor by ID. This action is irreversible."
+    method: DELETE
+    path: "v1/vendors/{id}"
+
+  # ── Departments ───────────────────────────────────────────────────────────────
+
+  - name: create_department
+    description: "Create a new department with a name and optional description"
+    method: POST
+    path: "v2/departments"
+
+  # ── Locations ─────────────────────────────────────────────────────────────────
+
+  - name: create_location
+    description: "Create a new location with a name and optional description"
+    method: POST
+    path: "v2/locations"

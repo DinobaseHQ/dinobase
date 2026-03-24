@@ -1,0 +1,202 @@
+name: figma
+description: "Figma design platform (files, projects, team projects, comments, component sets, styles, webhooks)"
+
+credentials:
+  - name: token
+    flag: "--token"
+    env: FIGMA_TOKEN
+    prompt: "Figma personal access token (Settings → Account → Personal access tokens)"
+    secret: true
+
+client:
+  base_url: "https://api.figma.com/"
+  auth:
+    type: bearer
+    token: "{token}"
+  # Figma uses two distinct pagination schemes:
+  #
+  #   1. Cursor-based (team library endpoints: components, component_sets, styles):
+  #      The response wraps paginated data inside a `meta` object and includes a
+  #      `meta.cursor` object with `before` (int) and `after` (int) fields. The
+  #      `after` value is an internally tracked integer (not an entity ID). Pass
+  #      it as the `after` query parameter to fetch the next page. Pagination ends
+  #      when `meta.cursor.after` is absent or null.
+  #
+  #   2. Cursor-based with `cursor` param (activity logs, webhooks v2):
+  #      Response contains `meta.cursor` (string) and `meta.next_page` (bool).
+  #      Pass `meta.cursor` as the `cursor` query parameter on subsequent requests.
+  #
+  #   3. Non-paginated (files, projects, project files, comments, file component_sets):
+  #      Single-page responses with no pagination envelope.
+  #
+  # The default paginator below is set to the team library cursor style (pattern 1).
+  # Resources that do not paginate or use a different scheme override it inline.
+  paginator:
+    type: cursor
+    cursor_path: "meta.cursor.after"
+    cursor_param: "after"
+
+resource_defaults:
+  primary_key: key
+  write_disposition: merge
+
+resources:
+  # ── Files ─────────────────────────────────────────────────────────────────────
+  # GET /v1/files/{file_key}
+  # Returns the full document tree and component metadata for a single file.
+  # This is a singleton endpoint (one file per call, no pagination). The file_key
+  # is a required path variable that callers must supply at runtime.
+  # Auth scopes: files:read
+  - name: files
+    primary_key: key
+    endpoint:
+      path: v1/files/{file_key}
+      # No pagination — single object response; disable the default paginator.
+      paginator: none
+      data_selector: null  # response IS the file object
+
+  # ── Team Projects ─────────────────────────────────────────────────────────────
+  # GET /v1/teams/{team_id}/projects
+  # Lists all projects visible within the specified team. Single-page response;
+  # the projects array is at `projects` in the top-level JSON.
+  # Auth scopes: projects:read, files:read
+  - name: team_projects
+    primary_key: id
+    endpoint:
+      path: v1/teams/{team_id}/projects
+      paginator: none
+      data_selector: projects
+
+  # ── Project Files ─────────────────────────────────────────────────────────────
+  # GET /v1/projects/{project_id}/files
+  # Lists all files within a specific project. Single-page response; the files
+  # array is at `files` in the top-level JSON.
+  # Auth scopes: projects:read, files:read
+  - name: projects
+    primary_key: key
+    endpoint:
+      path: v1/projects/{project_id}/files
+      paginator: none
+      data_selector: files
+
+  # ── Comments ──────────────────────────────────────────────────────────────────
+  # GET /v1/files/{file_key}/comments
+  # Returns all comments on the specified file. Single-page response; the
+  # comments array is at `comments` in the top-level JSON.
+  # Optional query param `as_md=true` returns comment bodies as Markdown.
+  # Auth scopes: file_comments:read, files:read
+  - name: comments
+    primary_key: id
+    endpoint:
+      path: v1/files/{file_key}/comments
+      paginator: none
+      data_selector: comments
+
+  # ── Team Component Sets ────────────────────────────────────────────────────────
+  # GET /v1/teams/{team_id}/component_sets
+  # Returns cursor-paginated published component sets from the team library.
+  # Response wraps data in `meta.component_sets`; cursor at `meta.cursor.after`.
+  # Query params: page_size (default 30, max 1000), after (cursor), before (cursor).
+  # Auth scopes: team_library_content:read, files:read
+  - name: component_sets
+    primary_key: key
+    endpoint:
+      path: v1/teams/{team_id}/component_sets
+      params:
+        page_size: 1000
+      data_selector: meta.component_sets
+      # Uses default cursor paginator (meta.cursor.after → after param).
+
+  # ── Team Styles ────────────────────────────────────────────────────────────────
+  # GET /v1/teams/{team_id}/styles
+  # Returns cursor-paginated published styles from the team library.
+  # Response wraps data in `meta.styles`; cursor at `meta.cursor.after`.
+  # Query params: page_size (default 30), after (cursor), before (cursor).
+  # Auth scopes: team_library_content:read, files:read
+  - name: styles
+    primary_key: key
+    endpoint:
+      path: v1/teams/{team_id}/styles
+      params:
+        page_size: 1000
+      data_selector: meta.styles
+      # Uses default cursor paginator (meta.cursor.after → after param).
+
+  # ── Webhooks ──────────────────────────────────────────────────────────────────
+  # GET /v2/webhooks
+  # Returns webhooks for the given context (team/project/file) or plan.
+  # When filtering by context + context_id, response is a single-page list.
+  # When filtering by plan_api_id, response is cursor-paginated using the
+  # `cursor` query param and `meta.cursor` / `meta.next_page` response fields.
+  # Required query params (at least one of):
+  #   context + context_id  — e.g. context=team&context_id={team_id}
+  #   plan_api_id           — organisation plan identifier
+  # Auth scopes: webhooks:read
+  - name: webhooks
+    primary_key: id
+    endpoint:
+      path: v2/webhooks
+      paginator:
+        # Webhooks use a string cursor at meta.cursor (not meta.cursor.after).
+        # next_page flag at meta.next_page signals more data is available.
+        type: cursor
+        cursor_path: "meta.cursor"
+        cursor_param: "cursor"
+      data_selector: meta.webhooks
+
+write_endpoints:
+  # ── Comments ──────────────────────────────────────────────────────────────────
+  # POST /v1/files/{file_key}/comments
+  # Adds a new comment to the specified file. Supports top-level comments and
+  # replies (via comment_id). Position can be specified as Vector, FrameOffset,
+  # Region, or FrameOffsetRegion in the client_meta field.
+  # Auth scopes: file_comments:write
+  # Required body: message (string)
+  # Optional body: comment_id (string, parent for replies), client_meta (object)
+  - name: post_comment
+    description: "Post a new comment on a Figma file (supports replies via comment_id)"
+    method: POST
+    path: v1/files/{file_key}/comments
+
+  # DELETE /v1/files/{file_key}/comments/{comment_id}
+  # Deletes a specific comment. Only the comment author or file owner can delete.
+  # Auth scopes: file_comments:write
+  - name: delete_comment
+    description: "Delete a comment from a Figma file"
+    method: DELETE
+    path: v1/files/{file_key}/comments/{comment_id}
+
+  # ── Webhooks ──────────────────────────────────────────────────────────────────
+  # POST /v2/webhooks
+  # Creates a new webhook that fires when the specified event_type occurs on the
+  # given context (team/project/file). The passcode is included in webhook
+  # payloads for verification.
+  # Auth scopes: webhooks:write
+  # Required body:
+  #   event_type  (WebhookV2Event)  — e.g. FILE_UPDATE, LIBRARY_PUBLISH
+  #   context     (string)          — "team" | "project" | "file"
+  #   context_id  (string)          — ID of the team, project, or file
+  #   endpoint    (string, ≤2048)   — HTTPS URL to receive payloads
+  #   passcode    (string, ≤100)    — secret included in all payloads
+  # Optional body: status (WebhookV2Status), description (string, ≤150)
+  - name: create_webhook
+    description: "Create a webhook that fires on Figma events (FILE_UPDATE, LIBRARY_PUBLISH, etc.)"
+    method: POST
+    path: v2/webhooks
+
+  # PUT /v2/webhooks/{webhook_id}
+  # Updates an existing webhook's configuration. All fields from POST are
+  # accepted; only provided fields are changed.
+  # Auth scopes: webhooks:write
+  - name: update_webhook
+    description: "Update an existing Figma webhook's event type, endpoint, or passcode"
+    method: PUT
+    path: v2/webhooks/{webhook_id}
+
+  # DELETE /v2/webhooks/{webhook_id}
+  # Permanently deletes a webhook. The webhook will stop firing immediately.
+  # Auth scopes: webhooks:write
+  - name: delete_webhook
+    description: "Permanently delete a Figma webhook"
+    method: DELETE
+    path: v2/webhooks/{webhook_id}

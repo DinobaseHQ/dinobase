@@ -1,0 +1,447 @@
+name: intercom
+description: "Intercom customer messaging platform (contacts, companies, conversations, admins, tags, segments, articles, teams, notes, tickets, data attributes, news items, subscription types)"
+
+credentials:
+  - name: token
+    flag: "--token"
+    env: INTERCOM_TOKEN
+    prompt: "Intercom access token"
+    secret: true
+
+client:
+  base_url: https://api.intercom.io/
+  auth:
+    type: bearer
+    token: "{token}"
+  headers:
+    # Pin API version to 2.10 (latest stable).
+    # Omitting this header risks receiving a deprecated response shape.
+    Intercom-Version: "2.10"
+  # Intercom uses cursor-based pagination.
+  # List responses include pages.next.starting_after; pass it as starting_after on the next request.
+  # When pages.next is null/absent, the current page is the last one.
+  paginator:
+    type: cursor
+    cursor_path: "pages.next.starting_after"
+    cursor_param: "starting_after"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    params: {}
+    data_selector: data
+
+resources:
+  # ── Contacts ────────────────────────────────────────────────────────────────
+  # GET /contacts returns cursor-paginated contact_list; array field is "data".
+  # Intercom does not expose an updated_since query param on the list endpoint.
+  # Incremental sync is possible via POST /contacts/search with updated_at > N
+  # but requires a POST body; the list endpoint is used here for simplicity.
+  - name: contacts
+    endpoint:
+      path: contacts
+      data_selector: data
+
+  # ── Companies ───────────────────────────────────────────────────────────────
+  # POST /companies/list returns all companies with cursor pagination.
+  # GET /companies requires a filter param (name/company_id/tag_id/segment_id)
+  # so the list-all POST variant is the correct choice for a full sync.
+  - name: companies
+    endpoint:
+      path: companies/list
+      method: POST
+      data_selector: data
+
+  # ── Conversations ────────────────────────────────────────────────────────────
+  # GET /conversations returns conversation.list; array field is "conversations" (not "data").
+  # Supports starting_after cursor and per_page. No updated_since query param exists
+  # on the list endpoint; incremental via search POST would require a body filter.
+  - name: conversations
+    endpoint:
+      path: conversations
+      data_selector: conversations
+
+  # ── Admins ──────────────────────────────────────────────────────────────────
+  # GET /admins returns all admins in the workspace (small list, no pagination needed).
+  # Response field is "admins".
+  - name: admins
+    endpoint:
+      path: admins
+      data_selector: admins
+
+  # ── Tags ────────────────────────────────────────────────────────────────────
+  # GET /tags returns all tags. No pagination. Response field is "data".
+  - name: tags
+    endpoint:
+      path: tags
+      data_selector: data
+
+  # ── Segments ────────────────────────────────────────────────────────────────
+  # GET /segments returns all segments. No pagination. Response field is "segments".
+  - name: segments
+    endpoint:
+      path: segments
+      data_selector: segments
+
+  # ── Teams ───────────────────────────────────────────────────────────────────
+  # GET /teams returns all teams in the workspace. No pagination. Response field is "teams".
+  - name: teams
+    endpoint:
+      path: teams
+      data_selector: teams
+
+  # ── Articles ────────────────────────────────────────────────────────────────
+  # GET /articles returns cursor-paginated articles. Response field is "data".
+  - name: articles
+    endpoint:
+      path: articles
+      data_selector: data
+
+  # ── Help Center Collections ──────────────────────────────────────────────────
+  # GET /help_center/collections returns cursor-paginated collections. Response field is "data".
+  - name: help_center_collections
+    endpoint:
+      path: help_center/collections
+      data_selector: data
+
+  # ── Help Centers ─────────────────────────────────────────────────────────────
+  # GET /help_center/help_centers returns a small list of help centers. Response field is "data".
+  - name: help_centers
+    endpoint:
+      path: help_center/help_centers
+      data_selector: data
+
+  # ── Data Attributes ──────────────────────────────────────────────────────────
+  # GET /data_attributes returns custom attribute definitions for contacts, companies, and conversations.
+  # Filter by model=contact|company|conversation. No pagination. Response field is "data".
+  - name: data_attributes
+    endpoint:
+      path: data_attributes
+      data_selector: data
+
+  # ── Subscription Types ────────────────────────────────────────────────────────
+  # GET /subscription_types returns all subscription consent types. No pagination. Response field is "data".
+  - name: subscription_types
+    endpoint:
+      path: subscription_types
+      data_selector: data
+
+  # ── News Items ────────────────────────────────────────────────────────────────
+  # GET /news/news_items returns cursor-paginated news items. Response field is "data".
+  - name: news_items
+    endpoint:
+      path: news/news_items
+      data_selector: data
+
+  # ── Newsfeeds ─────────────────────────────────────────────────────────────────
+  # GET /news/newsfeeds returns all newsfeeds. Response field is "data".
+  - name: newsfeeds
+    endpoint:
+      path: news/newsfeeds
+      data_selector: data
+
+  # ── Ticket Types ──────────────────────────────────────────────────────────────
+  # GET /ticket_types returns all ticket type definitions. Response field is "data".
+  - name: ticket_types
+    endpoint:
+      path: ticket_types
+      data_selector: data
+
+  # ── Tickets ────────────────────────────────────────────────────────────────────
+  # Tickets do not have a GET list endpoint; use POST /tickets/search to enumerate them.
+  # Supports cursor-based pagination via pages.next.starting_after. Response field is "tickets".
+  - name: tickets
+    endpoint:
+      path: tickets/search
+      method: POST
+      data_selector: tickets
+
+  # ── Activity Logs ─────────────────────────────────────────────────────────────
+  # GET /admins/activity_logs requires created_at_after (UNIX timestamp).
+  # Supports incremental sync; response field is "activity_logs".
+  - name: activity_logs
+    endpoint:
+      path: admins/activity_logs
+      data_selector: activity_logs
+    incremental:
+      cursor_path: created_at
+      param: created_at_after
+      initial_value: "1704067200"
+
+write_endpoints:
+  # ── Contacts ──────────────────────────────────────────────────────────────
+  - name: create_contact
+    description: "Create a new contact (lead or user). role must be 'user' or 'lead'."
+    method: POST
+    path: contacts
+
+  - name: update_contact
+    description: "Update an existing contact by ID."
+    method: PUT
+    path: contacts/{id}
+
+  - name: delete_contact
+    description: "Delete a contact permanently by ID."
+    method: DELETE
+    path: contacts/{id}
+
+  - name: archive_contact
+    description: "Archive a contact (soft delete). Contact data is retained but hidden."
+    method: POST
+    path: contacts/{id}/archive
+
+  - name: unarchive_contact
+    description: "Unarchive a previously archived contact."
+    method: POST
+    path: contacts/{id}/unarchive
+
+  - name: merge_contacts
+    description: "Merge two duplicate contacts. Provide 'from' and 'into' contact IDs."
+    method: POST
+    path: contacts/merge
+
+  # ── Companies ─────────────────────────────────────────────────────────────
+  - name: create_or_update_company
+    description: "Create a new company or update it if the company_id already exists."
+    method: POST
+    path: companies
+
+  - name: update_company
+    description: "Update an existing company by Intercom-generated ID."
+    method: PUT
+    path: companies/{id}
+
+  - name: delete_company
+    description: "Delete a company permanently by ID."
+    method: DELETE
+    path: companies/{id}
+
+  # Contact ↔ Company associations
+  - name: attach_contact_to_company
+    description: "Attach a contact to a company. Pass company id in the request body."
+    method: POST
+    path: contacts/{id}/companies
+
+  - name: detach_contact_from_company
+    description: "Remove the association between a contact and a company."
+    method: DELETE
+    path: contacts/{contact_id}/companies/{id}
+
+  # ── Conversations ──────────────────────────────────────────────────────────
+  - name: create_conversation
+    description: "Start a new outbound conversation from an admin to a contact."
+    method: POST
+    path: conversations
+
+  - name: update_conversation
+    description: "Update a conversation's state, assignee, priority, or custom attributes."
+    method: PUT
+    path: conversations/{id}
+
+  - name: reply_to_conversation
+    description: "Reply to a conversation as an admin or a contact."
+    method: POST
+    path: conversations/{id}/reply
+
+  - name: add_conversation_note
+    description: "Add an internal note to a conversation."
+    method: POST
+    path: conversations/{id}/parts
+
+  - name: assign_conversation
+    description: "Run auto-assignment rules on a conversation."
+    method: POST
+    path: conversations/{id}/run_assignment_rules
+
+  - name: add_participant_to_conversation
+    description: "Add a contact as a participant in a conversation."
+    method: POST
+    path: conversations/{id}/customers
+
+  - name: remove_participant_from_conversation
+    description: "Remove a contact participant from a conversation."
+    method: DELETE
+    path: conversations/{conversation_id}/customers/{contact_id}
+
+  - name: redact_conversation
+    description: "Permanently redact a conversation part or the conversation source body."
+    method: POST
+    path: conversations/redact
+
+  - name: convert_conversation_to_ticket
+    description: "Convert an existing conversation into a ticket."
+    method: POST
+    path: conversations/{id}/convert
+
+  # ── Tags ──────────────────────────────────────────────────────────────────
+  - name: create_or_update_tag
+    description: "Create a new tag or rename an existing one. Pass 'name' and optionally 'id'."
+    method: POST
+    path: tags
+
+  - name: delete_tag
+    description: "Delete a tag by ID."
+    method: DELETE
+    path: tags/{id}
+
+  - name: tag_contact
+    description: "Apply a tag to a contact."
+    method: POST
+    path: contacts/{contact_id}/tags
+
+  - name: untag_contact
+    description: "Remove a tag from a contact."
+    method: DELETE
+    path: contacts/{contact_id}/tags/{id}
+
+  - name: tag_conversation
+    description: "Apply a tag to a conversation."
+    method: POST
+    path: conversations/{conversation_id}/tags
+
+  - name: untag_conversation
+    description: "Remove a tag from a conversation."
+    method: DELETE
+    path: conversations/{conversation_id}/tags/{id}
+
+  - name: tag_ticket
+    description: "Apply a tag to a ticket."
+    method: POST
+    path: tickets/{ticket_id}/tags
+
+  - name: untag_ticket
+    description: "Remove a tag from a ticket."
+    method: DELETE
+    path: tickets/{ticket_id}/tags/{id}
+
+  # ── Notes ─────────────────────────────────────────────────────────────────
+  - name: create_note
+    description: "Create a note on a contact. Pass 'body' (HTML) and optionally 'admin_id'."
+    method: POST
+    path: contacts/{id}/notes
+
+  # ── Articles ──────────────────────────────────────────────────────────────
+  - name: create_article
+    description: "Create a Help Center article. author_id and title are required."
+    method: POST
+    path: articles
+
+  - name: update_article
+    description: "Update an existing article by ID."
+    method: PUT
+    path: articles/{id}
+
+  - name: delete_article
+    description: "Delete an article by ID."
+    method: DELETE
+    path: articles/{id}
+
+  # ── Help Center Collections ────────────────────────────────────────────────
+  - name: create_help_center_collection
+    description: "Create a new Help Center collection. name is required."
+    method: POST
+    path: help_center/collections
+
+  - name: update_help_center_collection
+    description: "Update an existing Help Center collection by ID."
+    method: PUT
+    path: help_center/collections/{id}
+
+  - name: delete_help_center_collection
+    description: "Delete a Help Center collection by ID."
+    method: DELETE
+    path: help_center/collections/{id}
+
+  # ── Data Attributes ───────────────────────────────────────────────────────
+  - name: create_data_attribute
+    description: "Create a custom data attribute for contacts, companies, or conversations."
+    method: POST
+    path: data_attributes
+
+  - name: update_data_attribute
+    description: "Update an existing custom data attribute by ID."
+    method: PUT
+    path: data_attributes/{id}
+
+  # ── Tickets ───────────────────────────────────────────────────────────────
+  - name: create_ticket
+    description: "Create a new ticket. ticket_type_id and contacts are required."
+    method: POST
+    path: tickets
+
+  - name: update_ticket
+    description: "Update an existing ticket's state, assignee, or attributes by ID."
+    method: PUT
+    path: tickets/{id}
+
+  - name: reply_to_ticket
+    description: "Add a reply or note to a ticket."
+    method: POST
+    path: tickets/{id}/reply
+
+  # ── Ticket Types ──────────────────────────────────────────────────────────
+  - name: create_ticket_type
+    description: "Create a new ticket type definition."
+    method: POST
+    path: ticket_types
+
+  - name: update_ticket_type
+    description: "Update an existing ticket type by ID."
+    method: PUT
+    path: ticket_types/{id}
+
+  - name: create_ticket_type_attribute
+    description: "Add a custom attribute to a ticket type."
+    method: POST
+    path: ticket_types/{ticket_type_id}/attributes
+
+  - name: update_ticket_type_attribute
+    description: "Update a custom attribute on a ticket type."
+    method: PUT
+    path: ticket_types/{ticket_type_id}/attributes/{id}
+
+  # ── News Items ────────────────────────────────────────────────────────────
+  - name: create_news_item
+    description: "Create a new news item. sender_id and title are required."
+    method: POST
+    path: news/news_items
+
+  - name: update_news_item
+    description: "Update an existing news item by ID."
+    method: PUT
+    path: news/news_items/{id}
+
+  - name: delete_news_item
+    description: "Delete a news item by ID."
+    method: DELETE
+    path: news/news_items/{id}
+
+  # ── Admins ────────────────────────────────────────────────────────────────
+  - name: set_admin_away
+    description: "Set an admin's availability to away or active. Requires away_mode_enabled and away_mode_reassign."
+    method: PUT
+    path: admins/{id}/away
+
+  # ── Subscription Types (contact-level) ────────────────────────────────────
+  - name: attach_subscription_to_contact
+    description: "Opt a contact in or out of a subscription consent type."
+    method: POST
+    path: contacts/{contact_id}/subscriptions
+
+  - name: detach_subscription_from_contact
+    description: "Remove a subscription type association from a contact."
+    method: DELETE
+    path: contacts/{contact_id}/subscriptions/{id}
+
+  # ── Messages (outbound one-off) ───────────────────────────────────────────
+  - name: create_message
+    description: "Send a one-off outbound message to a contact or a lead from an admin or the workspace."
+    method: POST
+    path: messages
+
+  # ── Events ────────────────────────────────────────────────────────────────
+  - name: create_event
+    description: "Track a custom event for a contact. event_name, created_at, and user identifiers are required."
+    method: POST
+    path: events

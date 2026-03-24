@@ -1,0 +1,401 @@
+name: attio
+description: "Attio CRM (objects, records, lists, entries, notes, tasks, threads, webhooks, workspace members)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: ATTIO_API_KEY
+    prompt: "Attio API key (Settings → API → Personal access tokens)"
+    secret: true
+
+client:
+  base_url: "https://api.attio.com/v2/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # Attio uses offset-based pagination on most list endpoints.
+  # POST query endpoints (records, entries) accept limit/offset in the JSON body.
+  # GET list endpoints (notes, tasks, threads, webhooks) accept limit/offset as
+  # query-string parameters.  Default page size for records is 500; notes/tasks
+  # cap at 500 and 50 respectively (Attio-documented maxima).
+  paginator:
+    type: offset
+    limit_param: "limit"
+    offset_param: "offset"
+    default_limit: 500
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "data"
+
+resources:
+  # ── Objects ──────────────────────────────────────────────────────────────────
+  # GET /v2/objects
+  # Lists all system-defined and user-defined objects in the workspace.
+  # No pagination parameters; returns the full set in a single response.
+  # Scope: object_configuration:read
+  - name: objects
+    endpoint:
+      path: "objects"
+      method: GET
+
+  # ── Object Attributes ─────────────────────────────────────────────────────
+  # GET /v2/objects/{object}/attributes
+  # Lists attribute definitions (schema) for every known object slug.
+  # The built-in standard objects are: people, companies, deals, users,
+  # workspaces.  Custom objects are discovered from the objects resource above.
+  # This resource is parameterised by object slug and must be called once per
+  # object; the loader is expected to fan-out over known slugs.
+  # Scope: object_configuration:read
+  - name: object_attributes
+    endpoint:
+      path: "objects/{object}/attributes"
+      method: GET
+      params:
+        show_archived: false
+
+  # ── Records (generic query endpoint) ────────────────────────────────────────
+  # POST /v2/objects/{object}/records/query
+  # Lists records for a given object (people, companies, deals, …).
+  # offset/limit go inside the JSON request body, not as query params.
+  # Scope: record_permission:read, object_configuration:read
+  - name: records
+    endpoint:
+      path: "objects/{object}/records/query"
+      method: POST
+      params:
+        limit: 500
+        offset: 0
+
+  # ── People (standard object – convenience alias) ─────────────────────────
+  # POST /v2/objects/people/records/query
+  # Scope: record_permission:read, object_configuration:read
+  - name: people
+    endpoint:
+      path: "objects/people/records/query"
+      method: POST
+      params:
+        limit: 500
+        offset: 0
+
+  # ── Companies (standard object – convenience alias) ───────────────────────
+  # POST /v2/objects/companies/records/query
+  # Scope: record_permission:read, object_configuration:read
+  - name: companies
+    endpoint:
+      path: "objects/companies/records/query"
+      method: POST
+      params:
+        limit: 500
+        offset: 0
+
+  # ── Deals (standard object – convenience alias) ──────────────────────────
+  # POST /v2/objects/deals/records/query
+  # Scope: record_permission:read, object_configuration:read
+  - name: deals
+    endpoint:
+      path: "objects/deals/records/query"
+      method: POST
+      params:
+        limit: 500
+        offset: 0
+
+  # ── Lists ────────────────────────────────────────────────────────────────
+  # GET /v2/lists
+  # Returns all lists the access token has access to, ordered as in the sidebar.
+  # No pagination parameters; Attio returns the full set in a single response.
+  # Scope: list_configuration:read
+  - name: lists
+    endpoint:
+      path: "lists"
+      method: GET
+
+  # ── List Attributes ───────────────────────────────────────────────────────
+  # GET /v2/lists/{list}/attributes
+  # Lists attribute definitions (schema) for a specific list.
+  # Scope: object_configuration:read
+  - name: list_attributes
+    endpoint:
+      path: "lists/{list}/attributes"
+      method: GET
+      params:
+        show_archived: false
+
+  # ── List Entries ─────────────────────────────────────────────────────────
+  # POST /v2/lists/{list}/entries/query
+  # Returns entries (rows) in a list. offset/limit go in the request body.
+  # Each entry has both its own list-attribute values and its parent record data.
+  # Scope: list_entry:read, list_configuration:read
+  - name: entries
+    endpoint:
+      path: "lists/{list}/entries/query"
+      method: POST
+      params:
+        limit: 500
+        offset: 0
+
+  # ── Notes ────────────────────────────────────────────────────────────────
+  # GET /v2/notes
+  # Lists notes across all records. Optionally filter by parent_object and
+  # parent_record_id. API max page size is 50.
+  # Scope: note:read, object_configuration:read, record_permission:read
+  - name: notes
+    endpoint:
+      path: "notes"
+      method: GET
+      params:
+        limit: 50
+        offset: 0
+    incremental:
+      cursor_path: created_at
+      initial_value: "1970-01-01T00:00:00Z"
+
+  # ── Tasks ────────────────────────────────────────────────────────────────
+  # GET /v2/tasks
+  # Lists tasks with optional filters (assignee, is_completed, linked records).
+  # Default page size is 500; sort by created_at to enable incremental loads.
+  # Scope: task:read, object_configuration:read, record_permission:read,
+  #        user_management:read
+  - name: tasks
+    endpoint:
+      path: "tasks"
+      method: GET
+      params:
+        limit: 500
+        offset: 0
+        sort: "created_at:asc"
+    incremental:
+      cursor_path: created_at
+      initial_value: "1970-01-01T00:00:00Z"
+
+  # ── Threads ──────────────────────────────────────────────────────────────
+  # GET /v2/threads
+  # Lists comment threads. Each thread embeds its comments array inline.
+  # Default page size is 10; maximum is 50.
+  # Scope: comment:read
+  - name: threads
+    endpoint:
+      path: "threads"
+      method: GET
+      params:
+        limit: 50
+        offset: 0
+
+  # ── Webhooks ─────────────────────────────────────────────────────────────
+  # GET /v2/webhooks
+  # Lists registered webhooks. Limit range is 10-100.
+  # Scope: webhook:read
+  - name: webhooks
+    endpoint:
+      path: "webhooks"
+      method: GET
+      params:
+        limit: 100
+        offset: 0
+
+  # ── Workspace Members ────────────────────────────────────────────────────
+  # GET /v2/workspace_members
+  # Lists all members of the workspace (name, email, access level, avatar).
+  # No pagination parameters; returns the full set in a single response.
+  # Note: the URL path uses an underscore, not a hyphen.
+  # Scope: user_management:read
+  - name: workspace_members
+    endpoint:
+      path: "workspace_members"
+      method: GET
+
+write_endpoints:
+  # ── Create Record ─────────────────────────────────────────────────────────
+  # POST /v2/objects/{object}/records
+  # Creates a new record for the given object slug (e.g. people, companies).
+  # Body: { "data": { "values": { "<attr_slug>": <value_or_array> } } }
+  # Scope: record_permission:read-write, object_configuration:read
+  - name: create_record
+    description: "Create a new record for the given object (e.g. people, companies)"
+    method: POST
+    path: "objects/{object}/records"
+
+  # ── Assert (Upsert) Record ────────────────────────────────────────────────
+  # PUT /v2/objects/{object}/records?matching_attribute={attr_slug}
+  # Creates or updates a record based on a unique matching attribute.
+  # Query param matching_attribute is required. For multiselect matching
+  # attributes new values are appended; existing values are not removed.
+  # Body: { "data": { "values": { "<attr_slug>": <value_or_array> } } }
+  # Scope: record_permission:read-write, object_configuration:read
+  - name: assert_record
+    description: "Upsert a record by a unique attribute (matching_attribute query param required)"
+    method: PUT
+    path: "objects/{object}/records"
+
+  # ── Update Record (append multiselect) ───────────────────────────────────
+  # PATCH /v2/objects/{object}/records/{record_id}
+  # Updates a record's attribute values. For multiselect attributes, new
+  # values are prepended to existing values (use assert_record to overwrite).
+  # Body: { "data": { "values": { "<attr_slug>": <value_or_array> } } }
+  # Scope: record_permission:read-write, object_configuration:read
+  - name: update_record
+    description: "Update a record's attribute values (multiselect values are prepended)"
+    method: PATCH
+    path: "objects/{object}/records/{record_id}"
+
+  # ── Delete Record ──────────────────────────────────────────────────────────
+  # DELETE /v2/objects/{object}/records/{record_id}
+  # Permanently deletes the record. This action cannot be undone.
+  # Scope: record_permission:read-write, object_configuration:read
+  - name: delete_record
+    description: "Permanently delete a record"
+    method: DELETE
+    path: "objects/{object}/records/{record_id}"
+
+  # ── Create List Entry ─────────────────────────────────────────────────────
+  # POST /v2/lists/{list}/entries
+  # Adds a record to a list as a new entry. The record must already exist.
+  # Body: { "data": { "parent_record_id": "<uuid>", "parent_object": "<slug>",
+  #                   "entry_values": { "<attr_slug>": <value> } } }
+  # Scope: list_entry:read-write, list_configuration:read
+  - name: create_entry
+    description: "Add an existing record to a list as a new entry"
+    method: POST
+    path: "lists/{list}/entries"
+
+  # ── Assert (Upsert) List Entry ────────────────────────────────────────────
+  # PUT /v2/lists/{list}/entries
+  # Creates a list entry or updates an existing one based on the parent record.
+  # Body: { "data": { "parent_record_id": "<uuid>", "parent_object": "<slug>",
+  #                   "entry_values": { "<attr_slug>": <value> } } }
+  # Scope: list_entry:read-write, list_configuration:read
+  - name: assert_entry
+    description: "Upsert a list entry by parent record (creates or updates)"
+    method: PUT
+    path: "lists/{list}/entries"
+
+  # ── Update List Entry ─────────────────────────────────────────────────────
+  # PATCH /v2/lists/{list}/entries/{entry_id}
+  # Updates entry-level attribute values. Multiselect values are appended.
+  # Body: { "data": { "entry_values": { "<attr_slug>": <value> } } }
+  # Scope: list_entry:read-write, list_configuration:read
+  - name: update_entry
+    description: "Update a list entry's attribute values"
+    method: PATCH
+    path: "lists/{list}/entries/{entry_id}"
+
+  # ── Delete List Entry ─────────────────────────────────────────────────────
+  # DELETE /v2/lists/{list}/entries/{entry_id}
+  # Removes an entry from a list. The underlying record is not deleted.
+  # Scope: list_entry:read-write, list_configuration:read
+  - name: delete_entry
+    description: "Remove an entry from a list (underlying record is preserved)"
+    method: DELETE
+    path: "lists/{list}/entries/{entry_id}"
+
+  # ── Create Note ───────────────────────────────────────────────────────────
+  # POST /v2/notes
+  # Creates a note attached to a record.
+  # Body: { "data": { "parent_object": "<slug>", "parent_record_id": "<uuid>",
+  #                   "title": "<string>", "format": "plaintext|markdown",
+  #                   "content": "<string>", "created_at": "<ISO 8601>" } }
+  # Scope: note:read-write, object_configuration:read, record_permission:read
+  - name: create_note
+    description: "Create a note attached to a record"
+    method: POST
+    path: "notes"
+
+  # ── Delete Note ───────────────────────────────────────────────────────────
+  # DELETE /v2/notes/{note_id}
+  # Permanently deletes a note. This action cannot be undone.
+  # Scope: note:read-write
+  - name: delete_note
+    description: "Permanently delete a note"
+    method: DELETE
+    path: "notes/{note_id}"
+
+  # ── Create Task ───────────────────────────────────────────────────────────
+  # POST /v2/tasks
+  # Creates a task optionally linked to records and assigned to members.
+  # Body: { "data": { "content": "<string>", "format": "plaintext",
+  #                   "deadline_at": "<ISO 8601>|null", "is_completed": false,
+  #                   "linked_records": [...], "assignees": [...] } }
+  # Scope: task:read-write, object_configuration:read, record_permission:read,
+  #        user_management:read
+  - name: create_task
+    description: "Create a task, optionally linked to records and assigned to members"
+    method: POST
+    path: "tasks"
+
+  # ── Update Task ───────────────────────────────────────────────────────────
+  # PATCH /v2/tasks/{task_id}
+  # Updates deadline, completion status, linked records, or assignees.
+  # Body: { "data": { "deadline_at": "<ISO 8601>|null",
+  #                   "is_completed": true|false,
+  #                   "linked_records": [...], "assignees": [...] } }
+  # Scope: task:read-write, object_configuration:read, record_permission:read,
+  #        user_management:read
+  - name: update_task
+    description: "Update a task's deadline, completion status, linked records, or assignees"
+    method: PATCH
+    path: "tasks/{task_id}"
+
+  # ── Delete Task ───────────────────────────────────────────────────────────
+  # DELETE /v2/tasks/{task_id}
+  # Permanently deletes a task.
+  # Scope: task:read-write
+  - name: delete_task
+    description: "Permanently delete a task"
+    method: DELETE
+    path: "tasks/{task_id}"
+
+  # ── Create Comment ────────────────────────────────────────────────────────
+  # POST /v2/comments
+  # Creates a comment on a record, list entry, or as a reply in a thread.
+  # Body (record comment):
+  #   { "data": { "format": "plaintext", "content": "<string>",
+  #               "author": { "workspace_member_id": "<uuid>" },
+  #               "record": { "object": "<slug>", "record_id": "<uuid>" } } }
+  # Body (entry comment):
+  #   { "data": { "format": "plaintext", "content": "<string>",
+  #               "author": { "workspace_member_id": "<uuid>" },
+  #               "entry": { "list": "<slug>", "entry_id": "<uuid>" } } }
+  # Body (thread reply):
+  #   { "data": { "format": "plaintext", "content": "<string>",
+  #               "author": { "workspace_member_id": "<uuid>" },
+  #               "thread_id": "<uuid>" } }
+  # Scope: comment:read-write (plus scopes for the target resource)
+  - name: create_comment
+    description: "Create a comment on a record, list entry, or as a thread reply"
+    method: POST
+    path: "comments"
+
+  # ── Create Webhook ────────────────────────────────────────────────────────
+  # POST /v2/webhooks
+  # Registers a new webhook. The secret is returned only at creation time.
+  # Body: { "data": { "target_url": "https://…",
+  #                   "subscriptions": [
+  #                     { "event_type": "note.created", "filter": null }
+  #                   ] } }
+  # Scope: webhook:read-write
+  - name: create_webhook
+    description: "Register a new webhook and subscribe to event types"
+    method: POST
+    path: "webhooks"
+
+  # ── Update Webhook ────────────────────────────────────────────────────────
+  # PATCH /v2/webhooks/{webhook_id}
+  # Updates target URL or subscriptions for an existing webhook.
+  # Body: { "data": { "target_url": "https://…",
+  #                   "subscriptions": [...] } }
+  # Scope: webhook:read-write
+  - name: update_webhook
+    description: "Update a webhook's target URL or event subscriptions"
+    method: PATCH
+    path: "webhooks/{webhook_id}"
+
+  # ── Delete Webhook ────────────────────────────────────────────────────────
+  # DELETE /v2/webhooks/{webhook_id}
+  # Permanently deletes a webhook registration.
+  # Scope: webhook:read-write
+  - name: delete_webhook
+    description: "Permanently delete a webhook registration"
+    method: DELETE
+    path: "webhooks/{webhook_id}"

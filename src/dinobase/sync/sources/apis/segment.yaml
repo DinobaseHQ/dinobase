@@ -1,0 +1,162 @@
+name: segment
+description: "Segment (sources, destinations, tracking plans, warehouses, spaces, functions, labels)"
+
+# ── Credentials ────────────────────────────────────────────────────────────────
+# Segment Public API uses a personal access token issued from the Segment app.
+# Tokens are workspace-scoped; create one under Settings → Access Management.
+credentials:
+  - name: token
+    flag: "--token"
+    env: SEGMENT_TOKEN
+    prompt: "Segment access token"
+    secret: true
+
+# ── Client ─────────────────────────────────────────────────────────────────────
+# Segment uses token-based cursor pagination.
+#
+# Request parameters (query string or body):
+#   pagination.count  – items per page, 1–1000 (default 200)
+#   pagination.cursor – opaque base64 cursor from previous response
+#
+# Response envelope for list endpoints:
+#   {
+#     "data": {
+#       "<resource>": [...],
+#       "pagination": {
+#         "current": "<cursor>",
+#         "next": "<cursor>|null",
+#         "previous": "<cursor>|null",
+#         "totalEntries": <int>
+#       }
+#     }
+#   }
+#
+# When data.pagination.next is null or absent, all pages have been consumed.
+client:
+  base_url: https://api.segmentapis.com/
+  auth:
+    type: bearer
+    token: "{token}"
+  paginator:
+    type: cursor
+    # Path to the next-page cursor in the response body.
+    # Segment nests it at data.pagination.next for all list endpoints.
+    cursor_path: "data.pagination.next"
+    # Query-string parameter name for the cursor on subsequent requests.
+    cursor_param: "pagination.cursor"
+
+# ── Resource Defaults ──────────────────────────────────────────────────────────
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    params:
+      # Request 1000 items per page (maximum Segment allows).
+      "pagination.count": 1000
+
+# ── Resources (Read Endpoints) ─────────────────────────────────────────────────
+resources:
+
+  # ── Sources ──────────────────────────────────────────────────────────────────
+  # GET /sources — returns all Sources in the workspace.
+  # Response: data.sources (array of SourceV1 objects).
+  - name: sources
+    endpoint:
+      path: sources
+      data_selector: "data.sources"
+
+  # ── Destinations ─────────────────────────────────────────────────────────────
+  # GET /destinations — returns all Destinations connected in the workspace.
+  # Response: data.destinations (array of DestinationV1 objects).
+  - name: destinations
+    endpoint:
+      path: destinations
+      data_selector: "data.destinations"
+
+  # ── Warehouses ───────────────────────────────────────────────────────────────
+  # GET /warehouses — returns all Warehouses configured in the workspace.
+  # Response: data.warehouses (array of WarehouseV1 objects).
+  - name: warehouses
+    endpoint:
+      path: warehouses
+      data_selector: "data.warehouses"
+
+  # ── Tracking Plans ────────────────────────────────────────────────────────────
+  # GET /tracking-plans — returns all Tracking Plans in the workspace.
+  # Response: data.trackingPlans (array of TrackingPlanV1 objects; Python alias
+  # is tracking_plans but the JSON key is "trackingPlans" in camelCase).
+  - name: tracking_plans
+    endpoint:
+      path: tracking-plans
+      data_selector: "data.trackingPlans"
+
+  # ── Spaces ────────────────────────────────────────────────────────────────────
+  # GET /spaces — returns all Segment Spaces (Unify/Engage) in the workspace.
+  # Response: data.spaces (array of Space objects).
+  # Note: Spaces endpoints are in alpha; the underlying path may change.
+  - name: spaces
+    endpoint:
+      path: spaces
+      data_selector: "data.spaces"
+
+  # ── Functions ─────────────────────────────────────────────────────────────────
+  # GET /functions — returns all source/destination/insert Functions.
+  # Response: data.functions (array of ListFunctionItemV1 objects).
+  - name: functions
+    endpoint:
+      path: functions
+      data_selector: "data.functions"
+
+  # ── Labels ────────────────────────────────────────────────────────────────────
+  # GET /labels — returns all workspace Labels (key/value pairs used to tag
+  # sources, destinations, etc.). No pagination required; list is small.
+  # Response: data.labels (array of LabelV1 objects with key, value, description).
+  - name: labels
+    endpoint:
+      path: labels
+      data_selector: "data.labels"
+
+# ── Write Endpoints ────────────────────────────────────────────────────────────
+write_endpoints:
+
+  # ── Sources ───────────────────────────────────────────────────────────────────
+  - name: create_source
+    description: "Create a new Source in the workspace. Requires slug and metadataId."
+    method: POST
+    path: sources
+
+  - name: update_source
+    description: "Update an existing Source by ID (name, enabled, settings, labels)."
+    method: PATCH
+    path: sources/{sourceId}
+
+  - name: delete_source
+    description: "Permanently delete a Source by ID."
+    method: DELETE
+    path: sources/{sourceId}
+
+  - name: add_labels_to_source
+    description: "Append labels to a Source without removing existing ones."
+    method: POST
+    path: sources/{sourceId}/labels
+
+  - name: replace_labels_on_source
+    description: "Replace the full set of labels on a Source."
+    method: PUT
+    path: sources/{sourceId}/labels
+
+  # ── Destinations ──────────────────────────────────────────────────────────────
+  - name: create_destination
+    description: "Create a new Destination connected to a Source. Requires sourceId and metadataId."
+    method: POST
+    path: destinations
+
+  - name: update_destination
+    description: "Update an existing Destination by ID (name, enabled, settings)."
+    method: PATCH
+    path: destinations/{destinationId}
+
+  - name: delete_destination
+    description: "Permanently delete a Destination by ID."
+    method: DELETE
+    path: destinations/{destinationId}

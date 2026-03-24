@@ -1,0 +1,227 @@
+name: newrelic
+description: "New Relic REST API v2 (applications, alert policies, alert conditions, dashboards, synthetics monitors, key transactions, servers)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: NEW_RELIC_API_KEY
+    prompt: "New Relic API key (User API key or REST API key)"
+    secret: true
+
+client:
+  # New Relic REST API v2 base URL.
+  # All REST v2 endpoints are rooted here; Synthetics uses a separate base URL
+  # and is listed with an explicit base_url override on its resource.
+  base_url: "https://api.newrelic.com/v2/"
+  # Authentication uses the literal header name "Api-Key".
+  # Both User API keys (NRAK-...) and REST API keys are accepted.
+  auth:
+    type: custom_header
+    header_name: "Api-Key"
+    header_value: "{api_key}"
+  # New Relic REST v2 returns a standard HTTP Link header for pagination.
+  # Format: <https://api.newrelic.com/v2/...?page=N>; rel="next",
+  #         <https://api.newrelic.com/v2/...?page=N>; rel="last"
+  # Pagination stops when there is no rel="next" in the Link header.
+  # Default page size is 25; max is 100 (set via per_page query param).
+  paginator:
+    type: header_link
+    links_next_key: "next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # ── Applications ──────────────────────────────────────────────────────────
+  # GET /v2/applications.json
+  # Returns all APM-monitored applications for the account.
+  # Response: {"applications": [...]}
+  # Supports incremental via last_reported_at — sort ascending so the cursor
+  # advances monotonically. filter[ids] and filter[name] narrow results.
+  # New Relic does not expose a direct "last_reported_after" query param;
+  # incremental is approximated via the last_reported_at field in the records.
+  - name: applications
+    endpoint:
+      path: "applications.json"
+      data_selector: "applications"
+      params:
+        per_page: 100
+
+  # ── Alert Policies ────────────────────────────────────────────────────────
+  # GET /v2/alerts_policies.json
+  # Returns all alert policies defined in the account.
+  # Response: {"policies": [...]}
+  # Optional filter: filter[name] (exact or partial match by name).
+  - name: alert_policies
+    endpoint:
+      path: "alerts_policies.json"
+      data_selector: "policies"
+      params:
+        per_page: 100
+
+  # ── Alert Conditions ──────────────────────────────────────────────────────
+  # GET /v2/alerts_conditions.json
+  # Returns alert conditions (APM metric-based) across all policies.
+  # Response: {"conditions": [...]}
+  # Required query param: policy_id — omit to get all conditions by paginating
+  # across all policies, or supply a specific policy_id to filter.
+  # Note: NRQL conditions and Infrastructure conditions live on separate
+  # endpoints (/alerts_nrql_conditions.json, /alerts_infrastructure_conditions.json)
+  # and are not included here. This resource covers classic APM conditions only.
+  - name: alert_conditions
+    endpoint:
+      path: "alerts_conditions.json"
+      data_selector: "conditions"
+      params:
+        per_page: 100
+
+  # ── Dashboards (Insights Dashboard API) ───────────────────────────────────
+  # GET /v2/dashboards.json
+  # Returns dashboards created via the classic Insights Dashboard API.
+  # Response: {"dashboards": [...]}
+  # Note: Dashboards created in the newer UI are managed via NerdGraph (GraphQL)
+  # and are not accessible through this REST endpoint. This resource covers
+  # Insights-era dashboards only.
+  - name: dashboards
+    endpoint:
+      path: "dashboards.json"
+      data_selector: "dashboards"
+      params:
+        per_page: 100
+
+  # ── Synthetics Monitors ───────────────────────────────────────────────────
+  # GET https://synthetics.newrelic.com/synthetics/api/v4/monitors
+  # Returns all Synthetics monitors (ping, scripted browser, API test, etc.).
+  # Response: {"monitors": [...], "count": N, "totalMonitors": N}
+  # Pagination: Link header (rel="next") with limit query param (max 100).
+  # Uses a different base URL from the REST v2 API.
+  - name: synthetics_monitors
+    endpoint:
+      base_url: "https://synthetics.newrelic.com/synthetics/api/"
+      path: "v4/monitors"
+      data_selector: "monitors"
+      params:
+        limit: 100
+
+  # ── Key Transactions ──────────────────────────────────────────────────────
+  # GET /v2/key_transactions.json
+  # Returns all key transactions defined in the account.
+  # Response: {"key_transactions": [...]}
+  # Optional filters: filter[name] (string), filter[ids] (comma-separated ints).
+  - name: key_transactions
+    endpoint:
+      path: "key_transactions.json"
+      data_selector: "key_transactions"
+      params:
+        per_page: 100
+
+  # ── Servers ───────────────────────────────────────────────────────────────
+  # GET /v2/servers.json
+  # Returns all servers reporting to New Relic Infrastructure (legacy Server
+  # Monitoring agent, not the modern Infrastructure agent).
+  # Response: {"servers": [...]}
+  # Optional filters: filter[name] (string), filter[ids] (comma-separated ints),
+  #                   filter[reported] (bool — true limits to recently reporting).
+  # Note: New Relic has deprecated the legacy Server Monitoring agent;
+  # most accounts use Infrastructure monitoring instead. This endpoint remains
+  # available for accounts still running the legacy agent.
+  - name: servers
+    endpoint:
+      path: "servers.json"
+      data_selector: "servers"
+      params:
+        per_page: 100
+
+write_endpoints:
+  # ── Alert Policies ────────────────────────────────────────────────────────
+
+  # Create a new alert policy.
+  # POST /v2/alerts_policies.json
+  # Request body is wrapped under a "policy" key.
+  # Required: name, incident_preference.
+  # incident_preference controls when incidents open:
+  #   PER_POLICY  — one incident per policy (default)
+  #   PER_CONDITION — one incident per condition
+  #   PER_CONDITION_AND_TARGET — one incident per condition per entity
+  - name: create_alert_policy
+    description: "Create a new alert policy"
+    method: POST
+    path: "alerts_policies.json"
+    body:
+      required:
+        - name
+        - incident_preference  # PER_POLICY | PER_CONDITION | PER_CONDITION_AND_TARGET
+
+  # Update an existing alert policy.
+  # PUT /v2/alerts_policies/{id}.json
+  # Request body is wrapped under a "policy" key.
+  # Updatable fields: name, incident_preference.
+  - name: update_alert_policy
+    description: "Update an existing alert policy (name or incident_preference)"
+    method: PUT
+    path: "alerts_policies/{id}.json"
+    body:
+      optional:
+        - name
+        - incident_preference
+
+  # Delete an alert policy by ID.
+  # DELETE /v2/alerts_policies/{id}.json
+  # No request body required.
+  - name: delete_alert_policy
+    description: "Delete an alert policy by ID"
+    method: DELETE
+    path: "alerts_policies/{id}.json"
+
+  # ── Alert Conditions ──────────────────────────────────────────────────────
+
+  # Create a new alert condition and attach it to a policy.
+  # POST /v2/alerts_conditions/policies/{policy_id}.json
+  # Request body is wrapped under a "condition" key.
+  # Required: type, name, entities, metric, terms.
+  # type: apm_app_metric | apm_kt_metric | browser_metric | mobile_metric | servers_metric
+  # terms defines threshold/duration/operator/priority/time_function.
+  - name: create_alert_condition
+    description: "Create a new alert condition attached to a policy"
+    method: POST
+    path: "alerts_conditions/policies/{policy_id}.json"
+    body:
+      required:
+        - type       # apm_app_metric | apm_kt_metric | browser_metric | mobile_metric | servers_metric
+        - name
+        - entities   # array of entity IDs (application IDs, etc.)
+        - metric     # metric name to threshold on
+        - terms      # array of {duration, operator, priority, threshold, time_function}
+      optional:
+        - enabled
+        - runbook_url
+        - user_defined
+        - gc_metric
+        - violation_close_timer
+
+  # Update an existing alert condition.
+  # PUT /v2/alerts_conditions/{id}.json
+  # Request body is wrapped under a "condition" key.
+  - name: update_alert_condition
+    description: "Update an existing alert condition"
+    method: PUT
+    path: "alerts_conditions/{id}.json"
+    body:
+      optional:
+        - name
+        - enabled
+        - entities
+        - metric
+        - terms
+        - runbook_url
+        - user_defined
+        - violation_close_timer
+
+  # Delete an alert condition by ID.
+  # DELETE /v2/alerts_conditions/{id}.json
+  # No request body required.
+  - name: delete_alert_condition
+    description: "Delete an alert condition by ID"
+    method: DELETE
+    path: "alerts_conditions/{id}.json"

@@ -1,0 +1,408 @@
+name: plausible
+description: "Plausible Analytics (aggregate stats, timeseries, breakdown by page/source/country/device, realtime visitors)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: PLAUSIBLE_API_KEY
+    prompt: "Plausible API key (create at plausible.io → Settings → API Keys)"
+    secret: true
+  - name: site_id
+    flag: "--site-id"
+    env: PLAUSIBLE_SITE_ID
+    prompt: "Plausible site ID (your domain, e.g. example.com)"
+    secret: false
+
+client:
+  base_url: "https://plausible.io/api/v2/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # Plausible v2 uses a single POST /query endpoint for all analytics queries.
+  # Pagination is controlled via limit/offset fields inside the POST body, not
+  # via query-string or response-header tokens. The default limit is 10,000
+  # rows per request; set include.total_rows=true in the body to get the total.
+  # Most analytics pulls fit within a single page (aggregate, realtime) so the
+  # paginator here covers breakdown queries that may exceed the default limit.
+  paginator:
+    type: offset
+    limit: 10000
+    offset: 0
+    # When include.total_rows is true, meta.total_rows carries the full count.
+    total_path: "meta.total_rows"
+
+resource_defaults:
+  primary_key: null
+  write_disposition: append
+  endpoint:
+    method: POST
+    # All v2 responses wrap results in a top-level "results" array.
+    data_selector: "results"
+
+resources:
+  # ── Aggregate stats ────────────────────────────────────────────────────────
+  # Returns a single summary row of metrics across the requested date range.
+  # No dimensions means one record per sync run — useful as a daily snapshot.
+  # Common metrics: visitors, visits, pageviews, bounce_rate, visit_duration,
+  # views_per_visit, events.
+  - name: aggregate
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+          - views_per_visit
+          - events
+        include:
+          total_rows: true
+
+  # ── Timeseries ─────────────────────────────────────────────────────────────
+  # Groups metrics by time dimension. Use time:day for a daily breakdown,
+  # time:week or time:month for coarser intervals.
+  # date_range and the time dimension should be aligned (e.g. "12mo" + time:month).
+  - name: timeseries_daily
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "time:day"
+        include:
+          time_labels: true
+          total_rows: true
+
+  - name: timeseries_monthly
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "12mo"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "time:month"
+        include:
+          time_labels: true
+          total_rows: true
+
+  # ── Breakdown by page ──────────────────────────────────────────────────────
+  # Top pages by visitor count. event:page is the canonical page path dimension.
+  # event:hostname can be added to distinguish pages across multiple subdomains
+  # when a site_id covers more than one hostname.
+  - name: breakdown_by_page
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+          - time_on_page
+          - scroll_depth
+        dimensions:
+          - "event:page"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by traffic source ────────────────────────────────────────────
+  # visit:source is the top-level source label (Direct, Google, Twitter, …).
+  # visit:channel is the marketing channel (Organic Search, Social, Email, …).
+  - name: breakdown_by_source
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "visit:source"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_channel
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "visit:channel"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by UTM parameters ────────────────────────────────────────────
+  - name: breakdown_by_utm_campaign
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        dimensions:
+          - "visit:utm_medium"
+          - "visit:utm_source"
+          - "visit:utm_campaign"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by country / region / city ──────────────────────────────────
+  # visit:country returns ISO 3166-1 alpha-2 codes; visit:country_name returns
+  # the human-readable label. Both can be requested simultaneously via dimensions.
+  - name: breakdown_by_country
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "visit:country"
+          - "visit:country_name"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_region
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        dimensions:
+          - "visit:country"
+          - "visit:region"
+          - "visit:region_name"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_city
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        dimensions:
+          - "visit:country"
+          - "visit:city"
+          - "visit:city_name"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by device / browser / OS ────────────────────────────────────
+  # visit:device returns Desktop, Mobile, or Tablet.
+  - name: breakdown_by_device
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "visit:device"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_browser
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        dimensions:
+          - "visit:browser"
+          - "visit:browser_version"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_os
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        dimensions:
+          - "visit:os"
+          - "visit:os_version"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by entry / exit page ────────────────────────────────────────
+  - name: breakdown_by_entry_page
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+          - bounce_rate
+          - visit_duration
+        dimensions:
+          - "visit:entry_page"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  - name: breakdown_by_exit_page
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - visits
+        dimensions:
+          - "visit:exit_page"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Breakdown by goal / conversion ────────────────────────────────────────
+  # event:goal returns goal names as defined in the Plausible dashboard.
+  # conversion_rate and group_conversion_rate require an event:goal dimension.
+  - name: breakdown_by_goal
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "30d"
+        metrics:
+          - visitors
+          - events
+          - conversion_rate
+          - total_revenue
+          - average_revenue
+        dimensions:
+          - "event:goal"
+        order_by:
+          - ["visitors", "desc"]
+        include:
+          total_rows: true
+
+  # ── Realtime visitors ──────────────────────────────────────────────────────
+  # Plausible does not expose a dedicated realtime endpoint in v2.
+  # Realtime data is fetched via /api/v2/query with a short date_range window.
+  # The convention is to use a 5-minute absolute datetime range anchored to
+  # "now"; at sync time, substitute the actual ISO 8601 timestamps.
+  # Alternatively, use date_range "day" to see today's aggregated totals.
+  # This resource uses "day" for a simple "visitors today" snapshot.
+  - name: realtime_visitors_today
+    endpoint:
+      path: "query"
+      body:
+        site_id: "{site_id}"
+        date_range: "day"
+        metrics:
+          - visitors
+          - visits
+          - pageviews
+          - bounce_rate
+        include:
+          total_rows: true
+
+write_endpoints:
+  # ── Events (Plausible Events Ingestion API) ────────────────────────────────
+  # POST https://plausible.io/api/event
+  # Used to send pageviews and custom events from server-side code, mobile
+  # apps, or any environment where the JS snippet cannot run.
+  # Authentication: none required — the domain must be registered in the
+  # Plausible account. The site_id is provided as the "domain" body field.
+  # Required headers: User-Agent (for unique visitor detection), Content-Type.
+  # Required body fields: domain, name, url.
+  # Optional body fields: referrer, props (up to 30 key-value pairs),
+  #   revenue (currency + amount), interactive (bool, default true).
+  # Response: 202 Accepted with empty JSON body {}.
+  # Note: this endpoint lives at the root /api/event, not under /api/v2/.
+  - name: send_event
+    description: "Send a pageview or custom event to Plausible for ingestion. Use name='pageview' for page views or any string for custom events. domain, name, and url are required."
+    method: POST
+    path: "https://plausible.io/api/event"

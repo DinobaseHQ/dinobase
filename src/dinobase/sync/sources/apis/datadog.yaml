@@ -1,0 +1,345 @@
+name: datadog
+description: "Datadog (monitors, dashboards, events, downtimes, SLOs, incidents, notebooks, synthetics tests)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: DATADOG_API_KEY
+    prompt: "Datadog API key (Organization Settings → API Keys)"
+    secret: true
+  # Application key is required for read operations on most endpoints.
+  # It grants access scoped to the owning user's permissions.
+  - name: app_key
+    flag: "--app-key"
+    env: DATADOG_APP_KEY
+    prompt: "Datadog Application key (Organization Settings → Application Keys)"
+    secret: true
+
+client:
+  base_url: "https://api.datadoghq.com/"
+  # Datadog uses two required headers for authentication on every request:
+  #   DD-API-KEY  — identifies the organization
+  #   DD-APPLICATION-KEY — identifies the user / grants scoped access
+  # Neither uses the Authorization header, so custom_header is used for
+  # one key and the static headers block carries the second.
+  auth:
+    type: custom_header
+    header_name: "DD-API-KEY"
+    header_value: "{api_key}"
+  headers:
+    DD-APPLICATION-KEY: "{app_key}"
+  # Default paginator covers the offset-style endpoints (monitors, SLOs,
+  # notebooks, dashboards, downtimes, incidents, synthetics).
+  # Cursor-based endpoints (events) override this per-resource.
+  # Monitors: GET /api/v1/monitor — page + page_size (max 1000).
+  # Dashboards: GET /api/v1/dashboard — start + count (offset by index).
+  # SLOs: GET /api/v1/slo — offset + limit (max 1000).
+  # Notebooks: GET /api/v1/notebooks — start + count (offset by index).
+  # Downtimes: GET /api/v2/downtime — page[offset] + page[limit] (max 30 default).
+  # Incidents: GET /api/v2/incidents — page[offset] + page[size] (max 100).
+  # Synthetics: GET /api/v1/synthetics/tests — page_number + page_size (0-indexed page).
+  # Events: GET /api/v2/events — page[cursor] + page[limit] (cursor, max 1000).
+  paginator:
+    type: offset
+    limit: 100
+    limit_param: "page_size"
+    offset_param: "page"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # ── Monitors ────────────────────────────────────────────────────────────────
+  # GET /api/v1/monitor
+  # Returns a bare JSON array of monitor objects (no envelope key).
+  # Pagination: page (0-indexed) + page_size (max 1000).
+  # Supports incremental via the modified field, but no server-side filter param
+  # exists for modified_at, so full sync is used here.
+  # Response: [{id, name, type, query, message, tags, ...}, ...]
+  - name: monitors
+    endpoint:
+      path: "api/v1/monitor"
+      params:
+        page_size: 1000
+        with_downtimes: "false"
+
+  # ── Dashboards ──────────────────────────────────────────────────────────────
+  # GET /api/v1/dashboard
+  # Returns {"dashboards": [...]} with summary (no full widget definitions).
+  # Pagination: start (integer offset) + count (page size, default 100).
+  # This endpoint returns summaries only; full definitions require a per-ID GET.
+  - name: dashboards
+    endpoint:
+      path: "api/v1/dashboard"
+      data_selector: "dashboards"
+      params:
+        count: 100
+    paginator:
+      type: offset
+      limit: 100
+      limit_param: "count"
+      offset_param: "start"
+
+  # ── Events ──────────────────────────────────────────────────────────────────
+  # GET /api/v2/events
+  # Returns {"data": [...], "meta": {"page": {"after": "<cursor>"}}, "links": {...}}.
+  # Pagination: cursor-based using page[cursor] / page[limit] (max 1000).
+  # Cursor token is in meta.page.after; absent on the final page.
+  # Incremental via filter[from] / filter[to] (RFC 3339 timestamps).
+  - name: events
+    endpoint:
+      path: "api/v2/events"
+      data_selector: "data"
+      params:
+        "page[limit]": 1000
+        sort: "timestamp"
+    paginator:
+      type: cursor
+      cursor_path: "meta.page.after"
+      cursor_param: "page[cursor]"
+    incremental:
+      cursor_path: "attributes.timestamp"
+      param: "filter[from]"
+      initial_value: "2024-01-01T00:00:00+00:00"
+
+  # ── Downtimes ───────────────────────────────────────────────────────────────
+  # GET /api/v2/downtime
+  # Returns {"data": [...], "meta": {...}, "links": {...}}.
+  # Pagination: offset-based using page[offset] + page[limit] (default 30, no stated max).
+  # current_only=false returns all downtimes including cancelled/expired ones.
+  - name: downtimes
+    endpoint:
+      path: "api/v2/downtime"
+      data_selector: "data"
+      params:
+        "page[limit]": 100
+        current_only: "false"
+    paginator:
+      type: offset
+      limit: 100
+      limit_param: "page[limit]"
+      offset_param: "page[offset]"
+
+  # ── Service Level Objectives ─────────────────────────────────────────────────
+  # GET /api/v1/slo
+  # Returns {"data": [...], "metadata": {...}}.
+  # Pagination: offset (integer) + limit (max 1000).
+  - name: service_level_objectives
+    endpoint:
+      path: "api/v1/slo"
+      data_selector: "data"
+      params:
+        limit: 1000
+    paginator:
+      type: offset
+      limit: 1000
+      limit_param: "limit"
+      offset_param: "offset"
+
+  # ── Incidents ───────────────────────────────────────────────────────────────
+  # GET /api/v2/incidents
+  # Returns {"data": [...], "meta": {...}, "included": [...]}.
+  # Requires the Incident Management feature to be enabled on the account.
+  # Pagination: page[offset] + page[size] (max 100).
+  - name: incidents
+    endpoint:
+      path: "api/v2/incidents"
+      data_selector: "data"
+      params:
+        "page[size]": 100
+    paginator:
+      type: offset
+      limit: 100
+      limit_param: "page[size]"
+      offset_param: "page[offset]"
+
+  # ── Notebooks ────────────────────────────────────────────────────────────────
+  # GET /api/v1/notebooks
+  # Returns {"data": [...], "meta": {...}}.
+  # Pagination: start (integer offset) + count (page size, default 100).
+  # include_cells=false reduces payload size for list purposes.
+  - name: notebooks
+    endpoint:
+      path: "api/v1/notebooks"
+      data_selector: "data"
+      params:
+        count: 100
+        include_cells: "false"
+    paginator:
+      type: offset
+      limit: 100
+      limit_param: "count"
+      offset_param: "start"
+
+  # ── Synthetics Tests ─────────────────────────────────────────────────────────
+  # GET /api/v1/synthetics/tests
+  # Returns {"tests": [...], "metadata": {...}}.
+  # Pagination: page_number (0-indexed) + page_size (default 100).
+  - name: synthetics_tests
+    primary_key: public_id
+    endpoint:
+      path: "api/v1/synthetics/tests"
+      data_selector: "tests"
+      params:
+        page_size: 100
+    paginator:
+      type: page_number
+      page_param: "page_number"
+      page_size_param: "page_size"
+
+write_endpoints:
+  # ── Monitors ─────────────────────────────────────────────────────────────────
+
+  # Create a new monitor.
+  # POST /api/v1/monitor
+  # Required body fields: type (monitor type string, e.g. "metric alert"), query (the alert query).
+  # Optional: name, message, tags, priority, options (thresholds, notify_no_data, etc.).
+  # Returns the created Monitor object with its assigned integer id.
+  - name: create_monitor
+    description: "Create a new monitor"
+    method: POST
+    path: "api/v1/monitor"
+    body:
+      required:
+        - type   # e.g. "metric alert", "service check", "event alert", "query alert"
+        - query  # the Datadog metric/log/APM query string
+      optional:
+        - name
+        - message
+        - tags
+        - priority
+        - options
+        - restricted_roles
+
+  # Update an existing monitor by integer ID.
+  # PUT /api/v1/monitor/{monitor_id}
+  # All fields are optional; only provided fields are updated.
+  - name: update_monitor
+    description: "Update an existing monitor by ID"
+    method: PUT
+    path: "api/v1/monitor/{monitor_id}"
+    body:
+      optional:
+        - name
+        - message
+        - query
+        - tags
+        - priority
+        - options
+        - restricted_roles
+
+  # Delete a monitor by integer ID.
+  # DELETE /api/v1/monitor/{monitor_id}
+  # Returns {"deleted": <monitor_id>}.
+  - name: delete_monitor
+    description: "Delete a monitor by ID"
+    method: DELETE
+    path: "api/v1/monitor/{monitor_id}"
+
+  # Mute a monitor (suppress notifications) globally or for a specific group.
+  # POST /api/v1/monitor/{monitor_id}/mute
+  # Optional body: scope (monitor group string), end (Unix timestamp when mute expires).
+  - name: mute_monitor
+    description: "Mute a monitor globally or for a specific scope"
+    method: POST
+    path: "api/v1/monitor/{monitor_id}/mute"
+    body:
+      optional:
+        - scope  # e.g. "host:myhost" — omit to mute all groups
+        - end    # Unix timestamp; omit for indefinite mute
+
+  # Unmute a monitor (re-enable notifications).
+  # POST /api/v1/monitor/{monitor_id}/unmute
+  # Optional body: scope (monitor group string), all_scopes (bool).
+  - name: unmute_monitor
+    description: "Unmute a monitor and re-enable notifications"
+    method: POST
+    path: "api/v1/monitor/{monitor_id}/unmute"
+    body:
+      optional:
+        - scope
+        - all_scopes  # boolean; if true, unmutes all groups regardless of scope
+
+  # ── Downtimes ─────────────────────────────────────────────────────────────────
+
+  # Schedule a new downtime (v2).
+  # POST /api/v2/downtime
+  # Body must follow the JSONAPI request structure wrapping data under "data".
+  # Required: data.type ("downtime"), data.attributes.schedule, data.attributes.scope.
+  # Optional: data.attributes.message, data.attributes.mute_first_recovery_notification,
+  #           data.attributes.notify_end_states, data.attributes.notify_end_types,
+  #           data.relationships.monitor (to scope to a specific monitor).
+  - name: create_downtime
+    description: "Schedule a new downtime window"
+    method: POST
+    path: "api/v2/downtime"
+    body:
+      required:
+        - data  # JSONAPI envelope: {type: "downtime", attributes: {schedule, scope}}
+      optional: []
+
+  # Update an existing downtime by UUID (v2).
+  # PATCH /api/v2/downtime/{downtime_id}
+  # Partial update; only provided attributes are changed.
+  # Path param: downtime_id (UUID string).
+  - name: update_downtime
+    description: "Update an existing scheduled downtime"
+    method: PATCH
+    path: "api/v2/downtime/{downtime_id}"
+    body:
+      required:
+        - data  # JSONAPI envelope with attributes to update
+      optional: []
+
+  # Cancel (delete) a downtime by UUID (v2).
+  # DELETE /api/v2/downtime/{downtime_id}
+  # Returns 204 No Content on success.
+  - name: cancel_downtime
+    description: "Cancel (delete) a scheduled downtime"
+    method: DELETE
+    path: "api/v2/downtime/{downtime_id}"
+
+  # ── Incidents ─────────────────────────────────────────────────────────────────
+
+  # Create a new incident (v2).
+  # POST /api/v2/incidents
+  # Requires Incident Management to be enabled.
+  # Body must include the JSONAPI envelope under "data":
+  #   data.type = "incidents"
+  #   data.attributes.title (string, required)
+  #   data.attributes.customer_impact_scope (string)
+  #   data.attributes.customer_impacted (bool)
+  # Optional: data.attributes.fields (key-value metadata), data.attributes.initial_cells,
+  #           data.attributes.notification_handles, data.attributes.severity,
+  #           data.attributes.state, data.relationships.commander_user.
+  - name: create_incident
+    description: "Create a new incident"
+    method: POST
+    path: "api/v2/incidents"
+    body:
+      required:
+        - data  # JSONAPI envelope: {type: "incidents", attributes: {title, customer_impacted}}
+      optional: []
+
+  # Update an existing incident by UUID (v2).
+  # PATCH /api/v2/incidents/{incident_id}
+  # Partial update; supports updating title, severity, state, fields, etc.
+  # Path param: incident_id (UUID string).
+  - name: update_incident
+    description: "Update an existing incident (title, severity, state, fields)"
+    method: PATCH
+    path: "api/v2/incidents/{incident_id}"
+    body:
+      required:
+        - data  # JSONAPI envelope with attributes to update
+      optional: []
+
+  # Delete an incident by UUID (v2).
+  # DELETE /api/v2/incidents/{incident_id}
+  # Returns 204 No Content on success.
+  # Note: deleting an incident is irreversible and removes all associated data.
+  - name: delete_incident
+    description: "Permanently delete an incident"
+    method: DELETE
+    path: "api/v2/incidents/{incident_id}"

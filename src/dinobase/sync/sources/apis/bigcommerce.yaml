@@ -1,0 +1,185 @@
+name: bigcommerce
+description: "BigCommerce (orders, products, customers, categories, brands, coupons, store_information)"
+
+credentials:
+  - name: store_hash
+    flag: "--store-hash"
+    env: BIGCOMMERCE_STORE_HASH
+    prompt: "BigCommerce store hash (the short identifier in your store URL)"
+    secret: false
+  - name: access_token
+    flag: "--token"
+    env: BIGCOMMERCE_ACCESS_TOKEN
+    prompt: "BigCommerce API access token (X-Auth-Token)"
+    secret: true
+
+client:
+  # Base URL covers all v3 resources. v2 resources (orders, store) use path-relative overrides.
+  base_url: "https://api.bigcommerce.com/stores/{store_hash}/v3/"
+  auth:
+    # BigCommerce uses a custom request header, not Bearer / Basic auth.
+    type: custom_header
+    header_name: "X-Auth-Token"
+    token: "{access_token}"
+  # v3 responses: {"data": [...], "meta": {"pagination": {"current_page": N, "total_pages": N, ...}}}
+  # v2 responses (orders): bare JSON array; pagination via page/limit query params only.
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "limit"
+    page_size: 250
+    base_page: 1
+    # v3 total-pages sentinel: stop when current_page == total_pages.
+    total_path: "meta.pagination.total_pages"
+    current_page_path: "meta.pagination.current_page"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # v3 resources all wrap records in the top-level "data" array.
+    data_selector: "data"
+
+resources:
+
+  # ── Orders ────────────────────────────────────────────────────────────────────
+  # GET /v2/orders — v2 endpoint, returns a bare JSON array (no "data" wrapper).
+  # Supports min_date_modified / max_date_modified for incremental filtering.
+  # Max 250 records per page; default sort is newest first — use sort=date_modified:asc
+  # so incremental cursor advances correctly through modified records.
+  - name: orders
+    endpoint:
+      path: "../v2/orders"
+      data_selector: null
+      params:
+        sort: "date_modified:asc"
+        limit: 250
+        min_date_modified: "{incremental.start_value}"
+    incremental:
+      cursor_path: "date_modified"
+      initial_value: "2020-01-01T00:00:00+00:00"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+  # GET /v3/catalog/products — v3, data array + meta.pagination.
+  # No native date_modified filter on the list endpoint; full merge sync via id.
+  - name: products
+    endpoint:
+      path: "catalog/products"
+      params:
+        limit: 250
+
+  # ── Customers ─────────────────────────────────────────────────────────────────
+  # GET /v3/customers — v3, data array + meta.pagination.
+  # No updated_at filter on list; full merge sync via id primary key.
+  - name: customers
+    endpoint:
+      path: "customers"
+      params:
+        limit: 250
+
+  # ── Categories ────────────────────────────────────────────────────────────────
+  # GET /v3/catalog/categories — v3, data array + meta.pagination.
+  # Small, slowly-changing catalog; full merge sync is appropriate.
+  - name: categories
+    endpoint:
+      path: "catalog/categories"
+      params:
+        limit: 250
+
+  # ── Brands ────────────────────────────────────────────────────────────────────
+  # GET /v3/catalog/brands — v3, data array + meta.pagination.
+  # Small catalog; full merge sync via id primary key.
+  - name: brands
+    endpoint:
+      path: "catalog/brands"
+      params:
+        limit: 250
+
+  # ── Coupons (Promotions) ──────────────────────────────────────────────────────
+  # BigCommerce v3 Promotions API — coupon codes are attached to promotions.
+  # GET /v3/promotions — data array + meta.pagination; max 250/page.
+  # The legacy v2 coupons endpoint is deprecated; this is the current standard.
+  - name: coupons
+    endpoint:
+      path: "promotions"
+      params:
+        limit: 250
+
+  # ── Store Information ─────────────────────────────────────────────────────────
+  # GET /v2/store — single-object response (no array, no pagination).
+  # Returns global store metadata: name, domain, currency, timezone, plan, etc.
+  - name: store_information
+    endpoint:
+      path: "../v2/store"
+      data_selector: null
+    write_disposition: replace
+
+write_endpoints:
+
+  # ── Orders ────────────────────────────────────────────────────────────────────
+  # POST /v2/orders — create a manual order.
+  # Required body fields: billing_address + (products OR consignments).
+  - name: create_order
+    description: "Create a new manual order. Requires billing_address and products or consignments."
+    method: POST
+    path: "../v2/orders"
+
+  # PUT /v2/orders/{order_id} — update an existing order (status, products, addresses, fees).
+  # Products behave as PATCH; fees use full PUT semantics (omitted fees are deleted).
+  - name: update_order
+    description: "Update an existing order by ID (status, products, addresses, fees)."
+    method: PUT
+    path: "../v2/orders/{order_id}"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+  # POST /v3/catalog/products — create a single product.
+  # Required: name, type, weight, price.
+  - name: create_product
+    description: "Create a new catalog product. Required fields: name, type, weight, price."
+    method: POST
+    path: "catalog/products"
+
+  # PUT /v3/catalog/products/{product_id} — update a single product by ID.
+  - name: update_product
+    description: "Update an existing catalog product by ID."
+    method: PUT
+    path: "catalog/products/{product_id}"
+
+  # PUT /v3/catalog/products — batch update up to 10 products in one request.
+  # Each object in the array must include an id field.
+  - name: batch_update_products
+    description: "Batch update up to 10 catalog products. Each object must include id."
+    method: PUT
+    path: "catalog/products"
+    bulk: true
+    max_batch_size: 10
+
+  # DELETE /v3/catalog/products/{product_id} — delete a single product.
+  - name: delete_product
+    description: "Delete a catalog product by ID."
+    method: DELETE
+    path: "catalog/products/{product_id}"
+
+  # ── Customers ─────────────────────────────────────────────────────────────────
+  # POST /v3/customers — create up to 10 customers in a single request (array body).
+  # Required per object: first_name, last_name, email.
+  - name: create_customers
+    description: "Create up to 10 customers in a single request (array body). Required per item: first_name, last_name, email."
+    method: POST
+    path: "customers"
+    bulk: true
+    max_batch_size: 10
+
+  # PUT /v3/customers — update up to 10 customers (array body); each must include id.
+  - name: update_customers
+    description: "Update up to 10 customers in a single request (array body). Each item must include id."
+    method: PUT
+    path: "customers"
+    bulk: true
+    max_batch_size: 10
+
+  # DELETE /v3/customers — delete customers by ID list (?id:in=1,2,3).
+  - name: delete_customers
+    description: "Delete one or more customers by passing id:in as a query parameter (e.g. ?id:in=1,2,3)."
+    method: DELETE
+    path: "customers"

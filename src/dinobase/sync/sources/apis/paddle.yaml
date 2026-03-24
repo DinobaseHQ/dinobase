@@ -1,0 +1,172 @@
+name: paddle
+description: "Paddle billing (customers, subscriptions, transactions, products, prices)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: PADDLE_API_KEY
+    prompt: "Paddle API key"
+    secret: true
+
+client:
+  base_url: "https://api.paddle.com/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # Paddle uses cursor-based pagination. Each paginated response includes
+  # meta.pagination.next (full URL to next page) and meta.pagination.has_more.
+  # Pass the next cursor ID via the `after` query param.
+  paginator:
+    type: json_link
+    next_url_path: "meta.pagination.next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "data"
+    params:
+      per_page: 200
+
+resources:
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # GET /customers — cursor pagination, max 200/page.
+  # No updated_at filter; full merge sync via id primary key.
+  - name: customers
+    endpoint:
+      path: "customers"
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+  # GET /subscriptions — cursor pagination, max 200/page.
+  # No updated_at query param, but the schema has updated_at field.
+  # Order ASC by id to get stable cursor traversal; incremental tracks updated_at.
+  - name: subscriptions
+    endpoint:
+      path: "subscriptions"
+      params:
+        per_page: 200
+        order_by: "updated_at[ASC]"
+    incremental:
+      cursor_path: "updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Transactions ──────────────────────────────────────────────────────────────
+  # GET /transactions — cursor pagination, max 30/page (Paddle-enforced limit).
+  # Supports updated_at filter with [GTE] comparator for incremental loads.
+  - name: transactions
+    endpoint:
+      path: "transactions"
+      params:
+        per_page: 30
+        updated_at: "{incremental.start_value}[GTE]"
+        order_by: "updated_at[ASC]"
+    incremental:
+      cursor_path: "updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+  # GET /products — cursor pagination, max 200/page.
+  - name: products
+    endpoint:
+      path: "products"
+
+  # ── Prices ────────────────────────────────────────────────────────────────────
+  # GET /prices — cursor pagination, max 200/page.
+  - name: prices
+    endpoint:
+      path: "prices"
+
+  # ── Discounts ─────────────────────────────────────────────────────────────────
+  # GET /discounts — cursor pagination, max 200/page.
+  - name: discounts
+    endpoint:
+      path: "discounts"
+
+  # ── Adjustments ───────────────────────────────────────────────────────────────
+  # GET /adjustments — cursor pagination, max 50/page (Paddle-enforced limit).
+  # Covers refunds and credits applied to transactions.
+  - name: adjustments
+    endpoint:
+      path: "adjustments"
+      params:
+        per_page: 50
+
+write_endpoints:
+
+  # ── Customers ─────────────────────────────────────────────────────────────────
+
+  - name: create_customer
+    description: "Create a new customer"
+    method: POST
+    path: "customers"
+
+  - name: update_customer
+    description: "Update an existing customer by ID"
+    method: PATCH
+    path: "customers/{customer_id}"
+
+  # ── Subscriptions ─────────────────────────────────────────────────────────────
+
+  - name: update_subscription
+    description: "Update a subscription (items, billing, custom data, etc.)"
+    method: PATCH
+    path: "subscriptions/{subscription_id}"
+
+  - name: cancel_subscription
+    description: "Cancel a subscription immediately or at period end"
+    method: POST
+    path: "subscriptions/{subscription_id}/cancel"
+
+  - name: pause_subscription
+    description: "Pause a subscription at the next billing period"
+    method: POST
+    path: "subscriptions/{subscription_id}/pause"
+
+  - name: resume_subscription
+    description: "Resume a paused subscription"
+    method: POST
+    path: "subscriptions/{subscription_id}/resume"
+
+  # ── Products ──────────────────────────────────────────────────────────────────
+
+  - name: create_product
+    description: "Create a new product"
+    method: POST
+    path: "products"
+
+  - name: update_product
+    description: "Update an existing product by ID"
+    method: PATCH
+    path: "products/{product_id}"
+
+  # ── Prices ────────────────────────────────────────────────────────────────────
+
+  - name: create_price
+    description: "Create a new price for a product"
+    method: POST
+    path: "prices"
+
+  - name: update_price
+    description: "Update an existing price by ID"
+    method: PATCH
+    path: "prices/{price_id}"
+
+  # ── Discounts ─────────────────────────────────────────────────────────────────
+
+  - name: create_discount
+    description: "Create a new discount code"
+    method: POST
+    path: "discounts"
+
+  - name: update_discount
+    description: "Update an existing discount by ID"
+    method: PATCH
+    path: "discounts/{discount_id}"
+
+  # ── Adjustments (Refunds / Credits) ──────────────────────────────────────────
+
+  - name: create_adjustment
+    description: "Create a refund or credit adjustment for a transaction"
+    method: POST
+    path: "adjustments"

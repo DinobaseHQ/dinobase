@@ -1,0 +1,313 @@
+name: sendgrid
+description: "SendGrid (contacts, lists, campaigns, templates, stats)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: SENDGRID_API_KEY
+    prompt: "SendGrid API key"
+    secret: true
+
+client:
+  base_url: https://api.sendgrid.com/v3/
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # SendGrid Marketing API (lists, singlesends, templates, contacts) uses
+  # page_token / page_size cursor pagination. _metadata.next holds the full
+  # next-page URL. Suppression endpoints (bounces, blocks, spam_reports,
+  # unsubscribes) use classic limit/offset pagination (max 500 per page).
+  paginator:
+    type: json_link
+    next_url_path: "_metadata.next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "result"
+
+resources:
+  # -----------------------------------------------------------------------
+  # Contacts
+  # GET /v3/marketing/contacts
+  # Response: { result: [...], _metadata: { next, self, prev }, contact_count }
+  # No query-string pagination params — result set is limited to ~50 contacts.
+  # Full bulk export requires POST /v3/marketing/contacts/exports (async job).
+  # -----------------------------------------------------------------------
+  - name: contacts
+    endpoint:
+      path: "marketing/contacts"
+      data_selector: "result"
+
+  # -----------------------------------------------------------------------
+  # Lists
+  # GET /v3/marketing/lists?page_size=1000&page_token=<token>
+  # Response: { result: [...], _metadata: { next, self, prev } }
+  # -----------------------------------------------------------------------
+  - name: lists
+    endpoint:
+      path: "marketing/lists"
+      data_selector: "result"
+      params:
+        page_size: 1000
+
+  # -----------------------------------------------------------------------
+  # Single Sends (marketing campaigns v2 replacement)
+  # GET /v3/marketing/singlesends?page_size=1000&page_token=<token>
+  # Response: { result: [...], _metadata: { next, self, prev } }
+  # -----------------------------------------------------------------------
+  - name: singlesends
+    endpoint:
+      path: "marketing/singlesends"
+      data_selector: "result"
+      params:
+        page_size: 1000
+
+  # -----------------------------------------------------------------------
+  # Templates (transactional)
+  # GET /v3/templates?generations=dynamic&page_size=200&page_token=<token>
+  # Response: { result: [...], _metadata: { next, self, prev } }
+  # generations=dynamic returns only the current Dynamic Templates (v3 editor).
+  # Omit the filter to also include legacy designs.
+  # -----------------------------------------------------------------------
+  - name: templates
+    endpoint:
+      path: "templates"
+      data_selector: "result"
+      params:
+        generations: dynamic
+        page_size: 200
+
+  # -----------------------------------------------------------------------
+  # Marketing Senders (New Marketing Campaigns sender identities)
+  # GET /v3/marketing/senders
+  # Response: { results: [...] }  — no pagination, small list
+  # -----------------------------------------------------------------------
+  - name: sender_identities
+    endpoint:
+      path: "marketing/senders"
+      data_selector: "results"
+
+  # -----------------------------------------------------------------------
+  # Verified Senders (single-sender verification — used in transactional)
+  # GET /v3/verified_senders?limit=100&lastSeenID=<id>
+  # Response: { results: [...] }
+  # Uses cursor via lastSeenID; no standard _metadata envelope.
+  # -----------------------------------------------------------------------
+  - name: verified_senders
+    endpoint:
+      path: "verified_senders"
+      data_selector: "results"
+      params:
+        limit: 100
+
+  # -----------------------------------------------------------------------
+  # Segments 2.0
+  # GET /v3/marketing/segments/2.0
+  # Response: array of segment objects (no wrapper key at the top level)
+  # No pagination params — returns all segments.
+  # -----------------------------------------------------------------------
+  - name: segments
+    endpoint:
+      path: "marketing/segments/2.0"
+      data_selector: "$"  # response is a bare array
+
+  # -----------------------------------------------------------------------
+  # Custom Field Definitions
+  # GET /v3/marketing/field_definitions
+  # Response: { custom_fields: [...], reserved_fields: [...], _metadata }
+  # -----------------------------------------------------------------------
+  - name: custom_fields
+    endpoint:
+      path: "marketing/field_definitions"
+      data_selector: "custom_fields"
+
+  # -----------------------------------------------------------------------
+  # Email Designs (Marketing Campaigns drag-and-drop designs)
+  # GET /v3/designs?page_size=200&page_token=<token>
+  # Response: { result: [...], _metadata: { next, self, prev } }
+  # -----------------------------------------------------------------------
+  - name: designs
+    endpoint:
+      path: "designs"
+      data_selector: "result"
+      params:
+        page_size: 200
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Unsubscribe Groups (ASM groups)
+  # GET /v3/asm/groups
+  # Response: bare array of group objects (no envelope key)
+  # -----------------------------------------------------------------------
+  - name: unsubscribe_groups
+    endpoint:
+      path: "asm/groups"
+      data_selector: "$"  # response is a bare array
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Global Unsubscribes
+  # GET /v3/suppression/unsubscribes?limit=500&offset=0
+  # Response: bare array  (limit/offset pagination, max 500 per page)
+  # -----------------------------------------------------------------------
+  - name: suppressions_unsubscribes
+    endpoint:
+      path: "suppression/unsubscribes"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Bounces
+  # GET /v3/suppression/bounces?limit=500&offset=0
+  # Response: bare array  (limit/offset pagination, max 500 per page)
+  # -----------------------------------------------------------------------
+  - name: suppressions_bounces
+    endpoint:
+      path: "suppression/bounces"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Spam Reports
+  # GET /v3/suppression/spam_reports?limit=500&offset=0
+  # Response: bare array  (limit/offset pagination, max 500 per page)
+  # -----------------------------------------------------------------------
+  - name: suppressions_spam_reports
+    endpoint:
+      path: "suppression/spam_reports"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Blocks
+  # GET /v3/suppression/blocks?limit=500&offset=0
+  # Response: bare array  (limit/offset pagination, max 500 per page)
+  # -----------------------------------------------------------------------
+  - name: suppressions_blocks
+    endpoint:
+      path: "suppression/blocks"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Suppressions — Invalid Emails
+  # GET /v3/suppression/invalid_emails?limit=500&offset=0
+  # Response: bare array  (limit/offset pagination, max 500 per page)
+  # -----------------------------------------------------------------------
+  - name: suppressions_invalid_emails
+    endpoint:
+      path: "suppression/invalid_emails"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Global Stats
+  # GET /v3/stats?start_date=YYYY-MM-DD&aggregated_by=day&limit=500&offset=0
+  # Response: bare array of { date, stats: [{ metrics: {...} }] }
+  # start_date is required; defaults to 30 days ago when omitted in practice.
+  # Uses limit/offset pagination (legacy stats API pattern).
+  # -----------------------------------------------------------------------
+  - name: stats_global
+    endpoint:
+      path: "stats"
+      data_selector: "$"
+      paginator:
+        type: offset
+        limit: 500
+        limit_param: "limit"
+        offset_param: "offset"
+
+  # -----------------------------------------------------------------------
+  # Marketing Stats — Single Sends
+  # GET /v3/marketing/stats/singlesends?page_size=25&page_token=<token>
+  # Returns aggregate send stats per single send. Max 25 IDs per request.
+  # Response envelope: { results: [...], _metadata: { next, self, prev } }
+  # -----------------------------------------------------------------------
+  - name: stats_singlesends
+    endpoint:
+      path: "marketing/stats/singlesends"
+      data_selector: "results"
+      params:
+        page_size: 25
+
+write_endpoints:
+  # -----------------------------------------------------------------------
+  # Contacts — upsert (create or update by email address)
+  # PUT /v3/marketing/contacts
+  # Body: { contacts: [ { email, first_name, last_name, ... } ] }
+  # Returns an async job_id (import is not synchronous).
+  # -----------------------------------------------------------------------
+  - name: upsert_contacts
+    path: "marketing/contacts"
+    method: PUT
+    body_key: "contacts"
+    description: "Create or update contacts (async job). Returns job_id."
+
+  # -----------------------------------------------------------------------
+  # Lists — create a new list
+  # POST /v3/marketing/lists
+  # Body: { name: "My List" }
+  # -----------------------------------------------------------------------
+  - name: create_list
+    path: "marketing/lists"
+    method: POST
+    description: "Create a new marketing contact list."
+
+  # -----------------------------------------------------------------------
+  # Lists — update (rename) an existing list
+  # PATCH /v3/marketing/lists/{id}
+  # Body: { name: "New Name" }
+  # -----------------------------------------------------------------------
+  - name: update_list
+    path: "marketing/lists/{id}"
+    method: PATCH
+    description: "Rename a marketing contact list."
+
+  # -----------------------------------------------------------------------
+  # Single Sends — create a new single send (campaign)
+  # POST /v3/marketing/singlesends
+  # Body: { name, send_to: { list_ids: [...] }, email_config: { subject, ... } }
+  # -----------------------------------------------------------------------
+  - name: create_singlesend
+    path: "marketing/singlesends"
+    method: POST
+    description: "Create a new single send (marketing campaign)."
+
+  # -----------------------------------------------------------------------
+  # Single Sends — update an existing single send
+  # PATCH /v3/marketing/singlesends/{id}
+  # -----------------------------------------------------------------------
+  - name: update_singlesend
+    path: "marketing/singlesends/{id}"
+    method: PATCH
+    description: "Update a single send's configuration."
+
+  # -----------------------------------------------------------------------
+  # Single Sends — schedule (send or schedule for future)
+  # PUT /v3/marketing/singlesends/{id}/schedule
+  # Body: { send_at: "2026-04-01T12:00:00Z" }  or  { send_at: "now" }
+  # -----------------------------------------------------------------------
+  - name: schedule_singlesend
+    path: "marketing/singlesends/{id}/schedule"
+    method: PUT
+    description: "Schedule or immediately send a single send."

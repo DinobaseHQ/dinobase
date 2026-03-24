@@ -1,0 +1,102 @@
+name: front
+description: "Front (conversations, contacts, inboxes, tags, teammates)"
+
+credentials:
+  - name: api_token
+    flag: "--token"
+    env: FRONT_API_TOKEN
+    prompt: "Front API token"
+    secret: true
+
+client:
+  base_url: https://api2.frontapp.com/
+  auth:
+    type: bearer
+    token: "{api_token}"
+  # Front uses cursor-based pagination via _pagination.next URL.
+  # Response wraps items in _results array. Default page size 50, max 100.
+  # Continue fetching until _pagination.next is null.
+  paginator:
+    type: json_link
+    next_url_path: "_pagination.next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # Conversations are returned in reverse chronological order (most recently updated first).
+  # Supports updated_after (Unix timestamp) for incremental syncs.
+  - name: conversations
+    endpoint:
+      path: conversations
+      data_selector: "_results"
+    incremental:
+      cursor_path: updated_at
+      param: updated_after
+      initial_value: "1609459200"
+
+  # All contacts in the workspace.
+  - name: contacts
+    endpoint:
+      path: contacts
+      data_selector: "_results"
+
+  # All inboxes the authenticated token has access to.
+  - name: inboxes
+    endpoint:
+      path: inboxes
+      data_selector: "_results"
+
+  # All tags defined in the workspace.
+  - name: tags
+    endpoint:
+      path: tags
+      data_selector: "_results"
+
+  # All teammates (users) in the workspace.
+  - name: teammates
+    endpoint:
+      path: teammates
+      data_selector: "_results"
+
+  # All channels across all inboxes.
+  - name: channels
+    endpoint:
+      path: channels
+      data_selector: "_results"
+
+  # All message templates available to the authenticated user.
+  - name: message_templates
+    endpoint:
+      path: message_templates
+      data_selector: "_results"
+
+write_endpoints:
+  # Conversations
+  - name: update_conversation
+    description: "Update a conversation's status, assignee, tags, subject, or custom fields"
+    method: PATCH
+    path: conversations/{conversation_id}
+
+  # Contacts
+  - name: create_contact
+    description: "Create a new contact"
+    method: POST
+    path: contacts
+
+  - name: update_contact
+    description: "Update an existing contact's name, description, handles, or custom fields"
+    method: PATCH
+    path: contacts/{contact_id}
+
+  # Tags
+  - name: create_tag
+    description: "Create a new company-level tag"
+    method: POST
+    path: tags
+
+  - name: update_tag
+    description: "Update an existing tag's name, description, or highlight"
+    method: PATCH
+    path: tags/{tag_id}

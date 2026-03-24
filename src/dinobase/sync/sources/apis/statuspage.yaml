@@ -1,0 +1,234 @@
+name: statuspage
+description: "Statuspage (pages, incidents, components, component groups, subscribers, metrics, scheduled maintenances)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: STATUSPAGE_API_KEY
+    prompt: "Statuspage API key"
+    secret: true
+  - name: page_id
+    flag: "--page-id"
+    env: STATUSPAGE_PAGE_ID
+    prompt: "Statuspage page ID"
+    secret: false
+
+client:
+  base_url: "https://api.statuspage.io/v1/"
+  # Statuspage uses "OAuth" auth scheme, NOT "Bearer".
+  # Header format: Authorization: OAuth <api_key>
+  auth:
+    type: custom_header
+    token: "{api_key}"
+    header_name: "Authorization"
+    header_prefix: "OAuth "
+  # Statuspage uses page-number pagination with page + per_page (or limit).
+  # Default and max page size is 100. Responses are bare JSON arrays.
+  # Base page is 1 for most endpoints (subscribers uses 0 but 1 also works).
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "per_page"
+    page_size: 100
+    base_page: 1
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  # Statuspage v1 returns bare JSON arrays — no data_selector needed.
+
+resources:
+  # ── Pages ─────────────────────────────────────────────────────────────────
+  # GET /pages — returns all pages for the authenticated user.
+  # No pagination: typically returns a small list of pages.
+  - name: pages
+    endpoint:
+      path: "pages"
+      paginator: none
+
+  # ── Incidents ─────────────────────────────────────────────────────────────
+  # GET /pages/{page_id}/incidents — all incidents (real-time and scheduled).
+  # Pagination: page + limit (max 100, default 100). Base page: 1.
+  # Note: Statuspage uses "limit" (not "per_page") on this specific endpoint.
+  - name: incidents
+    endpoint:
+      path: "pages/{page_id}/incidents"
+      paginator:
+        type: page_number
+        page_param: "page"
+        page_size_param: "limit"
+        page_size: 100
+        base_page: 1
+
+  # ── Scheduled Maintenances ────────────────────────────────────────────────
+  # GET /pages/{page_id}/incidents/scheduled — incidents with status=scheduled.
+  # Statuspage does not have a separate /scheduled_maintenances endpoint;
+  # scheduled maintenances are incidents of impact=maintenance, fetched via
+  # the /incidents/scheduled sub-endpoint.
+  # Pagination: page + per_page (max 100). Base page: 1.
+  - name: scheduled_maintenances
+    endpoint:
+      path: "pages/{page_id}/incidents/scheduled"
+
+  # ── Components ────────────────────────────────────────────────────────────
+  # GET /pages/{page_id}/components — all components for the page.
+  # Pagination: page + per_page (max 1100 allowed but default/recommended 100).
+  - name: components
+    endpoint:
+      path: "pages/{page_id}/components"
+
+  # ── Component Groups ──────────────────────────────────────────────────────
+  # GET /pages/{page_id}/component-groups — groups of components.
+  # Pagination: page + per_page (max 100).
+  - name: component_groups
+    endpoint:
+      path: "pages/{page_id}/component-groups"
+
+  # ── Subscribers ───────────────────────────────────────────────────────────
+  # GET /pages/{page_id}/subscribers — all subscribers (email, SMS, webhook, etc.).
+  # Pagination: page (0-indexed) + limit (max 100). Uses "limit" not "per_page".
+  # Returns only "active" subscribers by default; state=all includes all states.
+  - name: subscribers
+    endpoint:
+      path: "pages/{page_id}/subscribers"
+      params:
+        state: "all"
+      paginator:
+        type: page_number
+        page_param: "page"
+        page_size_param: "limit"
+        page_size: 100
+        base_page: 0
+
+  # ── Metrics ───────────────────────────────────────────────────────────────
+  # GET /pages/{page_id}/metrics — all metrics defined for the page.
+  # Pagination: page + per_page (max 100).
+  - name: metrics
+    endpoint:
+      path: "pages/{page_id}/metrics"
+
+write_endpoints:
+  # ── Incidents ─────────────────────────────────────────────────────────────
+
+  # Create a new real-time incident.
+  # Body is wrapped under an "incident" key.
+  # Required: name. Status defaults to "investigating" if omitted.
+  # Valid real-time statuses: investigating, identified, monitoring, resolved.
+  - name: create_incident
+    description: "Create a new real-time incident"
+    method: POST
+    path: "pages/{page_id}/incidents"
+    body:
+      required:
+        - name
+      optional:
+        - status
+        - impact_override
+        - body
+        - component_ids
+        - components
+        - deliver_notifications
+        - reminder_intervals
+        - metadata
+
+  # Update an existing incident (real-time or scheduled).
+  # PATCH /pages/{page_id}/incidents/{incident_id}
+  # Body wrapped under "incident" key.
+  # Use status=resolved to resolve a real-time incident.
+  # Use status=completed to complete a scheduled maintenance.
+  - name: update_incident
+    description: "Update an existing incident (change status, body, affected components)"
+    method: PATCH
+    path: "pages/{page_id}/incidents/{incident_id}"
+    body:
+      optional:
+        - name
+        - status
+        - impact_override
+        - body
+        - component_ids
+        - components
+        - deliver_notifications
+        - scheduled_for
+        - scheduled_until
+        - scheduled_remind_prior
+        - auto_transition_to_maintenance_state
+        - auto_transition_to_operational_state
+        - scheduled_auto_in_progress
+        - scheduled_auto_completed
+        - metadata
+
+  # ── Scheduled Maintenances ────────────────────────────────────────────────
+
+  # Create a scheduled maintenance (incident with status=scheduled).
+  # POST /pages/{page_id}/incidents with status=scheduled and scheduled_for/until.
+  # impact_override=maintenance marks it as a maintenance window.
+  - name: create_scheduled_maintenance
+    description: "Create a scheduled maintenance window (incident with status=scheduled)"
+    method: POST
+    path: "pages/{page_id}/incidents"
+    body:
+      required:
+        - name
+        - status      # must be "scheduled"
+        - scheduled_for
+        - scheduled_until
+      optional:
+        - impact_override     # set to "maintenance" for a maintenance window
+        - body
+        - component_ids
+        - components
+        - deliver_notifications
+        - scheduled_remind_prior
+        - auto_transition_to_maintenance_state
+        - auto_transition_to_operational_state
+        - scheduled_auto_in_progress
+        - scheduled_auto_completed
+        - auto_transition_deliver_notifications_at_start
+        - auto_transition_deliver_notifications_at_end
+        - reminder_intervals
+
+  # Update a scheduled maintenance.
+  # PATCH /pages/{page_id}/incidents/{incident_id} — same endpoint as update_incident.
+  # Use status=in_progress to mark as started; status=completed to finish.
+  - name: update_scheduled_maintenance
+    description: "Update a scheduled maintenance (change time window, status, or body)"
+    method: PATCH
+    path: "pages/{page_id}/incidents/{incident_id}"
+    body:
+      optional:
+        - name
+        - status      # scheduled | in_progress | verifying | completed
+        - body
+        - component_ids
+        - components
+        - scheduled_for
+        - scheduled_until
+        - scheduled_remind_prior
+        - auto_transition_to_maintenance_state
+        - auto_transition_to_operational_state
+        - scheduled_auto_in_progress
+        - scheduled_auto_completed
+        - deliver_notifications
+        - metadata
+
+  # ── Components ────────────────────────────────────────────────────────────
+
+  # Update a component's status or metadata.
+  # PATCH /pages/{page_id}/components/{component_id}
+  # Body wrapped under "component" key.
+  # Valid statuses: operational, under_maintenance, degraded_performance,
+  #                 partial_outage, major_outage.
+  - name: update_component
+    description: "Update a component's status, name, or description"
+    method: PATCH
+    path: "pages/{page_id}/components/{component_id}"
+    body:
+      optional:
+        - name
+        - description
+        - status
+        - showcase
+        - only_show_if_degraded
+        - group_id
+        - start_date

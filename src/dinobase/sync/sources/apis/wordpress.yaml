@@ -1,0 +1,222 @@
+name: wordpress
+description: "WordPress REST API (posts, pages, comments, users, categories, tags, media, taxonomies, types)"
+
+# Credentials: username is the WordPress login name; app_password is an
+# Application Password generated in WP Admin > Users > Profile > Application Passwords.
+# site_url is the bare domain used to build the base URL, e.g. "myblog.com".
+credentials:
+  - name: username
+    flag: "--username"
+    env: WORDPRESS_USERNAME
+    prompt: "WordPress username"
+    secret: false
+  - name: app_password
+    flag: "--app-password"
+    env: WORDPRESS_APP_PASSWORD
+    prompt: "WordPress application password (generated in WP Admin > Users > Profile)"
+    secret: true
+  - name: site_url
+    flag: "--site-url"
+    env: WORDPRESS_SITE_URL
+    prompt: "WordPress site URL (e.g. myblog.com)"
+    secret: false
+
+client:
+  base_url: "https://{site_url}/wp-json/wp/v2/"
+  # HTTP Basic auth using the WordPress username and an Application Password.
+  # Application Passwords are available in WordPress 5.6+ and require HTTPS.
+  auth:
+    type: http_basic
+    username: "{username}"
+    password: "{app_password}"
+  # Page-number pagination: ?page= (1-based) + ?per_page= (max 100).
+  # Response headers X-WP-Total and X-WP-TotalPages report total counts.
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "per_page"
+    page_size: 100
+    base_page: 1
+    total_path_header: "X-WP-TotalPages"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  # WordPress list endpoints return bare JSON arrays — no data_selector needed.
+
+resources:
+
+  # ── Posts ─────────────────────────────────────────────────────────────────────
+  # GET /posts — supports modified_after (ISO 8601) and orderby=modified for
+  # stable incremental reads. Fetches all statuses via context=edit (requires auth).
+  # cursor_path is "modified" (ISO 8601 string present on every post object).
+  - name: posts
+    endpoint:
+      path: "posts"
+      params:
+        orderby: "modified"
+        order: "asc"
+        status: "any"
+    incremental:
+      cursor_path: "modified"
+      start_param: "modified_after"
+      initial_value: "2020-01-01T00:00:00"
+
+  # ── Pages ─────────────────────────────────────────────────────────────────────
+  # GET /pages — supports modified_after (ISO 8601) and orderby=modified.
+  # Behaves identically to posts for incremental sync purposes.
+  - name: pages
+    endpoint:
+      path: "pages"
+      params:
+        orderby: "modified"
+        order: "asc"
+        status: "any"
+    incremental:
+      cursor_path: "modified"
+      start_param: "modified_after"
+      initial_value: "2020-01-01T00:00:00"
+
+  # ── Comments ──────────────────────────────────────────────────────────────────
+  # GET /comments — supports after (ISO 8601, based on date_gmt) and orderby=date.
+  # Incrementally syncs new comments since last run.
+  - name: comments
+    endpoint:
+      path: "comments"
+      params:
+        orderby: "date"
+        order: "asc"
+        status: "any"
+    incremental:
+      cursor_path: "date"
+      start_param: "after"
+      initial_value: "2020-01-01T00:00:00"
+
+  # ── Users ─────────────────────────────────────────────────────────────────────
+  # GET /users — no date-filter param; full merge sync via id primary key.
+  # Requires authentication; returns users the authenticated user can see.
+  - name: users
+    endpoint:
+      path: "users"
+      params:
+        orderby: "id"
+        order: "asc"
+
+  # ── Categories ────────────────────────────────────────────────────────────────
+  # GET /categories — paginated list of all categories; no date filter.
+  # Hierarchical terms; parent=0 returns only top-level categories.
+  - name: categories
+    endpoint:
+      path: "categories"
+      params:
+        orderby: "id"
+        order: "asc"
+        hide_empty: "false"
+
+  # ── Tags ──────────────────────────────────────────────────────────────────────
+  # GET /tags — paginated list of all tags; no date filter.
+  - name: tags
+    endpoint:
+      path: "tags"
+      params:
+        orderby: "id"
+        order: "asc"
+        hide_empty: "false"
+
+  # ── Media ─────────────────────────────────────────────────────────────────────
+  # GET /media — supports modified_after (ISO 8601) and orderby=modified.
+  # Incrementally syncs new and updated attachment records since last run.
+  - name: media
+    endpoint:
+      path: "media"
+      params:
+        orderby: "modified"
+        order: "asc"
+    incremental:
+      cursor_path: "modified"
+      start_param: "modified_after"
+      initial_value: "2020-01-01T00:00:00"
+
+  # ── Taxonomies ────────────────────────────────────────────────────────────────
+  # GET /taxonomies — returns all registered taxonomies as a keyed object (not an array).
+  # Not paginated; small dataset. Read-only metadata (category, post_tag, etc.).
+  - name: taxonomies
+    endpoint:
+      path: "taxonomies"
+
+  # ── Post Types ────────────────────────────────────────────────────────────────
+  # GET /types — returns all registered post types as a keyed object (not an array).
+  # Not paginated; small dataset. Read-only metadata.
+  - name: types
+    endpoint:
+      path: "types"
+
+write_endpoints:
+
+  # ── Posts ─────────────────────────────────────────────────────────────────────
+
+  - name: create_post
+    description: "Create a new post. title and content are required."
+    method: POST
+    path: "posts"
+
+  - name: update_post
+    description: "Update an existing post by ID."
+    method: POST
+    path: "posts/{post_id}"
+
+  - name: delete_post
+    description: "Move a post to trash. Pass ?force=true to permanently delete."
+    method: DELETE
+    path: "posts/{post_id}"
+
+  # ── Pages ─────────────────────────────────────────────────────────────────────
+
+  - name: create_page
+    description: "Create a new page. title and content are required."
+    method: POST
+    path: "pages"
+
+  - name: update_page
+    description: "Update an existing page by ID."
+    method: POST
+    path: "pages/{page_id}"
+
+  - name: delete_page
+    description: "Move a page to trash. Pass ?force=true to permanently delete."
+    method: DELETE
+    path: "pages/{page_id}"
+
+  # ── Comments ──────────────────────────────────────────────────────────────────
+
+  - name: create_comment
+    description: "Create a new comment. post (post ID) and content are required."
+    method: POST
+    path: "comments"
+
+  - name: update_comment
+    description: "Update an existing comment by ID (content, status, author, etc.)."
+    method: POST
+    path: "comments/{comment_id}"
+
+  - name: delete_comment
+    description: "Move a comment to trash. Pass ?force=true to permanently delete."
+    method: DELETE
+    path: "comments/{comment_id}"
+
+  # ── Media ─────────────────────────────────────────────────────────────────────
+
+  - name: upload_media
+    description: "Upload a new media file. Send binary data in the request body with Content-Disposition and Content-Type headers set appropriately."
+    method: POST
+    path: "media"
+
+  - name: update_media
+    description: "Update metadata for an existing media item by ID (title, alt_text, caption, description)."
+    method: POST
+    path: "media/{media_id}"
+
+  - name: delete_media
+    description: "Move a media item to trash. Pass ?force=true to permanently delete."
+    method: DELETE
+    path: "media/{media_id}"

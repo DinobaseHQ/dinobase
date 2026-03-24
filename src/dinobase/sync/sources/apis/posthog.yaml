@@ -1,0 +1,132 @@
+name: posthog
+description: "PostHog analytics (persons, events, feature flags, cohorts, insights)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: POSTHOG_API_KEY
+    prompt: "PostHog personal API key"
+    secret: true
+  - name: project_id
+    flag: "--project-id"
+    env: POSTHOG_PROJECT_ID
+    prompt: "PostHog project ID"
+    secret: false
+  - name: host
+    flag: "--host"
+    env: POSTHOG_HOST
+    prompt: "PostHog host (default: https://app.posthog.com)"
+    secret: false
+
+client:
+  base_url: "{host}/api/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # PostHog uses cursor-based pagination via a full "next" URL in the response body.
+  # The response envelope is: { count, next, previous, results: [...] }
+  paginator:
+    type: json_link
+    next_url_path: "next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    data_selector: "results"
+
+resources:
+  # Persons — all identified users tracked in the project.
+  # Supports incremental sync via properties timestamp ordering;
+  # PostHog does not expose an updated_after filter on this endpoint,
+  # so full refresh is recommended.
+  - name: persons
+    endpoint:
+      path: projects/{project_id}/persons/
+
+  # Events — raw event stream. PostHog returns events newest-first.
+  # Use after/before params (ISO 8601) to window the pull.
+  # primary_key is uuid (string), not integer id.
+  - name: events
+    primary_key: uuid
+    endpoint:
+      path: projects/{project_id}/events/
+      params:
+        orderBy: "-timestamp"
+    incremental:
+      cursor_path: timestamp
+      param: after
+      initial_value: "2024-01-01T00:00:00Z"
+
+  # Feature flags — all flags defined in the project, including their
+  # targeting filters, rollout config, and active/inactive status.
+  - name: feature_flags
+    endpoint:
+      path: projects/{project_id}/feature_flags/
+
+  # Cohorts — both static (manually managed person lists) and dynamic
+  # (automatically recalculated from property/behavioural filters).
+  - name: cohorts
+    endpoint:
+      path: projects/{project_id}/cohorts/
+
+  # Insights — saved queries: trends, funnels, retention, paths, etc.
+  - name: insights
+    endpoint:
+      path: projects/{project_id}/insights/
+
+  # Annotations — freeform notes anchored to a point in time on graphs.
+  - name: annotations
+    endpoint:
+      path: projects/{project_id}/annotations/
+
+  # Dashboards — collections of insight tiles; includes pinned/shared state.
+  - name: dashboards
+    endpoint:
+      path: projects/{project_id}/dashboards/
+
+  # Actions — reusable event definitions that combine multiple trigger
+  # conditions (pageview, autocapture click, custom event) into one trackable
+  # event for use in insights and funnels.
+  - name: actions
+    endpoint:
+      path: projects/{project_id}/actions/
+
+write_endpoints:
+  # Feature flags
+  - name: create_feature_flag
+    description: "Create a new feature flag in the project"
+    method: POST
+    path: projects/{project_id}/feature_flags/
+
+  - name: update_feature_flag
+    description: "Update an existing feature flag (full replace)"
+    method: PUT
+    path: projects/{project_id}/feature_flags/{feature_flag_id}
+
+  - name: patch_feature_flag
+    description: "Partially update an existing feature flag"
+    method: PATCH
+    path: projects/{project_id}/feature_flags/{feature_flag_id}
+
+  # Annotations
+  - name: create_annotation
+    description: "Create a new annotation on the project timeline"
+    method: POST
+    path: projects/{project_id}/annotations/
+
+  - name: update_annotation
+    description: "Update an existing annotation"
+    method: PATCH
+    path: projects/{project_id}/annotations/{annotation_id}
+
+  # Cohorts
+  - name: create_cohort
+    description: "Create a new static or dynamic cohort"
+    method: POST
+    path: projects/{project_id}/cohorts/
+
+  - name: update_cohort
+    description: "Update an existing cohort's definition or metadata"
+    method: PATCH
+    path: projects/{project_id}/cohorts/{cohort_id}

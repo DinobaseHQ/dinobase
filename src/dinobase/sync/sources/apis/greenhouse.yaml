@@ -1,0 +1,289 @@
+name: greenhouse
+description: "Greenhouse Harvest API (candidates, applications, jobs, offers, scorecards, departments, offices, users)"
+
+# Greenhouse Harvest API uses HTTP Basic authentication.
+# The API token is used as the username; the password is left blank.
+# Generate a Harvest API key in Greenhouse: Configure > Dev Center > API Credential Management.
+# Each key must be granted permissions for the specific endpoints it will access.
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: GREENHOUSE_API_KEY
+    prompt: "Greenhouse Harvest API key (Configure > Dev Center > API Credential Management)"
+    secret: true
+
+client:
+  base_url: "https://harvest.greenhouse.io/v1/"
+  # HTTP Basic auth: API token as username, empty string as password.
+  # The SDK encodes this as Authorization: Basic base64("<token>:").
+  auth:
+    type: http_basic
+    username: "{api_key}"
+    password: ""
+  # Greenhouse uses RFC-5988 Link header pagination.
+  # Responses include a Link header with rel="next", rel="prev", and rel="last".
+  # The paginator follows the rel="next" URL until it is absent.
+  # per_page can be 1-500 (defaults to 100); 500 is used here for efficiency.
+  # skip_count=true omits the rel="last" link, improving performance on large datasets.
+  paginator:
+    type: header_link
+    links_next_key: "next"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    # Greenhouse list endpoints return bare JSON arrays — no wrapper key needed.
+    data_selector: "$"
+    params:
+      per_page: 500
+      skip_count: true
+
+resources:
+  # ── Candidates ───────────────────────────────────────────────────────────────
+  # GET /v1/candidates
+  # Lists all candidates in the account. Returns a JSON array of candidate objects.
+  # Incremental: updated_after (ISO 8601) filters to candidates updated at or after
+  # the given timestamp. last_activity is the field tracking the most recent activity.
+  # Permissions required: "List Candidates"
+  - name: candidates
+    endpoint:
+      path: "candidates"
+    incremental:
+      cursor_path: updated_at
+      param: updated_after
+      initial_value: "2010-01-01T00:00:00Z"
+
+  # ── Applications ─────────────────────────────────────────────────────────────
+  # GET /v1/applications
+  # Lists all applications across all jobs. Returns a JSON array.
+  # Incremental: last_activity_after (ISO 8601) filters to applications with any
+  # activity (stage change, note, scorecard, etc.) at or after the given timestamp.
+  # Permissions required: "List Applications"
+  - name: applications
+    endpoint:
+      path: "applications"
+    incremental:
+      cursor_path: last_activity_at
+      param: last_activity_after
+      initial_value: "2010-01-01T00:00:00Z"
+
+  # ── Jobs ─────────────────────────────────────────────────────────────────────
+  # GET /v1/jobs
+  # Lists all jobs (open, closed, draft). Returns a JSON array.
+  # Incremental: updated_after (ISO 8601) is supported on this endpoint.
+  # The status param can be "open", "closed", or "draft" to filter by job status.
+  # Permissions required: "List Jobs"
+  - name: jobs
+    endpoint:
+      path: "jobs"
+    incremental:
+      cursor_path: updated_at
+      param: updated_after
+      initial_value: "2010-01-01T00:00:00Z"
+
+  # ── Offers ───────────────────────────────────────────────────────────────────
+  # GET /v1/offers
+  # Lists all offers across all applications. Returns a JSON array.
+  # Incremental: created_after (ISO 8601) is the supported filter.
+  # starts_before / starts_after can filter by offer start date.
+  # Permissions required: "List Offers"
+  - name: offers
+    endpoint:
+      path: "offers"
+    incremental:
+      cursor_path: created_at
+      param: created_after
+      initial_value: "2010-01-01T00:00:00Z"
+
+  # ── Scorecards ───────────────────────────────────────────────────────────────
+  # GET /v1/scorecards
+  # Lists all submitted scorecards. Returns a JSON array.
+  # Incremental: updated_after (ISO 8601) filters to scorecards updated since the cursor.
+  # Permissions required: "List Scorecards"
+  - name: scorecards
+    endpoint:
+      path: "scorecards"
+    incremental:
+      cursor_path: updated_at
+      param: updated_after
+      initial_value: "2010-01-01T00:00:00Z"
+
+  # ── Departments ───────────────────────────────────────────────────────────────
+  # GET /v1/departments
+  # Lists all departments. Returns a JSON array. Small list; no incremental needed.
+  # Permissions required: "List Departments"
+  - name: departments
+    endpoint:
+      path: "departments"
+
+  # ── Offices ──────────────────────────────────────────────────────────────────
+  # GET /v1/offices
+  # Lists all offices. Returns a JSON array. Small list; no incremental needed.
+  # Permissions required: "List Offices"
+  - name: offices
+    endpoint:
+      path: "offices"
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  # GET /v1/users
+  # Lists all users (recruiters, hiring managers, admins) in the account.
+  # Returns a JSON array. No date-filter params; full sync each time.
+  # Permissions required: "List Users"
+  - name: users
+    endpoint:
+      path: "users"
+
+write_endpoints:
+  # ── Candidates ───────────────────────────────────────────────────────────────
+
+  # POST /v1/candidates
+  # Creates a new candidate record. The On-Behalf-Of header (Greenhouse user ID)
+  # is required for audit logging and must be passed by the caller.
+  # Required fields: first_name, last_name
+  # Optional fields: company, title, phone_numbers, addresses, email_addresses,
+  #   website_addresses, social_media_addresses, tags, custom_fields, applications
+  - name: create_candidate
+    description: "Create a new candidate. Requires On-Behalf-Of header (Greenhouse user ID). Required: first_name, last_name."
+    method: POST
+    path: "candidates"
+    body:
+      required:
+        - first_name
+        - last_name
+      optional:
+        - company
+        - title
+        - phone_numbers
+        - addresses
+        - email_addresses
+        - website_addresses
+        - social_media_addresses
+        - tags
+        - custom_fields
+        - applications
+
+  # PATCH /v1/candidates/{id}
+  # Partially updates an existing candidate. All fields are optional.
+  # The On-Behalf-Of header (Greenhouse user ID) is required for audit logging.
+  - name: update_candidate
+    description: "Update an existing candidate by ID. Requires On-Behalf-Of header."
+    method: PATCH
+    path: "candidates/{id}"
+    body:
+      optional:
+        - first_name
+        - last_name
+        - company
+        - title
+        - phone_numbers
+        - addresses
+        - email_addresses
+        - website_addresses
+        - social_media_addresses
+        - tags
+        - custom_fields
+
+  # POST /v1/candidates/{id}/attachments
+  # Adds a resume, cover letter, or other attachment to a candidate.
+  # Body must include: filename, type (resume|cover_letter|admin_only|take_home_test),
+  # and either url or content (base64-encoded) + content_type.
+  - name: add_candidate_attachment
+    description: "Add a resume, cover letter, or other file attachment to a candidate."
+    method: POST
+    path: "candidates/{id}/attachments"
+    body:
+      required:
+        - filename
+        - type
+      optional:
+        - url
+        - content
+        - content_type
+
+  # ── Applications ─────────────────────────────────────────────────────────────
+
+  # POST /v1/candidates/{id}/applications
+  # Creates a new job application for an existing candidate. job_id is required
+  # for a standard application; omit for a prospect (pool) record.
+  # The On-Behalf-Of header (Greenhouse user ID) is required for audit logging.
+  - name: create_application
+    description: "Create a new application for an existing candidate. Requires On-Behalf-Of header. Required: job_id (omit for prospect)."
+    method: POST
+    path: "candidates/{candidate_id}/applications"
+    body:
+      required:
+        - job_id
+      optional:
+        - source_id
+        - initial_stage_id
+        - referrer
+        - attachments
+        - recruiter_id
+        - coordinator_id
+
+  # PATCH /v1/applications/{id}
+  # Partially updates an existing application. All body fields are optional.
+  # The On-Behalf-Of header (Greenhouse user ID) is required for audit logging.
+  - name: update_application
+    description: "Update an existing application by ID. Requires On-Behalf-Of header."
+    method: PATCH
+    path: "applications/{id}"
+    body:
+      optional:
+        - source_id
+        - referrer
+        - recruiter_id
+        - coordinator_id
+        - custom_fields
+        - prospect_pool_id
+        - prospect_pool_stage_id
+
+  # POST /v1/applications/{id}/advance
+  # Advances the application to the next interview stage within the same job.
+  # Requires: from_stage_id (the current stage ID to advance from).
+  # The On-Behalf-Of header (Greenhouse user ID) is required.
+  - name: advance_application
+    description: "Advance an application to the next interview stage. Requires On-Behalf-Of header. Required: from_stage_id."
+    method: POST
+    path: "applications/{id}/advance"
+    body:
+      required:
+        - from_stage_id
+
+  # POST /v1/applications/{id}/reject
+  # Rejects an application. Requires: rejection_reason_id.
+  # The On-Behalf-Of header (Greenhouse user ID) is required.
+  - name: reject_application
+    description: "Reject an application. Requires On-Behalf-Of header. Required: rejection_reason_id."
+    method: POST
+    path: "applications/{id}/reject"
+    body:
+      required:
+        - rejection_reason_id
+      optional:
+        - notes
+        - rejection_email
+
+  # POST /v1/applications/{id}/unreject
+  # Reactivates a previously rejected application, moving it back to the
+  # stage it was in before rejection.
+  # The On-Behalf-Of header (Greenhouse user ID) is required.
+  - name: unreject_application
+    description: "Reactivate a rejected application. Requires On-Behalf-Of header."
+    method: POST
+    path: "applications/{id}/unreject"
+
+  # POST /v1/applications/{id}/hire
+  # Marks an application as hired. Requires: start_date, opening_id.
+  # The On-Behalf-Of header (Greenhouse user ID) is required.
+  - name: hire_application
+    description: "Mark an application as hired. Requires On-Behalf-Of header. Required: start_date, opening_id."
+    method: POST
+    path: "applications/{id}/hire"
+    body:
+      required:
+        - start_date
+        - opening_id
+      optional:
+        - close_reason_id

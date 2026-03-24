@@ -1,0 +1,127 @@
+name: mercury
+description: "Mercury Banking (accounts, transactions, recipients, treasury)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: MERCURY_API_KEY
+    prompt: "Mercury API key"
+    secret: true
+
+client:
+  base_url: "https://api.mercury.com/api/v1/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # Mercury uses cursor-based pagination. Paginated list responses include a
+  # top-level "page" object with "nextPage" (UUID cursor) and "previousPage".
+  # When "nextPage" is null the current page is the last one.
+  # Pass the cursor value as the "offset" query parameter on the next request.
+  paginator:
+    type: cursor
+    cursor_path: "page.nextPage"
+    cursor_param: "offset"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+
+  # ── Accounts ──────────────────────────────────────────────────────────────
+  # GET /api/v1/account — returns all Mercury accounts for the organisation.
+  # Response key: "accounts". Fields: id, accountNumber, routingNumber, name,
+  # status (active|deleted|pending|archived), type, createdAt, availableBalance,
+  # currentBalance, kind, legalBusinessName, dashboardLink, nickname,
+  # canReceiveTransactions.
+  # Small dataset; full replace per sync is appropriate.
+  - name: accounts
+    endpoint:
+      path: "account"
+      data_selector: "accounts"
+    write_disposition: replace
+
+  # ── Transactions (nested under account) ───────────────────────────────────
+  # GET /api/v1/account/{accountId}/transactions
+  # Requires accountId path parameter resolved from the accounts resource.
+  # Response key: "transactions". Pagination via page.nextPage cursor.
+  # Fields: id, amount, status, createdAt, postedAt, note, categoryId,
+  #         customCategory, mercuryCategory, bankDescription, externalMemo,
+  #         estimatedDeliveryDate, failedAt, reasonForFailure.
+  # Incremental sync on createdAt; start from 2020-01-01 on first run.
+  - name: transactions
+    parent: accounts
+    parent_key: id
+    endpoint:
+      path: "account/{accountId}/transactions"
+      path_params:
+        accountId: "{parent.id}"
+      data_selector: "transactions"
+    incremental:
+      cursor_path: "createdAt"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Recipients ────────────────────────────────────────────────────────────
+  # GET /api/v1/recipients — list all payment recipients.
+  # Response key: "recipients". Pagination via page.nextPage cursor.
+  # Fields: id, name, nickname, emails, contactEmail, address,
+  #         electronicRoutingInfo (ACH), domesticWireRoutingInfo (wire),
+  #         checkInfo.
+  - name: recipients
+    endpoint:
+      path: "recipients"
+      data_selector: "recipients"
+
+  # ── Treasury ──────────────────────────────────────────────────────────────
+  # GET /api/v1/treasury — list all treasury accounts (Mercury Treasury product).
+  # Response key: "treasuryAccounts". Pagination via page.nextPage cursor.
+  # Only available to organisations enrolled in Mercury Treasury.
+  - name: treasury
+    endpoint:
+      path: "treasury"
+      data_selector: "treasuryAccounts"
+
+  # ── Treasury Transactions ─────────────────────────────────────────────────
+  # GET /api/v1/treasury/{treasuryId}/transactions
+  # Requires treasuryId path parameter resolved from the treasury resource.
+  # Response key: "transactions". Pagination via page.nextPage cursor.
+  # Incremental sync on createdAt; start from 2020-01-01 on first run.
+  - name: treasury_transactions
+    parent: treasury
+    parent_key: id
+    endpoint:
+      path: "treasury/{treasuryId}/transactions"
+      path_params:
+        treasuryId: "{parent.id}"
+      data_selector: "transactions"
+    incremental:
+      cursor_path: "createdAt"
+      initial_value: "2020-01-01T00:00:00Z"
+
+write_endpoints:
+
+  # ── Recipients ────────────────────────────────────────────────────────────
+
+  - name: create_recipient
+    description: "Add a new payment recipient. name and emails are required. Supply electronicRoutingInfo for ACH, domesticWireRoutingInfo for wire, or checkInfo for paper checks."
+    method: POST
+    path: "recipients"
+
+  - name: update_recipient
+    description: "Update an existing recipient's details by ID. Uses POST per Mercury convention."
+    method: POST
+    path: "recipients/{recipient_id}"
+
+  # ── Send Money ────────────────────────────────────────────────────────────
+
+  - name: send_money
+    description: "Initiate a payment from a Mercury account to a recipient. Requires accountId, amount, recipientId, and paymentMethod."
+    method: POST
+    path: "account/{account_id}/send-money"
+
+  # ── Internal Transfers ────────────────────────────────────────────────────
+
+  - name: create_internal_transfer
+    description: "Transfer funds between two Mercury accounts within the same organisation."
+    method: POST
+    path: "internal-transfers"

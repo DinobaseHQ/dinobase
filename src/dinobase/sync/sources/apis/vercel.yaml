@@ -1,0 +1,253 @@
+name: vercel
+description: "Vercel (projects, deployments, domains, teams, members, environment_variables, edge_configs, checks)"
+
+credentials:
+  - name: token
+    flag: "--token"
+    env: VERCEL_TOKEN
+    prompt: "Vercel personal access token or OAuth2 token"
+    secret: true
+
+client:
+  base_url: "https://api.vercel.com/"
+  auth:
+    type: bearer
+    token: "{token}"
+  # Vercel uses timestamp-based cursor pagination on most list endpoints.
+  # Each paginated response includes a `pagination` object with:
+  #   - pagination.next: Unix timestamp (ms) to pass as `until` for the next page
+  #   - pagination.prev: Unix timestamp (ms) to pass as `since` for the previous page
+  # Pagination stops when pagination.next is null.
+  # The `until` param fetches items created BEFORE the given timestamp (walk backwards).
+  # The `since` param fetches items created AFTER the given timestamp (walk forwards).
+  paginator:
+    type: cursor
+    cursor_path: "pagination.next"
+    cursor_param: "until"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # ── Projects ──────────────────────────────────────────────────────────────────
+  # GET /v10/projects
+  # Lists all projects the authenticated user or team has access to.
+  # Paginated via the `from` query parameter (continuation token or timestamp).
+  # Response: bare JSON array (no wrapping object or data_selector needed).
+  # Incremental: filter to projects updated after a given timestamp using `from`.
+  - name: projects
+    endpoint:
+      path: "v10/projects"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: updatedAt
+      param: from
+      initial_value: "0"
+
+  # ── Deployments ───────────────────────────────────────────────────────────────
+  # GET /v6/deployments
+  # Lists deployments for the authenticated user or team.
+  # Response: { deployments: [...], pagination: { count, next, prev } }
+  # Incremental: `since` (ms timestamp) to fetch deployments created after that time.
+  # `until` is used by the paginator to walk backwards through pages.
+  - name: deployments
+    primary_key: uid
+    endpoint:
+      path: "v6/deployments"
+      data_selector: "deployments"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: created
+      param: since
+      initial_value: "0"
+
+  # ── Domains ───────────────────────────────────────────────────────────────────
+  # GET /v5/domains
+  # Retrieves a list of domains registered for the authenticated user or team.
+  # Response: { domains: [...], pagination: { count, next, prev } }
+  # Incremental: `since` (ms timestamp) to fetch domains created after that time.
+  - name: domains
+    endpoint:
+      path: "v5/domains"
+      data_selector: "domains"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: createdAt
+      param: since
+      initial_value: "0"
+
+  # ── Teams ─────────────────────────────────────────────────────────────────────
+  # GET /v2/teams
+  # Returns a paginated list of all teams the authenticated user is a member of.
+  # Response: { teams: [...], pagination: { count, next, prev } }
+  # Incremental: `since` (ms timestamp) to fetch teams created after that time.
+  - name: teams
+    endpoint:
+      path: "v2/teams"
+      data_selector: "teams"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: createdAt
+      param: since
+      initial_value: "0"
+
+  # ── Members ───────────────────────────────────────────────────────────────────
+  # GET /v3/teams/{teamId}/members
+  # Returns a paginated list of members for the given team.
+  # Response: { members: [...], pagination: { count, hasNext, next, prev } }
+  # Incremental: `since` (ms timestamp) to fetch members added after that time.
+  # Requires {teamId} path variable; expects the team ID to be provided.
+  - name: members
+    primary_key: uid
+    endpoint:
+      path: "v3/teams/{teamId}/members"
+      data_selector: "members"
+      params:
+        limit: 100
+    incremental:
+      cursor_path: createdAt
+      param: since
+      initial_value: "0"
+
+  # ── Environment Variables ─────────────────────────────────────────────────────
+  # GET /v10/projects/{idOrName}/env
+  # Retrieves environment variables for a project.
+  # Response when paginated: { envs: [...], pagination: { count, next, prev } }
+  # No incremental filter params available; full sync per project.
+  # Requires {idOrName} path variable (project ID or name).
+  - name: environment_variables
+    endpoint:
+      path: "v10/projects/{idOrName}/env"
+      data_selector: "envs"
+      params:
+        limit: 100
+
+  # ── Edge Configs ──────────────────────────────────────────────────────────────
+  # GET /v1/edge-config
+  # Returns all Edge Configs for the account.
+  # Response: bare JSON array (no pagination; small fixed set per account).
+  # No incremental filter params available.
+  - name: edge_configs
+    endpoint:
+      path: "v1/edge-config"
+
+  # ── Edge Config Items ─────────────────────────────────────────────────────────
+  # GET /v1/edge-config/{edgeConfigId}/items
+  # Returns all key-value items stored in a specific Edge Config.
+  # Response: bare JSON array (no pagination).
+  # Requires {edgeConfigId} path variable (must match pattern ^ecfg_).
+  # Primary key is the `key` field (string), not `id`.
+  - name: edge_config_items
+    primary_key: key
+    endpoint:
+      path: "v1/edge-config/{edgeConfigId}/items"
+
+  # ── Checks ────────────────────────────────────────────────────────────────────
+  # GET /v1/deployments/{deploymentId}/checks
+  # Lists all quality checks registered for a given deployment.
+  # Response: { checks: [...] } — no pagination (checks are bounded per deployment).
+  # Requires {deploymentId} path variable.
+  # Primary key is the check `id` string field.
+  - name: checks
+    endpoint:
+      path: "v1/deployments/{deploymentId}/checks"
+      data_selector: "checks"
+
+write_endpoints:
+  # ── Create Project ─────────────────────────────────────────────────────────────
+  # POST /v11/projects
+  # Creates a new project. Only `name` is required; all other fields are optional.
+  # Key optional body fields: framework, gitRepository, buildCommand, devCommand,
+  # installCommand, outputDirectory, rootDirectory, environmentVariables,
+  # serverlessFunctionRegion, resourceConfig, publicSource.
+  - name: create_project
+    description: "Create a new Vercel project. Requires name; optional fields include framework, gitRepository, buildCommand, environmentVariables."
+    method: POST
+    path: "v11/projects"
+
+  # ── Update Project ─────────────────────────────────────────────────────────────
+  # PATCH /v9/projects/{idOrName}
+  # Updates settings on an existing project. Pass any subset of project fields.
+  # Path params: idOrName (project ID or name)
+  - name: update_project
+    description: "Update an existing project's settings such as framework, build commands, or environment protection."
+    method: PATCH
+    path: "v9/projects/{idOrName}"
+
+  # ── Delete Project ─────────────────────────────────────────────────────────────
+  # DELETE /v9/projects/{idOrName}
+  # Permanently deletes a project by ID or name.
+  - name: delete_project
+    description: "Permanently delete a project by its ID or name."
+    method: DELETE
+    path: "v9/projects/{idOrName}"
+
+  # ── Create Deployment ─────────────────────────────────────────────────────────
+  # POST /v13/deployments
+  # Creates a new deployment. Only `name` (project name) is strictly required.
+  # Key optional body fields: files (array of file objects for non-git deploys),
+  # gitSource (for git-backed deploys), target (production|staging|preview),
+  # projectSettings, meta (key-value metadata), deploymentId (for redeployment).
+  - name: create_deployment
+    description: "Create a new deployment. Requires name (project name); use gitSource for git-backed deploys or files for direct file uploads."
+    method: POST
+    path: "v13/deployments"
+
+  # ── Cancel Deployment ─────────────────────────────────────────────────────────
+  # PATCH /v12/deployments/{id}/cancel
+  # Cancels an in-progress deployment (BUILDING or QUEUED state).
+  - name: cancel_deployment
+    description: "Cancel an in-progress deployment that is in BUILDING or QUEUED state."
+    method: PATCH
+    path: "v12/deployments/{id}/cancel"
+
+  # ── Create Environment Variable ────────────────────────────────────────────────
+  # POST /v10/projects/{idOrName}/env
+  # Creates one or more environment variables for a project.
+  # Body can be a single object or an array of objects.
+  # Required body fields: key, value, type (plain|encrypted|sensitive|secret|system),
+  #                       target (array: production|preview|development)
+  # Optional: gitBranch (for preview-scoped branch vars), comment, upsert query param.
+  - name: create_environment_variable
+    description: "Create one or more environment variables for a project. Pass key, value, type, and target (array). Add ?upsert=true to update if already exists."
+    method: POST
+    path: "v10/projects/{idOrName}/env"
+
+  # ── Update Environment Variable ────────────────────────────────────────────────
+  # PATCH /v9/projects/{idOrName}/env/{id}
+  # Updates a specific environment variable by its ID.
+  # Body fields (all optional): key, value, type, target, gitBranch, comment.
+  - name: update_environment_variable
+    description: "Update a specific environment variable by its ID on a project."
+    method: PATCH
+    path: "v9/projects/{idOrName}/env/{id}"
+
+  # ── Delete Environment Variable ────────────────────────────────────────────────
+  # DELETE /v9/projects/{idOrName}/env/{id}
+  # Deletes a specific environment variable by its ID.
+  - name: delete_environment_variable
+    description: "Delete a specific environment variable by its ID from a project."
+    method: DELETE
+    path: "v9/projects/{idOrName}/env/{id}"
+
+  # ── Add Domain to Project ──────────────────────────────────────────────────────
+  # POST /v10/projects/{idOrName}/domains
+  # Adds an existing domain (must already be registered on Vercel) to a project.
+  # Required body field: name (the domain string, e.g. "example.com").
+  - name: add_domain_to_project
+    description: "Add an existing domain to a project. The domain must already be registered on Vercel."
+    method: POST
+    path: "v10/projects/{idOrName}/domains"
+
+  # ── Remove Domain from Project ─────────────────────────────────────────────────
+  # DELETE /v9/projects/{idOrName}/domains/{domain}
+  # Removes the association of a domain from a project (does not delete the domain).
+  - name: remove_domain_from_project
+    description: "Remove the association of a domain from a project without deleting the domain registration."
+    method: DELETE
+    path: "v9/projects/{idOrName}/domains/{domain}"

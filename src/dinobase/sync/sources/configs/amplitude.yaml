@@ -1,0 +1,367 @@
+name: amplitude
+description: "Amplitude analytics (events, users, cohorts, taxonomy)"
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: AMPLITUDE_API_KEY
+    prompt: "Amplitude API key"
+    secret: false
+  - name: secret_key
+    flag: "--secret-key"
+    env: AMPLITUDE_SECRET_KEY
+    prompt: "Amplitude secret key"
+    secret: true
+
+# Auth methods used by this source.
+# Endpoints reference these by key.
+auth_methods:
+  basic:
+    type: http_basic
+    username: "{api_key}"
+    password: "{secret_key}"
+  ingestion:
+    type: api_key_in_body
+    field: api_key
+    value: "{api_key}"
+  profile:
+    type: api_key_header
+    header: "Api-Key"
+    value: "{secret_key}"
+
+# Default pagination for this source (can be overridden per endpoint)
+default_pagination:
+  type: none  # Most Amplitude endpoints don't paginate
+
+endpoints:
+
+  # ═══════════════════════════════════════════════════════════════════
+  # READ ENDPOINTS
+  # ═══════════════════════════════════════════════════════════════════
+
+  # ── Events & Analytics ────────────────────────────────────────────
+
+  - name: events_list
+    description: "All active event types with weekly totals and uniques"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/events/list
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+    primary_key: null  # no unique key
+
+  - name: export
+    description: "Export raw event data (zipped JSONL, max 4GB, 365-day range)"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/export
+    auth: basic
+    params:
+      start: "{start_date}"  # YYYYMMDDThh
+      end: "{end_date}"
+    write_disposition: append
+    incremental:
+      cursor_path: server_upload_time
+      initial_value: "2024-01-01T00"
+
+  - name: realtime_users
+    description: "Real-time active users (5-min granularity, last 2 days)"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/realtime
+    auth: basic
+    write_disposition: replace
+
+  - name: revenue_ltv
+    description: "Revenue LTV metrics (ARPU, ARPPU, total revenue, paying users)"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/revenue/ltv
+    auth: basic
+    params:
+      start: "{start_date}"
+      end: "{end_date}"
+    write_disposition: replace
+
+  - name: sessions_average
+    description: "Average session length per day"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/sessions/average
+    auth: basic
+    write_disposition: replace
+
+  # ── User Data ─────────────────────────────────────────────────────
+
+  - name: user_search
+    description: "Search users by Amplitude ID, device ID, or user ID"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/usersearch
+    auth: basic
+    params:
+      user: "{query}"
+
+  - name: user_activity
+    description: "User summary and recent events"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/useractivity
+    auth: basic
+    params:
+      user: "{user_id}"
+
+  - name: user_profile
+    description: "User profile with properties, cohort IDs, recommendations"
+    method: GET
+    base_url: https://profile-api.amplitude.com
+    path: /v1/userprofile
+    auth: profile
+    params:
+      user_id: "{user_id}"
+
+  # ── Cohorts ───────────────────────────────────────────────────────
+
+  - name: cohorts
+    description: "List all behavioral cohorts"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/3/cohorts
+    auth: basic
+    data_selector: cohorts
+    write_disposition: replace
+    primary_key: id
+
+  # ── Taxonomy ──────────────────────────────────────────────────────
+
+  - name: taxonomy_events
+    description: "List all event types in the taxonomy"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/event
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+    primary_key: event_type
+
+  - name: taxonomy_event_properties
+    description: "List event properties (optionally filtered by event type)"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/event-property
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+
+  - name: taxonomy_user_properties
+    description: "List all user properties"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/user-property
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+
+  - name: taxonomy_categories
+    description: "List all event categories"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/category
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+
+  # ── Annotations ───────────────────────────────────────────────────
+
+  - name: annotations
+    description: "List all chart annotations"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/3/annotations
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+    primary_key: id
+
+  - name: annotation_categories
+    description: "List annotation categories"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/3/annotation-categories
+    auth: basic
+    data_selector: data
+    write_disposition: replace
+    primary_key: id
+
+  # ── Lookup Tables ─────────────────────────────────────────────────
+
+  - name: lookup_tables
+    description: "List all lookup tables"
+    method: GET
+    base_url: https://amplitude.com
+    path: /api/2/lookup_table
+    auth: basic
+    write_disposition: replace
+
+  # ═══════════════════════════════════════════════════════════════════
+  # WRITE ENDPOINTS
+  # ═══════════════════════════════════════════════════════════════════
+
+  # ── Event Ingestion ───────────────────────────────────────────────
+
+  - name: track_events
+    description: "Send events (up to 2000/request, 1MB max)"
+    method: POST
+    base_url: https://api2.amplitude.com
+    path: /2/httpapi
+    auth: ingestion
+    write: true
+    bulk: true
+    max_batch_size: 2000
+
+  - name: batch_events
+    description: "Batch upload events (up to 2000/request, 20MB max, with retries)"
+    method: POST
+    base_url: https://api2.amplitude.com
+    path: /batch
+    auth: ingestion
+    write: true
+    bulk: true
+    max_batch_size: 2000
+
+  # ── User Identity ─────────────────────────────────────────────────
+
+  - name: identify
+    description: "Set user IDs, update user properties ($set, $setOnce, $add, $append, $unset)"
+    method: POST
+    base_url: https://api2.amplitude.com
+    path: /identify
+    auth: ingestion
+    write: true
+
+  - name: group_identify
+    description: "Set/update group properties (max 1024/request)"
+    method: POST
+    base_url: https://api2.amplitude.com
+    path: /groupidentify
+    auth: ingestion
+    write: true
+    max_batch_size: 1024
+
+  # ── Cohort Management ─────────────────────────────────────────────
+
+  - name: cohort_upload
+    description: "Create or upload a cohort by user IDs"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/3/cohorts/upload
+    auth: basic
+    write: true
+
+  - name: cohort_membership
+    description: "Add or remove users from a cohort"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/3/cohorts/membership
+    auth: basic
+    write: true
+
+  # ── Taxonomy Management ───────────────────────────────────────────
+
+  - name: create_event_type
+    description: "Create a new event type in the taxonomy"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/event
+    auth: basic
+    write: true
+
+  - name: update_event_type
+    description: "Update an event type"
+    method: PUT
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/event/{event_type}
+    auth: basic
+    write: true
+
+  - name: delete_event_type
+    description: "Delete (archive) an event type"
+    method: DELETE
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/event/{event_type}
+    auth: basic
+    write: true
+
+  - name: create_user_property
+    description: "Create a new user property"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/user-property
+    auth: basic
+    write: true
+
+  - name: update_user_property
+    description: "Update a user property"
+    method: PUT
+    base_url: https://amplitude.com
+    path: /api/2/taxonomy/user-property/{user_property}
+    auth: basic
+    write: true
+
+  # ── Annotation Management ─────────────────────────────────────────
+
+  - name: create_annotation
+    description: "Create a chart annotation"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/3/annotations
+    auth: basic
+    write: true
+
+  - name: update_annotation
+    description: "Update a chart annotation"
+    method: PUT
+    base_url: https://amplitude.com
+    path: /api/3/annotations/{annotation_id}
+    auth: basic
+    write: true
+
+  - name: delete_annotation
+    description: "Delete a chart annotation"
+    method: DELETE
+    base_url: https://amplitude.com
+    path: /api/3/annotations/{annotation_id}
+    auth: basic
+    write: true
+
+  # ── User Privacy (GDPR) ──────────────────────────────────────────
+
+  - name: delete_users
+    description: "Submit user deletion request (up to 100 users, GDPR compliance)"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/2/deletions/users
+    auth: basic
+    write: true
+    max_batch_size: 100
+
+  # ── User Mapping ──────────────────────────────────────────────────
+
+  - name: map_users
+    description: "Map user IDs to global user IDs"
+    method: POST
+    base_url: https://api.amplitude.com
+    path: /usermap
+    auth: ingestion
+    write: true
+
+  # ── Releases ──────────────────────────────────────────────────────
+
+  - name: create_release
+    description: "Create a release marker"
+    method: POST
+    base_url: https://amplitude.com
+    path: /api/2/release
+    auth: basic
+    write: true
