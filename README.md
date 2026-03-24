@@ -1,0 +1,2 @@
+# dinobase
+The agentic database
