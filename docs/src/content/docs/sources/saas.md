@@ -1,9 +1,9 @@
 ---
 title: SaaS API Sources
-description: Connect Stripe, HubSpot, Salesforce, Shopify, and 20+ other SaaS tools to Dinobase.
+description: Connect Stripe, HubSpot, Salesforce, Linear, and 60+ other SaaS tools to Dinobase.
 ---
 
-SaaS sources connect to cloud services via API keys or OAuth tokens. Data is synced using [dlt](https://dlthub.com/) verified sources and REST API connectors.
+SaaS sources connect to cloud services via API keys or OAuth tokens. Data is synced using [dlt](https://dlthub.com/) verified sources, REST API connectors, and GraphQL connectors.
 
 ## CRM & Sales
 
@@ -20,6 +20,18 @@ dinobase add hubspot --api-key pat-na1-...
 | `--api-key` | `HUBSPOT_API_KEY` | HubSpot private app token |
 
 **Metadata:** Descriptions, enum options, and custom properties via the HubSpot Properties API.
+
+### HubSpot Marketing
+
+Marketing contacts, companies, deals (via REST API connector).
+
+```bash
+dinobase add hubspot_marketing --api-key pat-na1-...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `HUBSPOT_MARKETING_API_KEY` |
 
 ### Salesforce
 
@@ -221,15 +233,19 @@ dinobase add sentry --token ...
 
 ### Linear
 
-Issues, projects, teams.
+Issues, projects, teams, users, labels, cycles, comments. Uses GraphQL with Relay pagination.
 
 ```bash
-dinobase add linear --token ...
+dinobase add linear --api-key lin_api_...
 ```
 
 | Option | Env var |
 |--------|---------|
-| `--token` | `LINEAR_API_KEY` |
+| `--api-key` | `LINEAR_API_KEY` |
+
+---
+
+## Infrastructure & Monitoring
 
 ### PagerDuty
 
@@ -243,7 +259,7 @@ dinobase add pagerduty --token ...
 |--------|---------|
 | `--token` | `PAGERDUTY_TOKEN` |
 
-### Opsgenie
+### OpsGenie
 
 Alerts, incidents, users.
 
@@ -267,6 +283,67 @@ dinobase add statuspage --api-key ...
 |--------|---------|
 | `--api-key` | `STATUSPAGE_API_KEY` |
 
+### Datadog
+
+Monitors, dashboards, logs.
+
+```bash
+dinobase add datadog --api-key ... --app-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `DATADOG_API_KEY` |
+| `--app-key` | `DATADOG_APP_KEY` |
+
+### New Relic
+
+Applications, deployments, alerts.
+
+```bash
+dinobase add newrelic --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `NEWRELIC_API_KEY` |
+
+### Cloudflare
+
+Zones, DNS records, analytics.
+
+```bash
+dinobase add cloudflare --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `CLOUDFLARE_API_KEY` |
+
+### Vercel
+
+Projects, deployments, domains.
+
+```bash
+dinobase add vercel --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `VERCEL_TOKEN` |
+
+### Netlify
+
+Sites, deploys, forms.
+
+```bash
+dinobase add netlify --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `NETLIFY_TOKEN` |
+
 ---
 
 ## Communication
@@ -282,30 +359,6 @@ dinobase add slack --token xoxb-...
 | Option | Env var |
 |--------|---------|
 | `--token` | `SLACK_TOKEN` |
-
-### Zendesk
-
-Tickets, users, organizations.
-
-```bash
-dinobase add zendesk --token ...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--token` | `ZENDESK_TOKEN` |
-
-### Intercom
-
-Contacts, conversations, companies.
-
-```bash
-dinobase add intercom --token ...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--token` | `INTERCOM_TOKEN` |
 
 ### Discord
 
@@ -344,6 +397,18 @@ dinobase add sendgrid --token ...
 |--------|---------|
 | `--token` | `SENDGRID_API_KEY` |
 
+### Mailchimp
+
+Lists, campaigns, members.
+
+```bash
+dinobase add mailchimp --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `MAILCHIMP_API_KEY` |
+
 ### Front
 
 Conversations, contacts, inboxes.
@@ -356,17 +421,94 @@ dinobase add front --token ...
 |--------|---------|
 | `--token` | `FRONT_TOKEN` |
 
-### Drift
+---
 
-Contacts, conversations.
+## Support & Success
+
+### Zendesk
+
+Tickets, users, organizations.
 
 ```bash
-dinobase add drift --token ...
+dinobase add zendesk --token ...
 ```
 
 | Option | Env var |
 |--------|---------|
-| `--token` | `DRIFT_TOKEN` |
+| `--token` | `ZENDESK_TOKEN` |
+
+### Intercom
+
+Contacts, conversations, companies.
+
+```bash
+dinobase add intercom --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `INTERCOM_TOKEN` |
+
+### Freshdesk
+
+Tickets, contacts, companies.
+
+```bash
+dinobase add freshdesk --api-key ... --domain mycompany
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `FRESHDESK_API_KEY` |
+| `--domain` | `FRESHDESK_DOMAIN` |
+
+### HelpScout
+
+Conversations, customers, mailboxes.
+
+```bash
+dinobase add helpscout --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `HELPSCOUT_API_KEY` |
+
+### Customer.io
+
+Customers, segments, campaigns.
+
+```bash
+dinobase add customerio --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `CUSTOMERIO_API_KEY` |
+
+### Vitally
+
+Accounts, users, health scores.
+
+```bash
+dinobase add vitally --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `VITALLY_API_KEY` |
+
+### Gainsight
+
+Companies, relationships, CTAs.
+
+```bash
+dinobase add gainsight --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `GAINSIGHT_API_KEY` |
 
 ---
 
@@ -385,47 +527,48 @@ dinobase add shopify --api-key shppa_... --shop-url myshop.myshopify.com
 | `--api-key` | `SHOPIFY_API_KEY` | Private app password |
 | `--shop-url` | `SHOPIFY_SHOP_URL` | Shop URL |
 
+### WooCommerce
+
+Orders, products, customers.
+
+```bash
+dinobase add woocommerce --consumer-key ... --consumer-secret ... --url https://mystore.com
+```
+
+| Option | Env var |
+|--------|---------|
+| `--consumer-key` | `WOOCOMMERCE_CONSUMER_KEY` |
+| `--consumer-secret` | `WOOCOMMERCE_CONSUMER_SECRET` |
+| `--url` | `WOOCOMMERCE_URL` |
+
+### BigCommerce
+
+Orders, products, customers.
+
+```bash
+dinobase add bigcommerce --access-token ... --store-hash ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `BIGCOMMERCE_ACCESS_TOKEN` |
+| `--store-hash` | `BIGCOMMERCE_STORE_HASH` |
+
+### Square
+
+Payments, orders, customers.
+
+```bash
+dinobase add square --access-token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `SQUARE_ACCESS_TOKEN` |
+
 ---
 
-## Productivity
-
-### Notion
-
-Notion databases.
-
-```bash
-dinobase add notion --api-key secret_...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--api-key` | `NOTION_API_KEY` |
-
-### Airtable
-
-Bases and tables.
-
-```bash
-dinobase add airtable --token pat...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--token` | `AIRTABLE_TOKEN` |
-
-Requires: `pip install pyairtable`
-
-### Google Sheets
-
-```bash
-dinobase add google_sheets --credentials-file ./service-account.json
-```
-
-| Option | Env var |
-|--------|---------|
-| `--credentials-file` | `GOOGLE_APPLICATION_CREDENTIALS` |
-
-Requires: `pip install google-api-python-client`
+## Project Management
 
 ### Asana
 
@@ -441,9 +584,58 @@ dinobase add asana --token ...
 
 Requires: `pip install asana`
 
+### ClickUp
+
+Spaces, lists, tasks.
+
+```bash
+dinobase add clickup --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `CLICKUP_API_KEY` |
+
+### Monday
+
+Boards, items, updates.
+
+```bash
+dinobase add monday --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `MONDAY_API_KEY` |
+
+### Trello
+
+Boards, lists, cards.
+
+```bash
+dinobase add trello --api-key ... --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `TRELLO_API_KEY` |
+| `--token` | `TRELLO_TOKEN` |
+
+### Todoist
+
+Projects, tasks, comments.
+
+```bash
+dinobase add todoist --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `TODOIST_API_KEY` |
+
 ---
 
-## Marketing
+## Marketing & Analytics
 
 ### Facebook Ads
 
@@ -489,38 +681,54 @@ dinobase add google_ads --credentials-file ./sa.json
 
 Requires: `pip install google-ads`
 
-### Mailchimp
+### Mixpanel
 
-Lists, campaigns, members.
+Events, funnels, retention.
 
 ```bash
-dinobase add mailchimp --api-key ...
+dinobase add mixpanel --api-secret ...
 ```
 
 | Option | Env var |
 |--------|---------|
-| `--api-key` | `MAILCHIMP_API_KEY` |
+| `--api-secret` | `MIXPANEL_API_SECRET` |
 
----
+### PostHog
 
-## Support
-
-### Freshdesk
-
-Tickets, contacts, companies.
+Events, persons, feature flags, cohorts, insights.
 
 ```bash
-dinobase add freshdesk --api-key ... --domain mycompany
+dinobase add posthog --api-key ... --project-id ...
 ```
 
 | Option | Env var |
 |--------|---------|
-| `--api-key` | `FRESHDESK_API_KEY` |
-| `--domain` | `FRESHDESK_DOMAIN` |
+| `--api-key` | `POSTHOG_API_KEY` |
+| `--project-id` | `POSTHOG_PROJECT_ID` |
 
----
+### Segment
 
-## Analytics
+Sources, events, users.
+
+```bash
+dinobase add segment --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `SEGMENT_TOKEN` |
+
+### Plausible
+
+Sites, stats, pages.
+
+```bash
+dinobase add plausible --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `PLAUSIBLE_API_KEY` |
 
 ### Matomo
 
@@ -549,7 +757,282 @@ dinobase add bing_webmaster --api-key ...
 
 ---
 
-## Data
+## HR & Recruiting
+
+### Personio
+
+Employees, absences, attendances.
+
+```bash
+dinobase add personio --client-id ... --client-secret ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--client-id` | `PERSONIO_CLIENT_ID` |
+| `--client-secret` | `PERSONIO_CLIENT_SECRET` |
+
+### BambooHR
+
+Employees, time off, reports.
+
+```bash
+dinobase add bamboohr --api-key ... --subdomain mycompany
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `BAMBOOHR_API_KEY` |
+| `--subdomain` | `BAMBOOHR_SUBDOMAIN` |
+
+### Greenhouse
+
+Jobs, candidates, applications.
+
+```bash
+dinobase add greenhouse --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `GREENHOUSE_API_KEY` |
+
+### Lever
+
+Postings, opportunities, candidates.
+
+```bash
+dinobase add lever --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `LEVER_API_KEY` |
+
+### Workable
+
+Jobs, candidates, activities.
+
+```bash
+dinobase add workable --token ... --subdomain mycompany
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `WORKABLE_TOKEN` |
+| `--subdomain` | `WORKABLE_SUBDOMAIN` |
+
+### Gusto
+
+Employees, payrolls, companies.
+
+```bash
+dinobase add gusto --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `GUSTO_TOKEN` |
+
+### Deel
+
+Contracts, invoices, people.
+
+```bash
+dinobase add deel --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `DEEL_API_KEY` |
+
+---
+
+## Finance
+
+### QuickBooks
+
+Invoices, customers, accounts.
+
+```bash
+dinobase add quickbooks --access-token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `QUICKBOOKS_ACCESS_TOKEN` |
+
+### Xero
+
+Invoices, contacts, accounts.
+
+```bash
+dinobase add xero --access-token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `XERO_ACCESS_TOKEN` |
+
+### Brex
+
+Transactions, accounts, cards.
+
+```bash
+dinobase add brex --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `BREX_API_KEY` |
+
+### Mercury
+
+Transactions, accounts.
+
+```bash
+dinobase add mercury --api-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `MERCURY_API_KEY` |
+
+---
+
+## Productivity
+
+### Notion
+
+Notion databases.
+
+```bash
+dinobase add notion --api-key secret_...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `NOTION_API_KEY` |
+
+### Airtable
+
+Bases and tables.
+
+```bash
+dinobase add airtable --token pat...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `AIRTABLE_TOKEN` |
+
+Requires: `pip install pyairtable`
+
+### Google Sheets
+
+```bash
+dinobase add google_sheets --credentials-file ./service-account.json
+```
+
+| Option | Env var |
+|--------|---------|
+| `--credentials-file` | `GOOGLE_APPLICATION_CREDENTIALS` |
+
+Requires: `pip install google-api-python-client`
+
+---
+
+## Content & CMS
+
+### Strapi
+
+Strapi CMS content.
+
+```bash
+dinobase add strapi --api-key ... --domain cms.example.com
+```
+
+| Option | Env var |
+|--------|---------|
+| `--api-key` | `STRAPI_API_KEY` |
+| `--domain` | `STRAPI_DOMAIN` |
+
+### Contentful
+
+Entries, assets, content types.
+
+```bash
+dinobase add contentful --access-token ... --space-id ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `CONTENTFUL_ACCESS_TOKEN` |
+| `--space-id` | `CONTENTFUL_SPACE_ID` |
+
+### Sanity
+
+Documents, assets.
+
+```bash
+dinobase add sanity --token ... --project-id ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `SANITY_TOKEN` |
+| `--project-id` | `SANITY_PROJECT_ID` |
+
+### WordPress
+
+Posts, pages, users.
+
+```bash
+dinobase add wordpress --url https://mysite.com --username ... --app-password ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--url` | `WORDPRESS_URL` |
+| `--username` | `WORDPRESS_USERNAME` |
+| `--app-password` | `WORDPRESS_APP_PASSWORD` |
+
+---
+
+## Design
+
+### Figma
+
+Files, projects, comments.
+
+```bash
+dinobase add figma --token ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--token` | `FIGMA_TOKEN` |
+
+---
+
+## Video
+
+### Mux
+
+Video assets, views.
+
+```bash
+dinobase add mux --access-token ... --secret-key ...
+```
+
+| Option | Env var |
+|--------|---------|
+| `--access-token` | `MUX_ACCESS_TOKEN` |
+| `--secret-key` | `MUX_SECRET_KEY` |
+
+---
+
+## Data & Streaming
 
 ### MongoDB
 
@@ -586,67 +1069,3 @@ dinobase add kinesis --stream my-stream --access-key ... --secret-key ...
 | `--stream` | `KINESIS_STREAM_NAME` |
 | `--access-key` | `AWS_ACCESS_KEY_ID` |
 | `--secret-key` | `AWS_SECRET_ACCESS_KEY` |
-
----
-
-## HR
-
-### Personio
-
-Employees, absences, attendances.
-
-```bash
-dinobase add personio --client-id ... --client-secret ...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--client-id` | `PERSONIO_CLIENT_ID` |
-| `--client-secret` | `PERSONIO_CLIENT_SECRET` |
-
-### Workable
-
-Jobs, candidates, activities.
-
-```bash
-dinobase add workable --token ... --subdomain mycompany
-```
-
-| Option | Env var |
-|--------|---------|
-| `--token` | `WORKABLE_TOKEN` |
-| `--subdomain` | `WORKABLE_SUBDOMAIN` |
-
----
-
-## Content
-
-### Strapi
-
-Strapi CMS content.
-
-```bash
-dinobase add strapi --api-key ... --domain cms.example.com
-```
-
-| Option | Env var |
-|--------|---------|
-| `--api-key` | `STRAPI_API_KEY` |
-| `--domain` | `STRAPI_DOMAIN` |
-
----
-
-## Video
-
-### Mux
-
-Video assets, views.
-
-```bash
-dinobase add mux --access-token ... --secret-key ...
-```
-
-| Option | Env var |
-|--------|---------|
-| `--access-token` | `MUX_ACCESS_TOKEN` |
-| `--secret-key` | `MUX_SECRET_KEY` |

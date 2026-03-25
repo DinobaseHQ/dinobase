@@ -7,7 +7,7 @@ export default defineConfig({
 		starlight({
 			title: 'Dinobase',
 			description: 'The agent-native database. Connect your business data. Let AI agents query across all of it.',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/dinobase/dinobase' }],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/DinobaseHQ/dinobase' }],
 			customCss: ['./src/styles/custom.css'],
 			head: [
 				{
@@ -31,6 +31,7 @@ export default defineConfig({
 						{ label: 'MCP Integration', slug: 'guides/mcp' },
 						{ label: 'Syncing & Scheduling', slug: 'guides/syncing' },
 						{ label: 'Schema Annotations', slug: 'guides/annotations' },
+						{ label: 'Mutations', slug: 'guides/mutations' },
 					],
 				},
 				{

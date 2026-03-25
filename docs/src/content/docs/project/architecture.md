@@ -42,8 +42,9 @@ The `.duckdb` file stores metadata and view definitions. Synced data lives in pa
 
 [dlt](https://dlthub.com/) (data load tool) handles data ingestion:
 
-- 100+ verified sources for SaaS APIs
-- REST API connector for additional services
+- Verified sources for major SaaS APIs
+- REST API connector via YAML configs (50+ sources)
+- GraphQL connector with Relay-style pagination
 - `sql_database` connector for any SQLAlchemy-compatible database
 - `filesystem` connector for cloud storage
 - Handles pagination, rate limiting, incremental loading
@@ -55,7 +56,7 @@ The `.duckdb` file stores metadata and view definitions. Synced data lives in pa
 
 - FastMCP server with stdio transport
 - Dynamic instructions computed from database state
-- Three tools: `query`, `list_sources`, `describe`
+- Six tools: `query`, `list_sources`, `describe`, `confirm`, `confirm_batch`, `cancel`
 
 ### Click (CLI)
 
@@ -72,15 +73,19 @@ src/dinobase/
   db.py                    # DinobaseDB (DuckDB wrapper)
   query/
     engine.py              # QueryEngine (execute, list, describe)
-    schema.py              # Column metadata handling
+    mutations.py           # MutationEngine (UPDATE/INSERT with preview/confirm)
   sync/
     engine.py              # SyncEngine (dlt pipeline runner)
     scheduler.py           # SyncScheduler (concurrent, scheduled)
-    registry.py            # Source registry (30+ entries)
+    registry.py            # Source registry (99 entries + parquet/csv)
     metadata.py            # API metadata extraction (Stripe, HubSpot, Postgres)
+    yaml_source.py         # YAML-to-dlt translation for REST/GraphQL configs
+    write_client.py        # Write-back to source APIs
+    source_config.py       # YAML config loader for write endpoints
     sources/
-      __init__.py          # Source connector routing
       parquet.py           # File source handler (views)
+      graphql.py           # GraphQL source with Relay pagination
+      apis/                # 54 YAML source definitions
   mcp/
     server.py              # FastMCP server + tools
     __main__.py            # MCP entry point
@@ -109,10 +114,22 @@ src/dinobase/
 ### Query execution
 
 1. SQL received via CLI or MCP
-2. `QueryEngine.execute()` runs query on DuckDB
-3. Results serialized to JSON-safe format
-4. Truncation applied if over `max_rows`
-5. Result returned with columns, rows, and metadata
+2. `QueryEngine.execute()` checks if it's a mutation (UPDATE/INSERT)
+3. Mutations are routed to `MutationEngine` for preview/confirm flow
+4. SELECT queries run on DuckDB directly
+5. Results serialized to JSON-safe format
+6. Truncation applied if over `max_rows`
+7. Result returned with columns, rows, and metadata
+
+### Mutation execution
+
+1. Agent sends UPDATE/INSERT via `query` tool
+2. `MutationEngine` parses SQL, validates guardrails (no DELETE/DROP)
+3. Engine generates preview (affected rows, per-row diffs)
+4. Preview returned with `mutation_id` -- nothing executed yet
+5. Agent calls `confirm(mutation_id)` to execute
+6. Engine calls source API (write-back) AND updates local data
+7. Everything logged in `_dinobase.mutations`
 
 ## Concurrency model
 

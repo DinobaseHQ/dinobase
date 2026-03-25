@@ -159,4 +159,4 @@ dinobase query "SELECT COUNT(*) FROM demo.customers" --pretty
 - [Connecting Sources](/guides/connecting-sources/) -- all source types in detail
 - [Querying Data](/guides/querying/) -- SQL patterns, joins, aggregations
 - [MCP Integration](/guides/mcp/) -- agent setup and tools reference
-- [Sources Reference](/sources/overview/) -- full list of 30+ sources
+- [Sources Reference](/sources/overview/) -- full list of 100+ sources

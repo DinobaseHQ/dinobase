@@ -46,8 +46,12 @@ dinobase add postgres --connection-string postgresql://... --name prod --sync-in
 List all available source types.
 
 ```bash
-dinobase sources
+dinobase sources [OPTIONS]
 ```
+
+| Option | Description |
+|--------|-------------|
+| `--pretty` | Human-readable output grouped by category |
 
 Groups sources by category: SaaS APIs, Databases, Cloud Storage, Files.
 
@@ -153,6 +157,34 @@ dinobase serve [OPTIONS]
 ```bash
 dinobase serve                              # MCP server only
 dinobase serve --sync --sync-interval 30m   # with background sync
+```
+
+---
+
+## `dinobase confirm <mutation_id>`
+
+Confirm and execute a pending mutation.
+
+```bash
+dinobase confirm <mutation_id>
+```
+
+Mutations submitted via `dinobase query "UPDATE ..."` return a preview with a `mutation_id`. Use this command to execute it.
+
+```bash
+dinobase query "UPDATE stripe.customers SET name = 'Acme' WHERE id = 'cus_123'"
+# Returns preview with mutation_id
+dinobase confirm mut_abc123def456
+```
+
+---
+
+## `dinobase cancel <mutation_id>`
+
+Cancel a pending mutation without executing it.
+
+```bash
+dinobase cancel <mutation_id>
 ```
 
 ---
