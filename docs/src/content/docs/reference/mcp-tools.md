@@ -3,7 +3,7 @@ title: MCP Tools Reference
 description: Detailed reference for the three MCP tools exposed by Dinobase's MCP server.
 ---
 
-The Dinobase MCP server exposes three tools to agents.
+The Dinobase MCP server exposes six tools to agents.
 
 ## `query`
 
@@ -18,7 +18,7 @@ Execute a SQL query against the database.
 
 ### Response
 
-**Success:**
+**Success (SELECT):**
 
 ```json
 {
@@ -28,6 +28,24 @@ Execute a SQL query against the database.
   ],
   "row_count": 1,
   "total_rows": 1
+}
+```
+
+**Mutation (UPDATE/INSERT) -- returns preview instead of executing:**
+
+```json
+{
+  "mutation_id": "mut_abc123def456",
+  "status": "pending_confirmation",
+  "preview": {
+    "operation": "UPDATE",
+    "source": "stripe",
+    "table": "customers",
+    "rows_affected": 1,
+    "changes": [{"id": "cus_123", "name": "Old Name → New Name"}],
+    "side_effects": ["Will call API to update 1 record(s) in stripe"]
+  },
+  "confirm": "Call confirm with mutation_id 'mut_abc123def456' to execute"
 }
 ```
 
@@ -138,6 +156,87 @@ If a close match exists, the error includes a suggestion:
   "error": "Table 'stripe.customer' not found. Did you mean 'stripe.customers'?"
 }
 ```
+
+---
+
+## `confirm`
+
+Confirm and execute a pending mutation. Mutations (UPDATE/INSERT sent via `query`) return a preview -- call this with the `mutation_id` to actually execute it.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mutation_id` | string | Yes | The `mutation_id` from a pending mutation preview |
+
+### Response
+
+```json
+{
+  "status": "executed",
+  "mutation_id": "mut_abc123def456",
+  "operation": "UPDATE",
+  "source": "stripe",
+  "table": "customers",
+  "api_write_back": {
+    "total_rows": 1,
+    "api_calls": 1,
+    "succeeded": 1,
+    "failed": 0
+  },
+  "local_update": {
+    "method": "staging_table",
+    "rows_upserted": 1
+  }
+}
+```
+
+---
+
+## `confirm_batch`
+
+Confirm and execute multiple pending mutations from a multi-statement SQL.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mutation_ids` | string[] | Yes | List of `mutation_id` values to confirm together |
+
+### Response
+
+```json
+{
+  "status": "batch_executed",
+  "total": 2,
+  "succeeded": 2,
+  "failed": 0,
+  "results": [...]
+}
+```
+
+---
+
+## `cancel`
+
+Cancel a pending mutation without executing it.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mutation_id` | string | Yes | The `mutation_id` of a pending mutation to cancel |
+
+### Response
+
+```json
+{
+  "status": "cancelled",
+  "mutation_id": "mut_abc123def456"
+}
+```
+
+---
 
 ## Dynamic instructions
 

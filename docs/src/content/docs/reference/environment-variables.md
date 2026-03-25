@@ -47,7 +47,6 @@ Dinobase checks these environment variables when adding sources. Set them to avo
 | `SENDGRID_API_KEY` | SendGrid |
 | `MAILCHIMP_API_KEY` | Mailchimp |
 | `FRONT_TOKEN` | Front |
-| `DRIFT_TOKEN` | Drift |
 | `CLOSE_API_KEY` | Close |
 | `COPPER_API_KEY` | Copper |
 | `ATTIO_API_KEY` | Attio |
@@ -75,6 +74,54 @@ Dinobase checks these environment variables when adding sources. Set them to avo
 | `WORKABLE_SUBDOMAIN` | Workable |
 | `BITBUCKET_USERNAME` | Bitbucket |
 | `BITBUCKET_APP_PASSWORD` | Bitbucket |
+| `GITLAB_TOKEN` | GitLab |
+| `POSTHOG_API_KEY` | PostHog |
+| `POSTHOG_PROJECT_ID` | PostHog |
+| `MIXPANEL_API_SECRET` | Mixpanel |
+| `SEGMENT_TOKEN` | Segment |
+| `PLAUSIBLE_API_KEY` | Plausible |
+| `HUBSPOT_MARKETING_API_KEY` | HubSpot Marketing |
+| `CUSTOMERIO_API_KEY` | Customer.io |
+| `HELPSCOUT_API_KEY` | HelpScout |
+| `VITALLY_API_KEY` | Vitally |
+| `GAINSIGHT_API_KEY` | Gainsight |
+| `CLICKUP_API_KEY` | ClickUp |
+| `MONDAY_API_KEY` | Monday |
+| `TRELLO_API_KEY` | Trello |
+| `TRELLO_TOKEN` | Trello |
+| `TODOIST_API_KEY` | Todoist |
+| `SHOPIFY_API_KEY` | Shopify |
+| `SHOPIFY_SHOP_URL` | Shopify |
+| `WOOCOMMERCE_CONSUMER_KEY` | WooCommerce |
+| `WOOCOMMERCE_CONSUMER_SECRET` | WooCommerce |
+| `WOOCOMMERCE_URL` | WooCommerce |
+| `BIGCOMMERCE_ACCESS_TOKEN` | BigCommerce |
+| `BIGCOMMERCE_STORE_HASH` | BigCommerce |
+| `SQUARE_ACCESS_TOKEN` | Square |
+| `BAMBOOHR_API_KEY` | BambooHR |
+| `BAMBOOHR_SUBDOMAIN` | BambooHR |
+| `GREENHOUSE_API_KEY` | Greenhouse |
+| `LEVER_API_KEY` | Lever |
+| `GUSTO_TOKEN` | Gusto |
+| `DEEL_API_KEY` | Deel |
+| `QUICKBOOKS_ACCESS_TOKEN` | QuickBooks |
+| `XERO_ACCESS_TOKEN` | Xero |
+| `BREX_API_KEY` | Brex |
+| `MERCURY_API_KEY` | Mercury |
+| `DATADOG_API_KEY` | Datadog |
+| `DATADOG_APP_KEY` | Datadog |
+| `NEWRELIC_API_KEY` | New Relic |
+| `CLOUDFLARE_API_KEY` | Cloudflare |
+| `VERCEL_TOKEN` | Vercel |
+| `NETLIFY_TOKEN` | Netlify |
+| `CONTENTFUL_ACCESS_TOKEN` | Contentful |
+| `CONTENTFUL_SPACE_ID` | Contentful |
+| `SANITY_TOKEN` | Sanity |
+| `SANITY_PROJECT_ID` | Sanity |
+| `WORDPRESS_URL` | WordPress |
+| `WORDPRESS_USERNAME` | WordPress |
+| `WORDPRESS_APP_PASSWORD` | WordPress |
+| `FIGMA_TOKEN` | Figma |
 
 ### Databases
 

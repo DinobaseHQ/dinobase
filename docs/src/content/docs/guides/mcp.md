@@ -11,7 +11,7 @@ Dinobase exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol.
 dinobase serve
 ```
 
-The server uses stdio transport and exposes three tools: `query`, `list_sources`, and `describe`.
+The server uses stdio transport and exposes six tools: `query`, `list_sources`, `describe`, `confirm`, `confirm_batch`, and `cancel`.
 
 ### With background sync
 
@@ -91,6 +91,7 @@ How to work with this database:
 1. Agent calls `list_sources` to see what's available
 2. Agent calls `describe` on relevant tables to understand columns and types
 3. Agent writes and executes SQL via `query`
+4. For mutations (UPDATE/INSERT), `query` returns a preview -- agent calls `confirm` to execute
 
 This is the same workflow whether the agent uses MCP or CLI -- the data and query engine are identical.
 

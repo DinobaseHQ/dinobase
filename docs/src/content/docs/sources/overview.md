@@ -3,7 +3,7 @@ title: Sources Overview
 description: All data sources supported by Dinobase -- SaaS APIs, databases, file sources, and cloud storage.
 ---
 
-Dinobase connects to 30+ data sources across four categories.
+Dinobase connects to 101 data sources across four categories.
 
 ## Categories
 
@@ -11,13 +11,13 @@ Dinobase connects to 30+ data sources across four categories.
 
 Connect to business tools via API keys. Data is synced to parquet using [dlt](https://dlthub.com/).
 
-Stripe, HubSpot, Salesforce, Shopify, GitHub, Jira, Slack, Zendesk, Notion, and many more.
+CRMs, billing, support, dev tools, communication, e-commerce, marketing, HR, project management, and more.
 
 [Full list &rarr;](/sources/saas/)
 
 ### Databases
 
-Connect via SQLAlchemy connection strings. Supports PostgreSQL, MySQL, Snowflake, BigQuery, and 11 more.
+Connect via SQLAlchemy connection strings. Supports 16 databases: PostgreSQL, MySQL, Snowflake, BigQuery, and more.
 
 [Full list &rarr;](/sources/databases/)
 
@@ -35,24 +35,26 @@ Sync files incrementally from S3, GCS, Azure Blob, or SFTP.
 
 ## Quick reference
 
-| Source | Type | Auth | Pip extra |
-|--------|------|------|-----------|
-| Stripe | SaaS | API key | -- |
-| HubSpot | SaaS | API key | -- |
-| Salesforce | SaaS | Username/password | `simple_salesforce` |
-| Shopify | SaaS | API key | -- |
-| GitHub | SaaS | Token | -- |
-| Jira | SaaS | Email + API token | -- |
-| Slack | SaaS | Bot token | -- |
-| Zendesk | SaaS | API token | -- |
-| Notion | SaaS | API key | -- |
-| PostgreSQL | Database | Connection string | -- |
-| MySQL | Database | Connection string | -- |
-| Snowflake | Database | Connection string | `snowflake-sqlalchemy` |
-| BigQuery | Database | Connection string | `sqlalchemy-bigquery` |
-| Parquet | File | Path | -- |
-| CSV | File | Path | -- |
-| S3 | Cloud | AWS credentials | -- |
-| GCS | Cloud | Service account | -- |
+| Category | Sources |
+|----------|---------|
+| **CRM & Sales** | Salesforce, HubSpot, Pipedrive, Attio, Close, Copper |
+| **Billing & Payments** | Stripe, Paddle, Chargebee, Recurly, Lemon Squeezy |
+| **Support & Success** | Zendesk, Intercom, Freshdesk, HelpScout, Customer.io, Vitally, Gainsight |
+| **Developer Tools** | GitHub, GitLab, Jira, Bitbucket, Sentry, Linear |
+| **Communication** | Slack, Discord, Twilio, SendGrid, Mailchimp, Front |
+| **E-commerce** | Shopify, WooCommerce, BigCommerce, Square |
+| **Marketing & Analytics** | Google Analytics, Google Ads, Facebook Ads, HubSpot Marketing, Mixpanel, PostHog, Segment, Plausible, Matomo, Bing Webmaster |
+| **HR & Recruiting** | Personio, BambooHR, Greenhouse, Lever, Workable, Gusto, Deel |
+| **Project Management** | Asana, ClickUp, Monday, Trello, Todoist |
+| **Databases** | Postgres, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, BigQuery, Redshift, ClickHouse, CockroachDB, Databricks, Trino, Presto, DuckDB, MongoDB |
+| **Streaming** | Kafka, Kinesis |
+| **Cloud Storage** | S3, GCS, Azure Blob, SFTP |
+| **Finance** | QuickBooks, Xero, Brex, Mercury |
+| **Productivity** | Notion, Airtable, Google Sheets |
+| **Infrastructure** | Datadog, New Relic, PagerDuty, OpsGenie, Statuspage, Cloudflare, Vercel, Netlify |
+| **Content & CMS** | Strapi, Contentful, Sanity, WordPress |
+| **Design** | Figma |
+| **Video** | Mux |
+| **Files** | Parquet, CSV (local or S3 -- read at query time, no sync needed) |
 
-Run `dinobase sources` to see the complete list with descriptions.
+Run `dinobase sources --pretty` to see the complete list with descriptions.

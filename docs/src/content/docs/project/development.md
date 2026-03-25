@@ -6,7 +6,7 @@ description: Set up a development environment, run tests, and contribute to Dino
 ## Setup
 
 ```bash
-git clone https://github.com/dinobase/dinobase
+git clone https://github.com/DinobaseHQ/dinobase
 cd dinobase
 pip install -e ".[dev]"
 ```
@@ -21,13 +21,20 @@ pytest
 
 Tests use sample parquet data loaded into an in-memory DuckDB instance.
 
+147 tests covering the full stack: database, query engine, mutations, sync, CLI, MCP, and YAML connectors.
+
 ### Test structure
 
 ```
 tests/
-  conftest.py           # Fixtures (sample_db with Stripe + HubSpot data)
-  test_db.py            # DinobaseDB: metadata, sync logging, schema introspection
-  test_query_engine.py  # QueryEngine: queries, joins, aggregations, describe
+  conftest.py              # Fixtures (sample_db with Stripe + HubSpot data)
+  test_db.py               # DinobaseDB: metadata, sync logging, schema introspection
+  test_query_engine.py     # QueryEngine: queries, joins, aggregations, describe
+  test_mutations.py        # MutationEngine: preview, confirm, cancel, batch
+  test_cli.py              # CLI commands: init, add, sync, query, status
+  test_mcp.py              # MCP server: tools, instructions
+  test_yaml_source.py      # YAML-to-dlt translation, pagination, auth
+  test_write_client.py     # Write-back to source APIs
 ```
 
 ### Key fixtures
@@ -102,9 +109,65 @@ dinobase/
 
 ## Adding a new source
 
-To add a new SaaS source, add an entry to the registry in `src/dinobase/sync/registry.py`:
+The preferred way to add sources is via YAML files in `src/dinobase/sync/sources/apis/`. No Python code needed.
 
-### dlt verified source
+### YAML REST API source
+
+Create a new file like `src/dinobase/sync/sources/apis/myservice.yaml`:
+
+```yaml
+name: myservice
+description: "MyService (things, stuff)"
+type: rest
+credentials:
+  - name: api_key
+    flag: --api-key
+    env: MYSERVICE_API_KEY
+    prompt: "MyService API key"
+client:
+  base_url: https://api.myservice.com/v1
+  auth:
+    type: bearer_token
+    token: "{api_key}"
+  paginator:
+    type: json_link
+    next_url_path: "response.next"
+resources:
+  - name: things
+    endpoint:
+      path: things
+      data_selector: data
+  - name: stuff
+    endpoint:
+      path: stuff
+      data_selector: data
+```
+
+### YAML GraphQL source
+
+```yaml
+name: myservice
+description: "MyService (things, stuff)"
+type: graphql
+credentials:
+  - name: api_key
+    flag: --api-key
+    env: MYSERVICE_API_KEY
+    prompt: "MyService API key"
+endpoint: https://api.myservice.com/graphql
+auth_prefix: "Bearer "
+resources:
+  - name: things
+    query: "query($cursor: String) { things(first: 50, after: $cursor) { nodes { id name } pageInfo { hasNextPage endCursor } } }"
+    data_path: things.nodes
+    pagination:
+      type: relay_cursor
+      page_info_path: things.pageInfo
+```
+
+### Python registry entry
+
+For dlt verified sources, add an entry in `src/dinobase/sync/registry.py`:
 
 ```python
 _register(SourceEntry(
@@ -117,25 +180,7 @@ _register(SourceEntry(
 ))
 ```
 
-### REST API source
-
-```python
-_register_rest_api(
-    "myservice",
-    "MyService (things, stuff)",
-    "https://api.myservice.com/v1/",
-    "bearer", "token",
-    env_var="MYSERVICE_API_KEY",
-    prompt="MyService API key",
-    resources=[
-        {"name": "things", "endpoint": {"path": "things"}},
-        {"name": "stuff", "endpoint": {"path": "stuff"}},
-    ],
-    data_selector="data",
-)
-```
-
-No Python connector code needed -- dlt handles auth, pagination, and rate limiting.
+dlt handles auth, pagination, and rate limiting automatically.
 
 ## Docs site
 

@@ -187,6 +187,17 @@ By default, queries return up to 200 rows. If there are more, the result include
 
 Use `--max-rows` (CLI) or the `max_rows` parameter (MCP) to adjust, up to 10,000.
 
+## Mutations
+
+UPDATE and INSERT statements sent through `query` are intercepted and routed to the mutation engine. Instead of executing immediately, they return a preview with a `mutation_id`. See the [Mutations guide](/guides/mutations/) for details.
+
+```bash
+dinobase query "UPDATE stripe.customers SET name = 'Acme' WHERE id = 'cus_123'"
+# Returns preview, not execution
+dinobase confirm mut_abc123def456
+# Now it executes
+```
+
 ## Error handling
 
 SQL errors are returned in the result rather than thrown:

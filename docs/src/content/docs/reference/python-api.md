@@ -171,6 +171,77 @@ desc = engine.describe_table("stripe.customers")
 
 ---
 
+## MutationEngine
+
+Handles writes back to source systems via SQL.
+
+```python
+from dinobase.db import DinobaseDB
+from dinobase.query.mutations import MutationEngine
+
+db = DinobaseDB()
+engine = MutationEngine(db)
+```
+
+### Methods
+
+#### `engine.handle_sql(sql, max_affected_rows=50)`
+
+Parse and preview one or more mutation statements. Returns a preview with `mutation_id`.
+
+```python
+result = engine.handle_sql("UPDATE stripe.customers SET name = 'Acme' WHERE id = 'cus_123'")
+# {"mutation_id": "mut_...", "status": "pending_confirmation", "preview": {...}}
+```
+
+Multi-statement SQL is supported:
+
+```python
+result = engine.handle_sql("""
+    UPDATE stripe.customers SET name = 'Acme' WHERE id = 'cus_123';
+    INSERT INTO linear.issues (title) VALUES ('Follow up');
+""")
+# {"batch_id": "batch_...", "mutations": [...]}
+```
+
+#### `engine.confirm(mutation_id)`
+
+Execute a pending mutation.
+
+```python
+result = engine.confirm("mut_abc123def456")
+# {"status": "executed", "api_write_back": {...}, "local_update": {...}}
+```
+
+#### `engine.confirm_batch(mutation_ids)`
+
+Execute multiple pending mutations.
+
+```python
+result = engine.confirm_batch(["mut_abc123", "mut_def456"])
+# {"status": "batch_executed", "succeeded": 2, "failed": 0}
+```
+
+#### `engine.cancel(mutation_id)`
+
+Cancel a pending mutation.
+
+```python
+result = engine.cancel("mut_abc123def456")
+# {"status": "cancelled", "mutation_id": "mut_abc123def456"}
+```
+
+#### `engine.list_pending()`
+
+List all pending mutations.
+
+```python
+pending = engine.list_pending()
+# [{"mutation_id": "mut_...", "operation": "UPDATE", ...}]
+```
+
+---
+
 ## SyncEngine
 
 Syncs a single source using dlt.

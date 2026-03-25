@@ -11,7 +11,7 @@ hero:
       icon: right-arrow
       variant: primary
     - text: View on GitHub
-      link: https://github.com/dinobase/dinobase
+      link: https://github.com/DinobaseHQ/dinobase
       icon: external
       variant: minimal
 ---
@@ -39,7 +39,7 @@ ORDER BY d.amount DESC
 
 <CardGrid>
   <Card title="Connect in minutes" icon="plug">
-    Add Stripe, HubSpot, Postgres, or parquet files with one command. 30+ sources supported. Data is queryable immediately.
+    Add Stripe, HubSpot, Postgres, or parquet files with one command. 100+ sources supported. Data is queryable immediately.
   </Card>
   <Card title="Cross-source queries" icon="magnifier">
     JOIN Stripe customers with HubSpot deals with product analytics. Questions that required a data team now have instant answers.
@@ -116,7 +116,7 @@ ORDER BY d.amount DESC
 
 | Source type | How it works | Data location |
 |------------|-------------|---------------|
-| API sources (Stripe, HubSpot, etc.) | dlt syncs to parquet | `~/.dinobase/data/` |
+| API sources (100+ SaaS connectors, databases) | dlt syncs to parquet | `~/.dinobase/data/` |
 | File sources (parquet, CSV, S3) | DuckDB reads via views | Your storage -- nothing copied |
 
 Each source becomes a schema (`stripe.*`, `hubspot.*`). Cross-source joins work via shared columns like email. The `.duckdb` file stores only metadata -- data lives in parquet.
