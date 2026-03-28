@@ -8,6 +8,35 @@ description: All environment variables recognized by Dinobase.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DINOBASE_DIR` | `~/.dinobase` | Override the Dinobase data directory |
+| `DINOBASE_STORAGE_URL` | *(none)* | Cloud storage URL for data (e.g., `s3://bucket/dinobase/`). Enables cloud mode. |
+
+## Cloud storage credentials
+
+Set these when using `--storage` or `DINOBASE_STORAGE_URL` for cloud-backed storage.
+
+### Amazon S3
+
+| Variable | Description |
+|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | S3 access key |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key |
+| `AWS_REGION` or `AWS_DEFAULT_REGION` | S3 region (e.g., `us-east-1`) |
+| `S3_ENDPOINT` | Custom S3 endpoint for MinIO, Cloudflare R2, etc. |
+
+### Google Cloud Storage
+
+| Variable | Description |
+|----------|-------------|
+| `GCS_HMAC_KEY_ID` | GCS HMAC access key (create in Console > Settings > Interoperability) |
+| `GCS_HMAC_SECRET` | GCS HMAC secret key |
+
+### Azure Blob Storage
+
+| Variable | Description |
+|----------|-------------|
+| `AZURE_STORAGE_CONNECTION_STRING` | Full Azure connection string (preferred) |
+| `AZURE_STORAGE_ACCOUNT_NAME` | Azure storage account name (alternative) |
+| `AZURE_STORAGE_ACCOUNT_KEY` | Azure storage account key (alternative) |
 
 ## Source credentials
 

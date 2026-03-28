@@ -26,6 +26,10 @@ The main configuration file. Created by `dinobase init`, updated by `dinobase ad
 ### Format
 
 ```yaml
+# Optional: store data in cloud storage instead of locally
+storage:
+  url: "s3://my-bucket/dinobase/"
+
 sources:
   stripe:
     type: stripe
@@ -37,6 +41,7 @@ sources:
     credentials:
       api_key: pat-na1-...
     sync_interval: 30m
+    freshness_threshold: 1h
   analytics:
     type: parquet
     credentials:
@@ -46,6 +51,12 @@ sources:
 
 ### Fields
 
+**Storage (optional):**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `storage.url` | No | Cloud storage URL (e.g., `s3://bucket/dinobase/`, `gs://bucket/dinobase/`, `az://container/dinobase/`). When set, data is stored in cloud storage instead of locally. Can also be set via `DINOBASE_STORAGE_URL` env var. |
+
 **Per source:**
 
 | Field | Required | Description |
@@ -53,6 +64,7 @@ sources:
 | `type` | Yes | Source type (e.g., `stripe`, `postgres`, `parquet`) |
 | `credentials` | Yes | Source-specific credentials |
 | `sync_interval` | No | How often to sync (e.g., `30m`, `1h`) |
+| `freshness_threshold` | No | Max age before data is considered stale (e.g., `1h`, `30m`). Defaults: `1h` for SaaS APIs, `6h` for databases. File sources are never stale. |
 
 **Credential keys vary by source type:**
 
@@ -73,9 +85,21 @@ You can edit `config.yaml` directly to:
 
 Changes take effect on the next `dinobase sync` or `dinobase serve`.
 
+## Storage modes
+
+### Local (default)
+
+Data is stored in `dinobase.duckdb` alongside the config file. No additional setup needed.
+
+### Cloud storage
+
+When `storage.url` is configured, Dinobase uses an in-memory DuckDB that reads/writes parquet files to cloud storage. Metadata is persisted as parquet files in a `_meta/` prefix. See the [Cloud Storage Backend](/guides/cloud-storage-backend/) guide for setup instructions.
+
+Supported providers: Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible services (MinIO, Cloudflare R2).
+
 ## DuckDB database
 
-`dinobase.duckdb` contains:
+In local mode, `dinobase.duckdb` contains:
 
 ### User data schemas
 

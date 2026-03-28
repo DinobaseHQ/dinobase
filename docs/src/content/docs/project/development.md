@@ -109,11 +109,11 @@ dinobase/
 
 ## Adding a new source
 
-The preferred way to add sources is via YAML files in `src/dinobase/sync/sources/apis/`. No Python code needed.
+The preferred way to add sources is via YAML files in `src/dinobase/sync/sources/configs/`. No Python code needed.
 
 ### YAML REST API source
 
-Create a new file like `src/dinobase/sync/sources/apis/myservice.yaml`:
+Create a new file like `src/dinobase/sync/sources/configs/myservice.yaml`:
 
 ```yaml
 name: myservice

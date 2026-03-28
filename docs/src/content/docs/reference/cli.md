@@ -10,10 +10,23 @@ Run `dinobase --help` for a summary, or `dinobase <command> --help` for any comm
 Create the config directory and database.
 
 ```bash
-dinobase init
+dinobase init [OPTIONS]
 ```
 
+| Option | Description |
+|--------|-------------|
+| `--storage` | Cloud storage URL (e.g., `s3://bucket/dinobase/`, `gs://bucket/dinobase/`, `az://container/dinobase/`) |
+
 Creates `~/.dinobase/` with `config.yaml` and `dinobase.duckdb`. Safe to run multiple times.
+
+With `--storage`, data is stored in cloud storage instead of locally. See the [Cloud Storage Backend](/guides/cloud-storage-backend/) guide.
+
+```bash
+dinobase init                                    # local (default)
+dinobase init --storage s3://bucket/dinobase/    # S3
+dinobase init --storage gs://bucket/dinobase/    # GCS
+dinobase init --storage az://container/dinobase/ # Azure
+```
 
 ---
 
@@ -30,11 +43,13 @@ dinobase add <source_type> [OPTIONS]
 | `--name` | Custom name for the source (defaults to type) |
 | `--path` | Path to files (parquet/csv sources only) |
 | `--sync-interval` | Sync interval (e.g., `30m`, `1h`, `6h`) |
+| `--freshness` | Freshness threshold (e.g., `1h`, `30m`). Defaults: 1h for SaaS, 6h for databases |
 
 Source-specific flags (e.g., `--api-key`, `--connection-string`) are passed through.
 
 ```bash
 dinobase add stripe --api-key sk_live_...
+dinobase add stripe --api-key sk_live_... --freshness 30m
 dinobase add parquet --path ./data/ --name analytics
 dinobase add postgres --connection-string postgresql://... --name prod --sync-interval 30m
 ```
@@ -43,7 +58,7 @@ dinobase add postgres --connection-string postgresql://... --name prod --sync-in
 
 ## `dinobase sources`
 
-List all available source types.
+List connected data sources, or all available source types.
 
 ```bash
 dinobase sources [OPTIONS]
@@ -51,9 +66,10 @@ dinobase sources [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `--pretty` | Human-readable output grouped by category |
+| `--available` | Show all available source types (not just connected) |
+| `--pretty` | Human-readable output |
 
-Groups sources by category: SaaS APIs, Databases, Cloud Storage, Files.
+By default shows only your connected sources. Use `--available` to see all 100+ supported source types grouped by category.
 
 ---
 
@@ -76,6 +92,30 @@ dinobase sync                              # all sources, once
 dinobase sync stripe                       # one source
 dinobase sync --schedule --interval 30m    # daemon mode
 ```
+
+---
+
+## `dinobase refresh [source]`
+
+Re-sync sources to get fresh data.
+
+```bash
+dinobase refresh [SOURCE_NAME] [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--stale` | Refresh only sources that exceed their freshness threshold |
+| `--pretty` | Human-readable output |
+
+```bash
+dinobase refresh                 # refresh all sources
+dinobase refresh stripe          # refresh one source
+dinobase refresh --stale         # refresh only stale sources
+dinobase refresh --stale --pretty
+```
+
+Without arguments, refreshes all non-file sources. Use `--stale` to only refresh sources past their freshness threshold.
 
 ---
 
@@ -189,12 +229,49 @@ dinobase cancel <mutation_id>
 
 ---
 
-## `dinobase mcp-config`
+## `dinobase auth <type>`
 
-Print MCP configuration JSON for Claude Desktop.
+Connect a source via OAuth (browser-based authorization).
 
 ```bash
-dinobase mcp-config
+dinobase auth <source_type> [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--name` | Custom name for the source (defaults to type) |
+| `--proxy-url` | OAuth proxy URL (or set `DINOBASE_OAUTH_PROXY_URL`) |
+
+Opens your browser to authorize Dinobase to access the source. Tokens are stored locally and refreshed automatically on sync.
+
+```bash
+dinobase auth hubspot
+dinobase auth salesforce --name my_salesforce
+```
+
+---
+
+## `dinobase mcp-config [client]`
+
+Print MCP configuration for Claude Code, Claude Desktop, or Cursor.
+
+```bash
+dinobase mcp-config [CLIENT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `claude-desktop` | Config for `~/.claude/claude_desktop_config.json` |
+| `claude-code` | Config for `.mcp.json` (project root) |
+| `cursor` | Config for `.cursor/mcp.json` (project root) |
+
+Without arguments, prints configs for all three clients.
+
+```bash
+dinobase mcp-config                # show all configs
+dinobase mcp-config claude-desktop # Claude Desktop only
+dinobase mcp-config claude-code    # Claude Code only
+dinobase mcp-config cursor         # Cursor only
 ```
 
 ---
