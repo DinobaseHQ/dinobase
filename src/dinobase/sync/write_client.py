@@ -99,9 +99,11 @@ class WriteClient:
 
         # Execute the request
         try:
+            # For DELETE requests, skip body if empty (many APIs expect no body)
+            req_data = None if method == "DELETE" and not body else json.dumps(body).encode("utf-8")
             req = Request(
                 url,
-                data=json.dumps(body).encode("utf-8"),
+                data=req_data,
                 headers=headers,
                 method=method,
             )

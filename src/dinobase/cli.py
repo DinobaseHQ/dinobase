@@ -10,19 +10,95 @@ import click
 from dinobase import __version__
 
 
-@click.group()
+_AGENT_COMMANDS = frozenset({
+    "info", "query", "describe", "status", "sources",
+    "confirm", "cancel", "refresh", "auth",
+})
+
+
+def _get_cloud_client():
+    """Return an authenticated CloudClient if logged in, else None."""
+    from dinobase.config import is_cloud_logged_in, load_cloud_credentials, get_cloud_api_url
+
+    if not is_cloud_logged_in():
+        return None
+
+    creds = load_cloud_credentials()
+    if not creds:
+        return None
+
+    from dinobase.cloud_client import CloudClient
+    return CloudClient(
+        api_url=creds.get("api_url", get_cloud_api_url()),
+        access_token=creds["access_token"],
+    )
+
+
+class CategorizedGroup(click.Group):
+    """Click group that shows commands in agent/admin categories."""
+
+    def format_commands(self, ctx, formatter):
+        agent_cmds = []
+        admin_cmds = []
+        for name in self.list_commands(ctx):
+            cmd = self.get_command(ctx, name)
+            if cmd is None or cmd.hidden:
+                continue
+            help_text = cmd.get_short_help_str(limit=150)
+            if name in _AGENT_COMMANDS:
+                agent_cmds.append((name, help_text))
+            else:
+                admin_cmds.append((name, help_text))
+
+        if agent_cmds:
+            with formatter.section("Agent commands"):
+                formatter.write_dl(agent_cmds)
+        if admin_cmds:
+            with formatter.section("Admin commands (ignore if you're an agent)"):
+                formatter.write_dl(admin_cmds)
+
+
+@click.group(cls=CategorizedGroup)
 @click.version_option(version=__version__)
 def cli():
-    """Dinobase — the agent-native database."""
+    """🦕 Dinobase — the agent-native database."""
     pass
 
 
-@cli.command()
-def init():
-    """Initialize Dinobase (create config directory and database)."""
-    from dinobase.config import init_dinobase, get_db_path
+def _require_init():
+    """Check that Dinobase has been initialized. Exit with a friendly message if not."""
+    from dinobase.config import get_dinobase_dir, get_db_path, is_cloud_storage
 
-    ddir = init_dinobase()
+    # Cloud mode — config dir must exist but no local DB needed
+    if is_cloud_storage():
+        if not get_dinobase_dir().exists():
+            click.echo("Dinobase is not initialized. Run `dinobase init` first.", err=True)
+            sys.exit(1)
+        return
+
+    ddir = get_dinobase_dir()
+    if not ddir.exists() or not get_db_path().exists():
+        click.echo("Dinobase is not initialized. Run `dinobase init` first.", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--storage", help="Cloud storage URL (e.g., s3://bucket/dinobase/)")
+def init(storage: str | None):
+    """Initialize Dinobase (create config directory and database).
+
+    Use --storage to store data in cloud storage instead of locally.
+
+    Examples:
+
+      dinobase init                                    # local mode
+      dinobase init --storage s3://bucket/dinobase/    # S3 mode
+      dinobase init --storage gs://bucket/dinobase/    # GCS mode
+    """
+    from dinobase.config import init_dinobase, get_db_path, is_cloud_storage
+
+    ddir = init_dinobase(storage_url=storage)
+
     # Touch the database to create it
     from dinobase.db import DinobaseDB
     db = DinobaseDB()
@@ -30,8 +106,142 @@ def init():
     db.close()
 
     click.echo(f"Dinobase initialized at {ddir}")
-    click.echo(f"Database: {get_db_path()}")
+    if is_cloud_storage():
+        from dinobase.config import get_storage_url
+        click.echo(f"Storage: {get_storage_url()}")
+    else:
+        click.echo(f"Database: {get_db_path()}")
     click.echo("Add a source: dinobase add <source> --api-key ...  (run `dinobase sources` to list all)")
+
+
+# ---------------------------------------------------------------------------
+# Cloud account commands
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--headless", is_flag=True, help="Machine-readable output, no browser launch")
+def login(headless: bool):
+    """Sign in to Dinobase Cloud (free account).
+
+    Opens your browser to create an account or sign in.
+    After authentication, your CLI is configured for cloud mode.
+
+    Examples:
+
+      dinobase login              # opens browser
+      dinobase login --headless   # prints login URL as JSON
+    """
+    import os
+    from dinobase.config import (
+        save_cloud_credentials, get_cloud_api_url, init_dinobase,
+    )
+
+    init_dinobase()
+    api_url = get_cloud_api_url()
+    web_url = os.environ.get("DINOBASE_WEB_URL", "http://localhost:3000")
+
+    # Reuse the same local callback server pattern from auth.py
+    from dinobase.auth import _start_callback_server
+    import secrets
+    import webbrowser
+    from urllib.parse import urlencode, parse_qs, urlparse
+
+    server = _start_callback_server()
+    port = server.server_address[1]
+    redirect_uri = f"http://localhost:{port}/callback"
+    state = secrets.token_urlsafe(32)
+
+    # Open the web frontend's CLI login page — it handles auth and redirects back
+    login_url = f"{web_url}/cli-login?" + urlencode({
+        "callback": redirect_uri,
+        "state": state,
+    })
+
+    if headless:
+        click.echo(json.dumps({
+            "status": "waiting",
+            "login_url": login_url,
+            "message": "Open this URL to sign in to Dinobase Cloud",
+        }))
+    else:
+        click.echo("Opening browser to sign in to Dinobase Cloud...", err=True)
+        click.echo(f"If the browser doesn't open, visit:\n  {login_url}\n", err=True)
+        webbrowser.open(login_url)
+
+    # Wait for callback
+    server.timeout = 300
+    while server.oauth_result is None:  # type: ignore[attr-defined]
+        server.handle_request()
+
+    server.server_close()
+    result = server.oauth_result  # type: ignore[attr-defined]
+
+    if "error" in result:
+        click.echo(json.dumps({"status": "error", "error": result["error"]}))
+        sys.exit(1)
+
+    # The web frontend sends back the token directly via query params
+    access_token = result.get("access_token")
+    if not access_token:
+        click.echo(json.dumps({"status": "error", "error": "No access token received"}))
+        sys.exit(1)
+
+    # Save credentials
+    credentials = {
+        "access_token": access_token,
+        "refresh_token": result.get("refresh_token", ""),
+        "expires_at": int(result.get("expires_at", 0)),
+        "user_id": result.get("user_id", ""),
+        "email": result.get("email", ""),
+        "api_url": api_url,
+    }
+    save_cloud_credentials(credentials)
+
+    storage_url = result.get("storage_url")
+    if storage_url:
+        init_dinobase(storage_url=storage_url)
+
+    email = result.get("email", "")
+    if headless:
+        click.echo(json.dumps({
+            "status": "connected",
+            "email": email,
+            "storage_url": storage_url,
+        }))
+    else:
+        click.echo(f"Logged in as {email}")
+        if storage_url:
+            click.echo(f"Storage: {storage_url}")
+        click.echo("Run `dinobase auth <source>` to connect data sources via OAuth.")
+
+
+@cli.command()
+def logout():
+    """Sign out of Dinobase Cloud."""
+    from dinobase.config import clear_cloud_credentials, is_cloud_logged_in
+
+    if not is_cloud_logged_in():
+        click.echo("Not logged in.")
+        return
+
+    clear_cloud_credentials()
+    click.echo("Logged out of Dinobase Cloud.")
+
+
+@cli.command()
+def whoami():
+    """Show current Dinobase Cloud account info."""
+    cloud = _get_cloud_client()
+    if not cloud:
+        click.echo(json.dumps({"logged_in": False}))
+        return
+
+    try:
+        user_info = cloud.whoami()
+        click.echo(json.dumps(user_info, indent=2, default=str))
+    except RuntimeError as e:
+        click.echo(json.dumps({"logged_in": False, "error": str(e)}))
 
 
 @cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
@@ -59,15 +269,54 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
 
       dinobase add shopify --api-key shppa_... --shop-url myshop.myshopify.com
     """
-    from dinobase.config import add_source as save_source, init_dinobase
+    from dinobase.config import add_source as save_source, init_dinobase, source_exists
 
     init_dinobase()
+
+    # Cloud mode — register source with the API
+    cloud = _get_cloud_client()
+    if cloud and source_type not in ("parquet", "csv"):
+        from dinobase.sync.registry import get_source_entry, list_available_sources
+
+        entry = get_source_entry(source_type)
+        if entry is None:
+            available = ", ".join(list_available_sources())
+            click.echo(f"Unknown source: '{source_type}'", err=True)
+            click.echo(f"Available sources: {available}", err=True)
+            sys.exit(1)
+
+        extra_dict = _parse_extra_args(tuple(ctx.args))
+        source_name = name or source_type
+        credentials: dict[str, str] = {}
+
+        for param in entry.credentials:
+            flag_key = param.cli_flag.lstrip("-").replace("-", "_")
+            value = extra_dict.get(flag_key)
+            if not value and param.env_var:
+                import os
+                value = os.environ.get(param.env_var)
+            if not value:
+                value = click.prompt(param.prompt or f"Enter {param.name}", hide_input=param.secret)
+            credentials[param.name] = value
+
+        try:
+            result = cloud.add_source(source_name, source_type, credentials)
+            click.echo(f"Added {source_type} source as '{source_name}' (cloud)")
+            click.echo(f"Run `dinobase sync` to load data.")
+        except RuntimeError as e:
+            click.echo(f"Failed: {e}", err=True)
+            sys.exit(1)
+        return
 
     # File sources — create views immediately, no sync needed
     if source_type in ("parquet", "csv"):
         if not path:
             path = click.prompt(f"Enter path to {source_type} files")
         source_name = name or path.rstrip("/").split("/")[-1].replace(".", "_")
+        if source_exists(source_name):
+            if not click.confirm(f"Source '{source_name}' already exists. Overwrite?"):
+                click.echo("Aborted.")
+                return
 
         from dinobase.db import DinobaseDB
         from dinobase.sync.sources.parquet import add_file_source, extract_metadata
@@ -106,6 +355,10 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
 
     # Collect credentials — from CLI flags, env vars, or interactive prompts
     source_name = name or source_type
+    if source_exists(source_name):
+        if not click.confirm(f"Source '{source_name}' already exists. Overwrite?"):
+            click.echo("Aborted.")
+            return
     credentials: dict[str, str] = {}
 
     for param in entry.credentials:
@@ -137,10 +390,17 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
             sys.exit(1)
 
     sync_interval = extra_dict.get("sync_interval")
-    save_source(source_name, source_type, credentials, sync_interval=sync_interval)
+    freshness_threshold = extra_dict.get("freshness")
+    save_source(
+        source_name, source_type, credentials,
+        sync_interval=sync_interval,
+        freshness_threshold=freshness_threshold,
+    )
     click.echo(f"Added {source_type} source as '{source_name}'")
     if sync_interval:
         click.echo(f"Sync interval: {sync_interval}")
+    if freshness_threshold:
+        click.echo(f"Freshness threshold: {freshness_threshold}")
     click.echo(f"Run `dinobase sync` to load data.")
 
 
@@ -162,15 +422,198 @@ def _parse_extra_args(args: tuple) -> dict[str, str]:
     return result
 
 
+@cli.command()
+@click.argument("source_type")
+@click.option("--name", help="Custom name for the source (defaults to source type)")
+@click.option("--headless", is_flag=True, help="Machine-readable output, no browser launch")
+def auth(source_type: str, name: str | None, headless: bool):
+    """Connect a source via OAuth (requires Dinobase Cloud account).
+
+    Opens your browser to authorize Dinobase to access the source.
+    Tokens are stored in the cloud and refreshed automatically.
+
+    Examples:
+
+      dinobase auth hubspot
+
+      dinobase auth salesforce --name my_salesforce
+
+      dinobase auth hubspot --headless   # for agents
+    """
+    from dinobase.config import is_cloud_logged_in
+    from dinobase.sync.registry import get_source_entry, list_available_sources
+
+    # Validate source type first
+    entry = get_source_entry(source_type)
+    if entry is None:
+        available = ", ".join(list_available_sources())
+        click.echo(f"Unknown source: '{source_type}'", err=True)
+        click.echo(f"Available sources: {available}", err=True)
+        sys.exit(1)
+
+    # Require cloud login for OAuth
+    if not is_cloud_logged_in():
+        if headless:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": "Cloud account required for OAuth",
+                "message": "Run `dinobase login` first (free), or use `dinobase add <source> --api-key` for manual setup.",
+            }))
+        else:
+            click.echo(
+                "Dinobase Cloud account required for OAuth sources.\n"
+                "Run `dinobase login` to sign up (free), or use "
+                "`dinobase add <source> --api-key ...` for manual API key setup.",
+                err=True,
+            )
+        sys.exit(1)
+
+    cloud = _get_cloud_client()
+    source_name = name or source_type
+
+    # Start OAuth flow via the cloud API using local callback server
+    from dinobase.auth import _start_callback_server
+    import secrets
+    import webbrowser
+    from urllib.parse import urlencode
+
+    server = _start_callback_server()
+    port = server.server_address[1]
+    redirect_uri = f"http://localhost:{port}/callback"
+
+    try:
+        oauth_info = cloud.start_oauth(source_name, redirect_uri)
+    except RuntimeError as e:
+        click.echo(json.dumps({"status": "error", "error": str(e)}) if headless else f"OAuth failed: {e}")
+        sys.exit(1)
+
+    auth_url = oauth_info["auth_url"]
+    state = oauth_info.get("state", "")
+
+    if headless:
+        click.echo(json.dumps({
+            "status": "waiting",
+            "auth_url": auth_url,
+            "message": f"Open this URL to connect {source_type}",
+        }))
+    else:
+        click.echo(f"Opening browser to authorize {source_type}...", err=True)
+        click.echo(f"If the browser doesn't open, visit:\n  {auth_url}\n", err=True)
+        webbrowser.open(auth_url)
+
+    # Wait for callback
+    server.timeout = 300
+    while server.oauth_result is None:  # type: ignore[attr-defined]
+        server.handle_request()
+
+    server.server_close()
+    result = server.oauth_result  # type: ignore[attr-defined]
+
+    if "error" in result:
+        msg = f"OAuth failed: {result['error']}"
+        click.echo(json.dumps({"status": "error", "error": msg}) if headless else msg)
+        sys.exit(1)
+
+    code = result.get("code")
+    if not code:
+        click.echo(json.dumps({"status": "error", "error": "No auth code received"}) if headless else "No auth code received")
+        sys.exit(1)
+
+    # Complete OAuth via cloud API
+    try:
+        completion = cloud.complete_oauth(source_name, code, redirect_uri, state)
+    except RuntimeError as e:
+        click.echo(json.dumps({"status": "error", "error": str(e)}) if headless else f"OAuth completion failed: {e}")
+        sys.exit(1)
+
+    if headless:
+        click.echo(json.dumps({
+            "status": "connected",
+            "source": source_name,
+            "type": source_type,
+        }))
+    else:
+        click.echo(f"Connected {source_type} as '{source_name}' via OAuth.")
+        click.echo(f"Run `dinobase sync` to load data.")
+
+
 @cli.command("sources")
+@click.option("--available", is_flag=True, help="Show all available source types (not just connected)")
 @click.option("--pretty", is_flag=True, help="Human-readable output with descriptions")
-def list_sources_cmd(pretty: bool):
-    """List all available source types."""
+def list_sources_cmd(available: bool, pretty: bool):
+    """List connected data sources, or all available source types with --available."""
+    if available:
+        _list_available_sources(pretty)
+        return
+
+    # Cloud mode — list sources from the API
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            sources = cloud.list_sources()
+            if not pretty:
+                click.echo(json.dumps(sources, indent=2, default=str))
+            elif not sources:
+                click.echo("No sources connected. Run `dinobase auth <source>` to connect one.")
+            else:
+                for src in sources:
+                    click.echo(f"  {src['name']:<20} type={src['type']}  ({src['auth_method']})")
+                click.echo(f"\n{len(sources)} source(s) connected.")
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+        return
+
+    # Local mode — show connected sources from config
+    from dinobase.config import get_sources
+
+    sources = get_sources()
+    if not sources:
+        if pretty:
+            click.echo("No sources connected. Run `dinobase add <source>` to add one.")
+            click.echo("Run `dinobase sources --available` to see all available source types.")
+        else:
+            click.echo(json.dumps([]))
+        return
+
+    if not pretty:
+        click.echo(json.dumps(list(sources.keys())))
+        return
+
+    for name, config in sources.items():
+        source_type = config.get("type", name)
+        click.echo(f"  {name:<20} type={source_type}")
+
+    click.echo(f"\n{len(sources)} source(s) connected.")
+    click.echo("Run `dinobase sources --available` to see all available source types.")
+
+
+def _list_available_sources(pretty: bool):
+    """Show all available source types from the registry."""
     from dinobase.sync.registry import SOURCES
 
     if not pretty:
-        sources = sorted(SOURCES.keys()) + ["parquet", "csv"]
-        click.echo(json.dumps(sources))
+        sources = []
+        for _name, entry in sorted(SOURCES.items()):
+            sources.append(entry.to_dict())
+        # Add file sources
+        sources.append({
+            "name": "parquet",
+            "description": "Parquet files (local, S3, GCS)",
+            "supports_oauth": False,
+            "credential_help": None,
+            "credentials": [{"name": "path", "cli_flag": "--path", "env_var": None, "prompt": "Path to parquet files", "secret": False}],
+            "pip_extra": None,
+        })
+        sources.append({
+            "name": "csv",
+            "description": "CSV files (local, S3, GCS)",
+            "supports_oauth": False,
+            "credential_help": None,
+            "credentials": [{"name": "path", "cli_flag": "--path", "env_var": None, "prompt": "Path to CSV files", "secret": False}],
+            "pip_extra": None,
+        })
+        click.echo(json.dumps(sources, indent=2))
         return
 
     saas = []
@@ -178,7 +621,8 @@ def list_sources_cmd(pretty: bool):
     cloud_storage = []
     for name, entry in sorted(SOURCES.items()):
         extra = f"  (pip install {entry.pip_extra})" if entry.pip_extra else ""
-        line = f"    {name:<20} {entry.description}{extra}"
+        oauth_tag = " [oauth]" if entry.supports_oauth else ""
+        line = f"    {name:<20} {entry.description}{oauth_tag}{extra}"
         if "sql_database" in entry.import_path:
             databases.append(line)
         elif "filesystem" in entry.import_path:
@@ -224,6 +668,17 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
       dinobase sync --schedule --interval 30m  # sync every 30m
       dinobase sync --max-workers 20   # sync up to 20 sources at once
     """
+    # Cloud mode — trigger server-side sync
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.trigger_sync(source_name)
+            click.echo(json.dumps(result, indent=2, default=str))
+        except RuntimeError as e:
+            click.echo(f"Sync failed: {e}", err=True)
+            sys.exit(1)
+        return
+
     from dinobase.config import get_sources, init_dinobase
     from dinobase.db import DinobaseDB
 
@@ -266,8 +721,9 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
     total_rows = 0
 
     for name, config in to_sync.items():
-        # Skip file sources
+        # Skip file sources with a clear message
         if config.get("type") in ("parquet", "csv"):
+            click.echo(f"  {name}: file source — no sync needed (query directly)")
             continue
         result = engine.sync(name, config)
         if result.status == "success":
@@ -285,9 +741,147 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
 
 
 @cli.command()
+@click.argument("source_name", required=False)
+@click.option("--stale", is_flag=True, help="Refresh only stale sources")
+@click.option("--pretty", is_flag=True, help="Human-readable output instead of JSON")
+def refresh(source_name: str | None, stale: bool, pretty: bool):
+    """Re-sync sources to get fresh data. Blocks until complete (typically 10-60s per source).
+
+    Without arguments, refreshes all sources. Use --stale to refresh
+    only sources that exceed their freshness threshold.
+
+    Examples:
+
+      dinobase refresh                 # refresh all sources
+      dinobase refresh stripe          # refresh one source
+      dinobase refresh --stale         # refresh only stale sources
+      dinobase refresh --stale --pretty  # human-readable output
+    """
+    # Cloud mode — trigger sync via API
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.trigger_sync(source_name)
+            if not pretty:
+                click.echo(json.dumps(result, indent=2, default=str))
+            else:
+                click.echo(f"Sync triggered for {result.get('sources', '?')} source(s).")
+        except RuntimeError as e:
+            click.echo(f"Refresh failed: {e}", err=True)
+            sys.exit(1)
+        return
+
+    from dinobase.config import get_sources, init_dinobase
+    from dinobase.db import DinobaseDB
+    from dinobase.query.engine import QueryEngine
+    from dinobase.sync.engine import SyncEngine
+
+    init_dinobase()
+    sources = get_sources()
+
+    if not sources:
+        click.echo("No sources configured. Run `dinobase add <source>` first.")
+        sys.exit(1)
+
+    db = DinobaseDB()
+    engine = QueryEngine(db)
+    sync_engine = SyncEngine(db)
+
+    # Determine which sources to refresh
+    if source_name:
+        if source_name not in sources:
+            click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+            db.close()
+            sys.exit(1)
+        to_refresh = {source_name: sources[source_name]}
+    elif stale:
+        to_refresh = {}
+        for name, config in sources.items():
+            if config.get("type") in ("parquet", "csv"):
+                continue
+            freshness = engine.get_freshness(name)
+            if freshness["is_stale"]:
+                to_refresh[name] = config
+        if not to_refresh:
+            if pretty:
+                click.echo("All sources are fresh.")
+            else:
+                click.echo(json.dumps({"status": "all_fresh"}))
+            db.close()
+            return
+    else:
+        # No args, no --stale: refresh all non-file sources
+        to_refresh = {
+            name: config for name, config in sources.items()
+            if config.get("type") not in ("parquet", "csv")
+        }
+        if not to_refresh:
+            click.echo("No syncable sources to refresh.")
+            db.close()
+            return
+
+    results = []
+    for name, config in to_refresh.items():
+        if config.get("type") in ("parquet", "csv"):
+            continue
+
+        if pretty:
+            freshness_before = engine.get_freshness(name)
+            click.echo(f"Refreshing {name} (was {freshness_before.get('age_human', '?')} old)...")
+
+        result = sync_engine.sync(name, config)
+        freshness_after = engine.get_freshness(name)
+
+        if pretty:
+            if result.status == "success":
+                click.echo(
+                    f"  {name}: synced {result.tables_synced} tables "
+                    f"({result.rows_synced:,} rows) — now fresh"
+                )
+            else:
+                click.echo(f"  {name}: ERROR — {result.error}", err=True)
+        else:
+            results.append({
+                "source": name,
+                "status": result.status,
+                "tables_synced": result.tables_synced,
+                "rows_synced": result.rows_synced,
+                "error": result.error,
+                "freshness": freshness_after,
+            })
+
+    if not pretty:
+        click.echo(json.dumps(results, indent=2, default=str))
+
+    db.close()
+
+
+@cli.command()
 @click.option("--pretty", is_flag=True, help="Human-readable output instead of JSON")
 def status(pretty: bool):
     """Show status of all sources."""
+    # Cloud mode
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.sync_status()
+            if not pretty:
+                click.echo(json.dumps(result, indent=2, default=str))
+            else:
+                for src in result:
+                    status_tag = f" [{src['status']}]" if src.get("status") else ""
+                    click.echo(f"\n{src['source']}:{status_tag}")
+                    click.echo(f"  Type: {src.get('type', '?')}")
+                    click.echo(f"  Tables: {src.get('tables_synced', 0)}")
+                    click.echo(f"  Rows: {src.get('rows_synced', 0):,}")
+                    if src.get("last_sync"):
+                        click.echo(f"  Last sync: {src['last_sync']}")
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
 
@@ -300,17 +894,34 @@ def status(pretty: bool):
         db.close()
         return
 
+    # Show storage location
+    from dinobase.config import is_cloud_storage, get_storage_url
+    if is_cloud_storage():
+        click.echo(f"Storage: {get_storage_url()}")
+    else:
+        from dinobase.config import get_db_path
+        click.echo(f"Storage: {get_db_path()} (local)")
+
     if not result["sources"]:
-        click.echo("No data loaded. Run `dinobase add <source>` then `dinobase sync`.")
+        click.echo("\nNo data loaded. Run `dinobase add <source>` then `dinobase sync`.")
         db.close()
         return
 
     for source in result["sources"]:
-        click.echo(f"\n{source['name']}:")
+        status_tag = ""
+        if source.get("is_stale"):
+            status_tag = " [STALE]"
+        elif source.get("age"):
+            status_tag = " [fresh]"
+
+        click.echo(f"\n{source['name']}:{status_tag}")
         click.echo(f"  Tables: {source['table_count']}")
         click.echo(f"  Total rows: {source['total_rows']:,}")
         if source["last_sync"]:
-            click.echo(f"  Last sync: {source['last_sync']}")
+            age_str = f" ({source['age']} ago)" if source.get("age") else ""
+            click.echo(f"  Last sync: {source['last_sync']}{age_str}")
+        if source.get("freshness_threshold"):
+            click.echo(f"  Freshness threshold: {source['freshness_threshold']}")
         for table in source["tables"]:
             click.echo(f"    {table['name']}: {table['rows']:,} rows")
 
@@ -323,6 +934,40 @@ def status(pretty: bool):
 @click.option("--max-rows", default=200, help="Maximum rows to return")
 def run_query(sql: str, pretty: bool, max_rows: int):
     """Execute a SQL query."""
+    # Cloud mode
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.query(sql, max_rows=max_rows)
+        except RuntimeError as e:
+            click.echo(json.dumps({"error": str(e)}, indent=2))
+            sys.exit(1)
+        # Fall through to the same display logic below
+        if "error" in result:
+            click.echo(json.dumps(result, indent=2, default=str))
+            sys.exit(1)
+        if not pretty:
+            click.echo(json.dumps(result, indent=2, default=str))
+            return
+        # Pretty-print (reuse same table rendering below)
+        if result.get("rows"):
+            columns = result["columns"]
+            rows = result["rows"]
+            widths = {col: len(col) for col in columns}
+            for row in rows:
+                for col in columns:
+                    val = str(row.get(col, ""))
+                    widths[col] = min(max(widths[col], len(val)), 40)
+            header = " | ".join(col.ljust(widths[col]) for col in columns)
+            click.echo(header)
+            click.echo("-+-".join("-" * widths[col] for col in columns))
+            for row in rows:
+                line = " | ".join(str(row.get(col, ""))[:40].ljust(widths[col]) for col in columns)
+                click.echo(line)
+        click.echo(f"\n{result.get('row_count', 0)} rows", err=True)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
 
@@ -376,6 +1021,31 @@ def run_query(sql: str, pretty: bool, max_rows: int):
 @click.option("--pretty", is_flag=True, help="Human-readable output instead of JSON")
 def describe_table(table: str, pretty: bool):
     """Describe a table's columns, types, annotations, and sample data."""
+    # Cloud mode
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.describe(table)
+        except RuntimeError as e:
+            click.echo(json.dumps({"error": str(e)}, indent=2))
+            sys.exit(1)
+        if not pretty:
+            click.echo(json.dumps(result, indent=2, default=str))
+            if "error" in result:
+                sys.exit(1)
+            return
+        if "error" in result:
+            click.echo(f"Error: {result['error']}", err=True)
+            sys.exit(1)
+        click.echo(f"\n{result.get('schema','')}.{result.get('table','')} ({result.get('row_count',0):,} rows)\n")
+        for col in result.get("columns", []):
+            line = f"  {col['name']:<25} {col['type']:<15}"
+            if col.get("description"):
+                line += f" -- {col['description']}"
+            click.echo(line)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
 
@@ -417,6 +1087,17 @@ def describe_table(table: str, pretty: bool):
 @click.argument("mutation_id")
 def confirm_mutation(mutation_id: str):
     """Confirm and execute a pending mutation."""
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.confirm(mutation_id)
+            click.echo(json.dumps(result, indent=2, default=str))
+        except RuntimeError as e:
+            click.echo(json.dumps({"error": str(e)}, indent=2))
+            sys.exit(1)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.mutations import MutationEngine
 
@@ -433,6 +1114,17 @@ def confirm_mutation(mutation_id: str):
 @click.argument("mutation_id")
 def cancel_mutation(mutation_id: str):
     """Cancel a pending mutation."""
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.cancel(mutation_id)
+            click.echo(json.dumps(result, indent=2, default=str))
+        except RuntimeError as e:
+            click.echo(json.dumps({"error": str(e)}, indent=2))
+            sys.exit(1)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.mutations import MutationEngine
 
@@ -441,11 +1133,25 @@ def cancel_mutation(mutation_id: str):
     result = engine.cancel(mutation_id)
     click.echo(json.dumps(result, indent=2, default=str))
     db.close()
+    if "error" in result:
+        sys.exit(1)
 
 
 @cli.command()
 def info():
     """Show database overview for agents. Use this to understand what data is available."""
+    # Cloud mode
+    cloud = _get_cloud_client()
+    if cloud:
+        try:
+            result = cloud.info()
+            click.echo(result.get("instructions", ""))
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+        return
+
+    _require_init()
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
     from dinobase.mcp.server import _build_instructions
@@ -477,34 +1183,61 @@ def serve(sync_schedule: bool, sync_interval: str):
 
 
 @cli.command("mcp-config")
-def mcp_config():
-    """Print the MCP configuration for Claude Desktop."""
+@click.argument("client", required=False, default=None,
+                type=click.Choice(["claude-desktop", "claude-code", "cursor"], case_sensitive=False))
+def mcp_config(client: str | None):
+    """Print MCP configuration for Claude Desktop, Claude Code, or Cursor.
+
+    Without arguments, prints configs for all three clients.
+
+    Examples:
+
+      dinobase mcp-config                # show all configs
+      dinobase mcp-config claude-desktop # Claude Desktop only
+      dinobase mcp-config claude-code    # Claude Code only
+      dinobase mcp-config cursor         # Cursor only
+    """
     import shutil
 
-    # Find the dinobase executable
+    # Build the server entry
     dinobase_path = shutil.which("dinobase")
     if dinobase_path:
-        config = {
-            "mcpServers": {
-                "dinobase": {
-                    "command": dinobase_path,
-                    "args": ["serve"],
-                }
-            }
+        server_entry = {
+            "command": dinobase_path,
+            "args": ["serve"],
         }
     else:
-        config = {
-            "mcpServers": {
-                "dinobase": {
-                    "command": sys.executable,
-                    "args": ["-m", "dinobase.mcp.server"],
-                }
-            }
+        server_entry = {
+            "command": sys.executable,
+            "args": ["-m", "dinobase.mcp.server"],
         }
 
-    click.echo("Add this to your Claude Desktop config:")
-    click.echo(f"(~/.claude/claude_desktop_config.json)\n")
-    click.echo(json.dumps(config, indent=2))
+    mcp_block = {"mcpServers": {"dinobase": server_entry}}
+
+    clients = {
+        "claude-desktop": {
+            "label": "Claude Desktop",
+            "path": "~/.claude/claude_desktop_config.json",
+        },
+        "claude-code": {
+            "label": "Claude Code",
+            "path": ".mcp.json (in your project root)",
+        },
+        "cursor": {
+            "label": "Cursor",
+            "path": ".cursor/mcp.json (in your project root)",
+        },
+    }
+
+    targets = [client] if client else list(clients.keys())
+
+    for i, name in enumerate(targets):
+        info = clients[name]
+        if i > 0:
+            click.echo()
+        click.echo(f"# {info['label']}")
+        click.echo(f"# Add to {info['path']}\n")
+        click.echo(json.dumps(mcp_block, indent=2))
 
 
 if __name__ == "__main__":

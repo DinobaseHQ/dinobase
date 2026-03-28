@@ -87,6 +87,83 @@ def build_auth_headers(
         return {}
 
 
+def _substitute(template: str, credentials: dict[str, str]) -> str:
+    """Replace {key} placeholders in a string with credential values."""
+    result = template
+    for key, value in credentials.items():
+        result = result.replace(f"{{{key}}}", value)
+    return result
+
+
+def build_client_auth_headers(
+    config: dict[str, Any],
+    credentials: dict[str, str],
+) -> dict[str, str]:
+    """Build auth headers from a resource-style YAML config's client.auth block.
+
+    Handles the format used by configs like intercom.yaml, chargebee.yaml:
+        client:
+          auth:
+            type: bearer
+            token: "{token}"
+    """
+    import base64
+
+    client = config.get("client", {})
+    auth = client.get("auth", {})
+    auth_type = auth.get("type", "")
+
+    if auth_type == "bearer":
+        token_template = auth.get("token", "")
+        token = _substitute(token_template, credentials)
+        return {"Authorization": f"Bearer {token}"}
+    elif auth_type == "http_basic":
+        username = _substitute(auth.get("username", ""), credentials)
+        password = _substitute(auth.get("password", ""), credentials)
+        encoded = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+    elif auth_type == "api_key_header":
+        header = auth.get("header", "Authorization")
+        value = _substitute(auth.get("value", ""), credentials)
+        return {header: value}
+
+    return {}
+
+
+def get_client_base_url(
+    config: dict[str, Any],
+    credentials: dict[str, str],
+) -> str:
+    """Get the base URL from a resource-style config, substituting credentials."""
+    base_url = config.get("client", {}).get("base_url", "")
+    return _substitute(base_url, credentials).rstrip("/")
+
+
+def get_client_headers(
+    config: dict[str, Any],
+    credentials: dict[str, str],
+) -> dict[str, str]:
+    """Get extra client headers (e.g., API version pins) from a resource-style config."""
+    headers = config.get("client", {}).get("headers", {})
+    return {k: _substitute(str(v), credentials) for k, v in headers.items()}
+
+
+def get_resource(config: dict[str, Any], table_name: str) -> dict[str, Any] | None:
+    """Find a resource by table name in a resource-style config."""
+    for resource in config.get("resources", []):
+        if resource.get("name") == table_name:
+            return resource
+    return None
+
+
+def get_resource_primary_key(config: dict[str, Any], resource: dict[str, Any]) -> str:
+    """Get the primary key for a resource (falls back to resource_defaults)."""
+    pk = resource.get("primary_key")
+    if pk:
+        return pk
+    return config.get("resource_defaults", {}).get("primary_key", "id")
+
+
 def build_request_body(
     endpoint: dict[str, Any],
     credentials: dict[str, str],

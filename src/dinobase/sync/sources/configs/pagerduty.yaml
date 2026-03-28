@@ -1,0 +1,173 @@
+name: pagerduty
+description: "PagerDuty (incidents, services, users, teams, escalation policies)"
+oauth: true
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: PAGERDUTY_API_KEY
+    prompt: "PagerDuty API key"
+    secret: true
+
+client:
+  base_url: https://api.pagerduty.com/
+  # PagerDuty REST API v2 requires this Accept header on every request.
+  headers:
+    Accept: "application/vnd.pagerduty+json;version=2"
+  # PagerDuty API keys use "Token token=<key>" not Bearer.
+  # OAuth 2.0 tokens use "Bearer <token>".
+  # Passing the raw key here; the auth header is built by the custom_header auth type.
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # PagerDuty offset pagination: request ?offset=N&limit=100&total=true.
+  # Responses include: offset (int), limit (int), more (bool), total (int).
+  # Max limit is 100.
+  paginator:
+    type: offset
+    limit: 100
+    limit_param: "limit"
+    offset_param: "offset"
+    more_key: "more"
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # Incidents: triggered, acknowledged, or resolved alerts.
+  # Supports incremental via 'since' query param (ISO 8601 datetime).
+  # Response: {"incidents": [...], "offset": 0, "limit": 100, "more": false, "total": 100}
+  - name: incidents
+    endpoint:
+      path: "incidents"
+      data_selector: "incidents"
+      params:
+        # Return all statuses so resolved incidents are included in full syncs.
+        # Valid values: triggered, acknowledged, resolved (comma-separated list).
+        "statuses[]": "triggered,acknowledged,resolved"
+    incremental:
+      cursor_path: "created_at"
+      param: "since"
+      initial_value: "2024-01-01T00:00:00Z"
+
+  # Services: represents an integration point (application, cluster, etc.).
+  # Response: {"services": [...], ...}
+  - name: services
+    endpoint:
+      path: "services"
+      data_selector: "services"
+
+  # Users: all users in the account.
+  # Response: {"users": [...], ...}
+  - name: users
+    endpoint:
+      path: "users"
+      data_selector: "users"
+
+  # Teams: groups of users that own services and escalation policies.
+  # Response: {"teams": [...], ...}
+  - name: teams
+    endpoint:
+      path: "teams"
+      data_selector: "teams"
+
+  # Escalation policies: define the on-call rotation for a service.
+  # Response: {"escalation_policies": [...], ...}
+  - name: escalation_policies
+    endpoint:
+      path: "escalation_policies"
+      data_selector: "escalation_policies"
+
+  # Schedules: on-call rotation schedules.
+  # Response: {"schedules": [...], ...}
+  - name: schedules
+    endpoint:
+      path: "schedules"
+      data_selector: "schedules"
+
+  # On-calls: current and upcoming on-call entries across all schedules.
+  # Does not use offset pagination (returns up to the limit in one page).
+  # Response: {"oncalls": [...], ...}
+  - name: on_calls
+    endpoint:
+      path: "oncalls"
+      data_selector: "oncalls"
+
+write_endpoints:
+  # Incidents — create, update, resolve
+
+  # Create a new incident. Requires a 'From' header (email of the user creating it)
+  # and a request body wrapping the incident under an "incident" key.
+  # Required fields: type ("incident"), title, service (reference with id + type).
+  - name: create_incident
+    description: "Create a new incident"
+    method: POST
+    path: "incidents"
+    body:
+      required:
+        - title
+        - service
+      optional:
+        - urgency
+        - body
+        - assignments
+        - escalation_policy
+        - incident_key
+
+  # Update an incident (title, urgency, assignments, status, etc.).
+  # Send status=acknowledged to acknowledge; status=resolved to resolve.
+  - name: update_incident
+    description: "Update an incident (title, urgency, assignments, status)"
+    method: PUT
+    path: "incidents/{id}"
+    body:
+      optional:
+        - title
+        - status
+        - urgency
+        - assignments
+        - escalation_policy
+        - body
+
+  # Resolve an incident by setting status=resolved via PUT.
+  # Convenience alias for update_incident with status=resolved.
+  - name: resolve_incident
+    description: "Resolve an incident (sets status to resolved)"
+    method: PUT
+    path: "incidents/{id}"
+    body:
+      required:
+        - status  # must be "resolved"
+
+  # Services — create, update
+
+  # Create a new service. Requires escalation_policy reference.
+  - name: create_service
+    description: "Create a new service"
+    method: POST
+    path: "services"
+    body:
+      required:
+        - name
+        - escalation_policy
+      optional:
+        - description
+        - auto_resolve_timeout
+        - acknowledgement_timeout
+        - status
+        - alert_creation
+
+  # Update an existing service.
+  - name: update_service
+    description: "Update an existing service"
+    method: PUT
+    path: "services/{id}"
+    body:
+      optional:
+        - name
+        - description
+        - auto_resolve_timeout
+        - acknowledgement_timeout
+        - status
+        - escalation_policy
+        - alert_creation

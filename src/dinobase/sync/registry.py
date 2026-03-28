@@ -40,6 +40,29 @@ class SourceEntry:
     metadata_openapi_url: str | None = None
     rest_api_config: dict[str, Any] | None = None  # for rest_api_source based connectors
     graphql_config: dict[str, Any] | None = None   # for graphql_source based connectors
+    supports_oauth: bool = False   # whether this source can be connected via OAuth
+    live_fetch_config: dict[str, Any] | None = None  # API config for single-record live fetch
+    credential_help: str | None = None  # where to find credentials (for agents)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a dict for JSON output (used by `dinobase sources --available`)."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "supports_oauth": self.supports_oauth,
+            "credential_help": self.credential_help,
+            "credentials": [
+                {
+                    "name": p.name,
+                    "cli_flag": p.cli_flag,
+                    "env_var": p.env_var,
+                    "prompt": p.prompt,
+                    "secret": p.secret,
+                }
+                for p in self.credentials
+            ],
+            "pip_extra": self.pip_extra,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +124,9 @@ def _register_rest_api(
 
 
 def _load_yaml_api_configs(apis_dir: Path | None = None) -> None:
-    """Load REST API and GraphQL source configs from YAML files in the apis/ directory."""
+    """Load REST API and GraphQL source configs from YAML files in the configs/ directory."""
     if apis_dir is None:
-        apis_dir = Path(__file__).parent / "sources" / "apis"
+        apis_dir = Path(__file__).parent / "sources" / "configs"
     if not apis_dir.is_dir():
         return
 
@@ -210,6 +233,8 @@ def _load_yaml_rest_api(cfg: dict[str, Any]) -> None:
         credentials=creds,
         pip_extra=cfg.get("pip_extra"),
         rest_api_config=rest_api_config,
+        supports_oauth=cfg.get("oauth", False),
+        credential_help=cfg.get("credential_help"),
     ))
 
 
@@ -231,6 +256,8 @@ def _load_yaml_graphql(cfg: dict[str, Any]) -> None:
         credentials=creds,
         pip_extra=cfg.get("pip_extra"),
         graphql_config=graphql_config,
+        supports_oauth=cfg.get("oauth", False),
+        credential_help=cfg.get("credential_help"),
     ))
 
 
@@ -251,6 +278,23 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("api_key", "--api-key", "HUBSPOT_API_KEY", "HubSpot private app token"),
     ],
+    supports_oauth=True,
+    credential_help="HubSpot > Settings > Integrations > Private Apps > create app > copy token",
+    live_fetch_config={
+        "client": {
+            "base_url": "https://api.hubapi.com",
+            "auth": {"type": "bearer", "token": "{api_key}"},
+        },
+        "resources": [
+            {"name": "contacts", "endpoint": {"path": "crm/v3/objects/contacts"}},
+            {"name": "companies", "endpoint": {"path": "crm/v3/objects/companies"}},
+            {"name": "deals", "endpoint": {"path": "crm/v3/objects/deals"}},
+            {"name": "tickets", "endpoint": {"path": "crm/v3/objects/tickets"}},
+            {"name": "products", "endpoint": {"path": "crm/v3/objects/products"}},
+            {"name": "quotes", "endpoint": {"path": "crm/v3/objects/quotes"}},
+            {"name": "owners", "endpoint": {"path": "crm/v3/owners"}},
+        ],
+    },
 ))
 
 _register(SourceEntry(
@@ -260,6 +304,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("pipedrive_api_key", "--api-key", "PIPEDRIVE_API_KEY", "Pipedrive API key"),
     ],
+    supports_oauth=True,
 ))
 
 _register(SourceEntry(
@@ -272,6 +317,7 @@ _register(SourceEntry(
         CredentialParam("password", "--password", "SALESFORCE_PASSWORD", "Salesforce password"),
         CredentialParam("security_token", "--security-token", "SALESFORCE_SECURITY_TOKEN", "Salesforce security token"),
     ],
+    supports_oauth=True,
 ))
 
 # --- Payments & Billing ---
@@ -283,7 +329,32 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("stripe_secret_key", "--api-key", "STRIPE_SECRET_KEY", "Stripe secret key"),
     ],
+    credential_help="Stripe Dashboard > Developers > API keys (use the Secret key, starts with sk_)",
     metadata_openapi_url="https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json",
+    live_fetch_config={
+        "client": {
+            "base_url": "https://api.stripe.com/v1",
+            "auth": {"type": "bearer", "token": "{stripe_secret_key}"},
+        },
+        "resources": [
+            {"name": "customers", "endpoint": {"path": "customers"}},
+            {"name": "customer", "endpoint": {"path": "customers"}},
+            {"name": "subscriptions", "endpoint": {"path": "subscriptions"}},
+            {"name": "subscription", "endpoint": {"path": "subscriptions"}},
+            {"name": "charges", "endpoint": {"path": "charges"}},
+            {"name": "charge", "endpoint": {"path": "charges"}},
+            {"name": "invoices", "endpoint": {"path": "invoices"}},
+            {"name": "invoice", "endpoint": {"path": "invoices"}},
+            {"name": "products", "endpoint": {"path": "products"}},
+            {"name": "product", "endpoint": {"path": "products"}},
+            {"name": "prices", "endpoint": {"path": "prices"}},
+            {"name": "price", "endpoint": {"path": "prices"}},
+            {"name": "payment_intents", "endpoint": {"path": "payment_intents"}},
+            {"name": "payment_intent", "endpoint": {"path": "payment_intents"}},
+            {"name": "events", "endpoint": {"path": "events"}},
+            {"name": "event", "endpoint": {"path": "events"}},
+        ],
+    },
 ))
 
 # --- Developer Tools ---
@@ -295,6 +366,19 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("access_token", "--token", "GITHUB_TOKEN", "GitHub personal access token"),
     ],
+    supports_oauth=True,
+    credential_help="GitHub > Settings > Developer settings > Personal access tokens > Generate",
+    live_fetch_config={
+        "client": {
+            "base_url": "https://api.github.com",
+            "auth": {"type": "bearer", "token": "{access_token}"},
+        },
+        "resources": [
+            {"name": "issues", "endpoint": {"path": "repos/{owner}/{repo}/issues"}},
+            {"name": "pull_requests", "endpoint": {"path": "repos/{owner}/{repo}/pulls"}},
+            {"name": "stargazers", "endpoint": {"path": "repos/{owner}/{repo}/stargazers"}},
+        ],
+    },
 ))
 
 _register(SourceEntry(
@@ -306,6 +390,18 @@ _register(SourceEntry(
         CredentialParam("email", "--email", "JIRA_EMAIL", "Jira account email", secret=False),
         CredentialParam("api_token", "--api-token", "JIRA_API_TOKEN", "Jira API token"),
     ],
+    credential_help="Atlassian account > Security > API tokens > Create API token",
+    live_fetch_config={
+        "client": {
+            "base_url": "https://{subdomain}.atlassian.net/rest/api/3",
+            "auth": {"type": "http_basic", "username": "{email}", "password": "{api_token}"},
+        },
+        "resources": [
+            {"name": "issues", "endpoint": {"path": "issue"}},
+            {"name": "projects", "endpoint": {"path": "project"}},
+            {"name": "users", "endpoint": {"path": "user"}},
+        ],
+    },
 ))
 
 # --- Communication ---
@@ -317,6 +413,8 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("access_token", "--token", "SLACK_TOKEN", "Slack bot token"),
     ],
+    supports_oauth=True,
+    credential_help="Slack API > Your Apps > OAuth & Permissions > Bot User OAuth Token",
 ))
 
 _register(SourceEntry(
@@ -326,6 +424,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("credentials", "--token", "ZENDESK_TOKEN", "Zendesk API token"),
     ],
+    supports_oauth=True,
 ))
 
 # --- E-commerce ---
@@ -338,6 +437,8 @@ _register(SourceEntry(
         CredentialParam("private_app_password", "--api-key", "SHOPIFY_API_KEY", "Shopify private app password"),
         CredentialParam("shop_url", "--shop-url", "SHOPIFY_SHOP_URL", "Shopify shop URL", secret=False),
     ],
+    supports_oauth=True,
+    credential_help="Shopify Admin > Settings > Apps > Develop apps > Create an app > API credentials",
 ))
 
 # --- Productivity ---
@@ -349,6 +450,21 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("api_key", "--api-key", "NOTION_API_KEY", "Notion integration token"),
     ],
+    supports_oauth=True,
+    credential_help="Notion > Settings > Connections > Develop or manage integrations > Create > copy token",
+    live_fetch_config={
+        "client": {
+            "base_url": "https://api.notion.com/v1",
+            "auth": {"type": "bearer", "token": "{api_key}"},
+            "headers": {"Notion-Version": "2022-06-28"},
+        },
+        "resources": [
+            {"name": "pages", "endpoint": {"path": "pages"}},
+            {"name": "databases", "endpoint": {"path": "databases"}},
+            {"name": "users", "endpoint": {"path": "users"}},
+            {"name": "blocks", "endpoint": {"path": "blocks"}},
+        ],
+    },
 ))
 
 _register(SourceEntry(
@@ -359,6 +475,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("access_token", "--token", "AIRTABLE_TOKEN", "Airtable personal access token"),
     ],
+    supports_oauth=True,
 ))
 
 _register(SourceEntry(
@@ -369,6 +486,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("credentials", "--credentials-file", "GOOGLE_APPLICATION_CREDENTIALS", "Path to service account JSON", secret=False),
     ],
+    supports_oauth=True,
 ))
 
 # --- Marketing ---
@@ -382,6 +500,7 @@ _register(SourceEntry(
         CredentialParam("access_token", "--token", "FACEBOOK_ACCESS_TOKEN", "Facebook access token"),
         CredentialParam("account_id", "--account-id", "FACEBOOK_ACCOUNT_ID", "Ad account ID", secret=False),
     ],
+    supports_oauth=True,
 ))
 
 _register(SourceEntry(
@@ -393,6 +512,7 @@ _register(SourceEntry(
         CredentialParam("property_id", "--property-id", "GA_PROPERTY_ID", "GA4 property ID", secret=False),
         CredentialParam("credentials", "--credentials-file", "GOOGLE_APPLICATION_CREDENTIALS", "Service account JSON", secret=False),
     ],
+    supports_oauth=True,
 ))
 
 _register(SourceEntry(
@@ -403,6 +523,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("credentials", "--credentials-file", "GOOGLE_APPLICATION_CREDENTIALS", "Service account JSON", secret=False),
     ],
+    supports_oauth=True,
 ))
 
 # --- Support ---
@@ -415,6 +536,18 @@ _register(SourceEntry(
         CredentialParam("api_secret_key", "--api-key", "FRESHDESK_API_KEY", "Freshdesk API key"),
         CredentialParam("domain", "--domain", "FRESHDESK_DOMAIN", "Freshdesk domain", secret=False),
     ],
+    live_fetch_config={
+        "client": {
+            "base_url": "https://{domain}.freshdesk.com/api/v2",
+            "auth": {"type": "http_basic", "username": "{api_secret_key}", "password": "X"},
+        },
+        "resources": [
+            {"name": "tickets", "endpoint": {"path": "tickets"}},
+            {"name": "contacts", "endpoint": {"path": "contacts"}},
+            {"name": "companies", "endpoint": {"path": "companies"}},
+            {"name": "agents", "endpoint": {"path": "agents"}},
+        ],
+    },
 ))
 
 # --- Data ---
@@ -482,6 +615,7 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("access_token", "--token", "ASANA_TOKEN", "Asana personal access token"),
     ],
+    supports_oauth=True,
 ))
 
 # --- Content ---
@@ -615,10 +749,10 @@ _register(SourceEntry(
 
 
 # ===================================================================
-# REST API SOURCES — loaded from YAML configs in sources/apis/
+# REST API SOURCES — loaded from YAML configs in sources/configs/
 # ===================================================================
 # All REST API sources are now defined in YAML files under
-# src/dinobase/sync/sources/apis/*.yaml and loaded by _load_yaml_api_configs().
+# src/dinobase/sync/sources/configs/*.yaml and loaded by _load_yaml_api_configs().
 # See CONNECTOR_SPEC skill (.claude/skills/build-connector/) for how to add more.
 
 # --- Incident Management ---
