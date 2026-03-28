@@ -1,0 +1,17 @@
+# Dinobase Cloud API — deployed to Fly.io
+
+app = 'dinobase-cloud'
+primary_region = 'sjc'
+
+[build]
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = 'shared-cpu-2x'
+  memory = '512'
