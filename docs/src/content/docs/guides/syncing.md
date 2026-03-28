@@ -109,6 +109,84 @@ dinobase query "
 " --pretty
 ```
 
+## Freshness thresholds
+
+Each source has a freshness threshold -- the maximum age before data is considered stale. The `list_sources` MCP tool and `dinobase status` show freshness for each source.
+
+**Defaults:**
+
+| Source category | Default threshold |
+|----------------|-------------------|
+| SaaS APIs (Stripe, HubSpot, etc.) | `1h` |
+| Databases (Postgres, MySQL, etc.) | `6h` |
+| File sources (parquet, CSV) | never stale |
+
+**Override per source:**
+
+```bash
+dinobase add stripe --api-key ... --freshness 30m
+```
+
+Or edit `config.yaml` directly:
+
+```yaml
+sources:
+  stripe:
+    type: stripe
+    credentials: { api_key: sk_... }
+    freshness_threshold: 30m
+```
+
+## Refreshing stale sources
+
+Use `dinobase refresh` to re-sync stale sources:
+
+```bash
+dinobase refresh stripe          # refresh one source
+dinobase refresh --stale         # refresh all stale sources
+dinobase refresh --stale --pretty
+```
+
+The `refresh` MCP tool lets agents trigger re-syncs:
+
+```
+Agent: refresh("stripe")
+→ Re-syncs stripe, returns new freshness info + row counts
+```
+
+## Live fetch for single records
+
+When data is stale and the agent queries a single record by primary key, Dinobase automatically calls the source API instead of returning stale parquet data. This is fully transparent -- the agent just writes SQL.
+
+```sql
+-- If intercom data is stale, this triggers GET /contacts/12345 on the Intercom API
+SELECT * FROM intercom.contacts WHERE id = '12345'
+```
+
+The response includes `"_freshness": "live"` so the agent knows it got real-time data:
+
+```json
+{
+  "columns": ["id", "name", "email"],
+  "rows": [{"id": "12345", "name": "Alice", "email": "alice@acme.com"}],
+  "_freshness": "live",
+  "_source": "intercom API"
+}
+```
+
+**When live fetch triggers:**
+- Source data is stale (exceeds freshness threshold)
+- Query is a simple `SELECT ... FROM schema.table WHERE id = 'value'`
+- The source has a YAML config in `sources/configs/`
+
+**When it does NOT trigger:**
+- Data is fresh (normal parquet query)
+- Query has JOINs, multiple conditions, or aggregations
+- Source has no YAML config (e.g., custom dlt sources)
+- API call fails (graceful fallback to parquet)
+
+This covers 55 sources with YAML configs including Intercom, Chargebee, Linear, Amplitude, and more.
+
 ## File sources skip sync
 
 File sources (parquet, CSV) create DuckDB views that read files at query time. They never appear in `dinobase sync` output:

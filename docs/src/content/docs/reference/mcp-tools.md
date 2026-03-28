@@ -1,9 +1,9 @@
 ---
 title: MCP Tools Reference
-description: Detailed reference for the three MCP tools exposed by Dinobase's MCP server.
+description: Detailed reference for the seven MCP tools exposed by Dinobase's MCP server.
 ---
 
-The Dinobase MCP server exposes six tools to agents.
+The Dinobase MCP server exposes seven tools to agents.
 
 ## `query`
 
@@ -48,6 +48,8 @@ Execute a SQL query against the database.
   "confirm": "Call confirm with mutation_id 'mut_abc123def456' to execute"
 }
 ```
+
+Responses include a `_freshness` field: `"synced"` for parquet data, `"live"` when the record was fetched directly from the source API (happens automatically for single-record lookups on stale sources).
 
 **Truncated (more rows than `max_rows`):**
 
@@ -95,11 +97,16 @@ None.
       ],
       "table_count": 4,
       "total_rows": 1255,
-      "last_sync": "2024-01-15 10:30:00"
+      "last_sync": "2024-01-15 10:30:00",
+      "age": "2h 15m",
+      "freshness_threshold": "1h",
+      "is_stale": true
     }
   ]
 }
 ```
+
+Freshness fields (`age`, `freshness_threshold`, `is_stale`) are included for API sources. File sources (parquet, CSV) omit these since they read live data.
 
 ---
 
@@ -233,6 +240,37 @@ Cancel a pending mutation without executing it.
 {
   "status": "cancelled",
   "mutation_id": "mut_abc123def456"
+}
+```
+
+---
+
+## `refresh`
+
+Re-sync a source to get fresh data. Use when data is stale before running queries.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source` | string | Yes | Name of the source to re-sync (e.g., `stripe`, `hubspot`) |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "tables_synced": 4,
+  "rows_synced": 12450,
+  "error": null,
+  "freshness": {
+    "last_sync": "2024-01-15 12:45:00",
+    "age_seconds": 5,
+    "age_human": "5s",
+    "threshold": 3600,
+    "threshold_human": "1h",
+    "is_stale": false
+  }
 }
 ```
 

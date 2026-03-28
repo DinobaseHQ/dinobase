@@ -56,7 +56,7 @@ The `.duckdb` file stores metadata and view definitions. Synced data lives in pa
 
 - FastMCP server with stdio transport
 - Dynamic instructions computed from database state
-- Six tools: `query`, `list_sources`, `describe`, `confirm`, `confirm_batch`, `cancel`
+- Seven tools: `query`, `list_sources`, `describe`, `confirm`, `confirm_batch`, `cancel`, `refresh`
 
 ### Click (CLI)
 
@@ -72,8 +72,10 @@ src/dinobase/
   config.py                # YAML config management
   db.py                    # DinobaseDB (DuckDB wrapper)
   query/
-    engine.py              # QueryEngine (execute, list, describe)
+    engine.py              # QueryEngine (execute, list, describe, live fetch)
     mutations.py           # MutationEngine (UPDATE/INSERT with preview/confirm)
+  fetch/
+    client.py              # LiveFetchClient (single-record API calls)
   sync/
     engine.py              # SyncEngine (dlt pipeline runner)
     scheduler.py           # SyncScheduler (concurrent, scheduled)
@@ -93,7 +95,7 @@ src/dinobase/
 
 ## Data flow
 
-### API source sync
+### API source sync (local mode)
 
 1. `SyncEngine.sync()` called with source name and config
 2. Source function loaded from registry via `get_source()`
@@ -102,6 +104,16 @@ src/dinobase/
 5. Metadata extracted from source API (OpenAPI, Properties API, pg_catalog)
 6. Annotations stored in `_dinobase.columns`
 7. Sync logged in `_dinobase.sync_log`
+
+### API source sync (cloud mode)
+
+1. `SyncEngine.sync()` called with source name and config
+2. Source function loaded from registry via `get_source()`
+3. dlt pipeline created with **filesystem destination** (writes parquet to S3/GCS/Azure)
+4. DuckDB views created over cloud parquet: `read_parquet('s3://.../*.parquet')`
+5. `_live_*` staging tables created in-memory for mutation overlay
+6. Metadata persisted to cloud as `_meta/*.parquet` files
+7. On server restart, metadata is loaded from cloud and views are recreated
 
 ### File source add
 
@@ -116,10 +128,11 @@ src/dinobase/
 1. SQL received via CLI or MCP
 2. `QueryEngine.execute()` checks if it's a mutation (UPDATE/INSERT)
 3. Mutations are routed to `MutationEngine` for preview/confirm flow
-4. SELECT queries run on DuckDB directly
-5. Results serialized to JSON-safe format
-6. Truncation applied if over `max_rows`
-7. Result returned with columns, rows, and metadata
+4. For SELECTs, check if it's a single-record lookup on a stale source
+5. If stale + ID lookup + YAML config exists: call source API directly (live fetch)
+6. Otherwise: run on DuckDB (parquet data)
+7. Results serialized to JSON-safe format with `_freshness` tag (`live` or `synced`)
+8. Truncation applied if over `max_rows`
 
 ### Mutation execution
 
@@ -142,9 +155,11 @@ The sync scheduler uses a thread pool (`ThreadPoolExecutor`):
 
 ## Design decisions
 
-**Parquet over direct DB writes:** Data stays portable. Swap `~/.dinobase/data/` for `s3://managed-bucket/` and the same queries work.
+**Parquet over direct DB writes:** Data stays portable. Switch to cloud storage with `--storage s3://...` and the same queries work.
 
 **DuckDB views for files:** Zero-copy reads mean file sources are instant. No sync step, no data duplication.
+
+**Cloud-native storage:** When configured with cloud storage, DuckDB runs in-memory and reads parquet files directly from S3/GCS/Azure via the `httpfs` extension. No local disk needed. Metadata is persisted as small parquet files in a `_meta/` prefix.
 
 **Registry-based sources:** Adding a source is a data entry, not a code change. The registry maps source names to dlt import paths and credential schemas.
 
