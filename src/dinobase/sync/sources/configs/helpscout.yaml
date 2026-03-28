@@ -1,0 +1,123 @@
+name: helpscout
+description: "Help Scout (conversations, customers, mailboxes, users, tags, teams, workflows)"
+oauth: true
+# Help Scout uses OAuth2 client credentials: POST app_id + app_secret to
+# https://api.helpscout.net/v2/oauth2/token to get a bearer token (valid 2 days).
+# The app_secret is used here as the bearer token placeholder; the runtime must
+# exchange credentials before use (token endpoint: POST /v2/oauth2/token with
+# grant_type=client_credentials, client_id={app_id}, client_secret={app_secret}).
+credentials:
+  - name: app_id
+    flag: "--app-id"
+    env: HELPSCOUT_APP_ID
+    prompt: "Help Scout App ID"
+    secret: false
+  - name: app_secret
+    flag: "--app-secret"
+    env: HELPSCOUT_APP_SECRET
+    prompt: "Help Scout App Secret"
+    secret: true
+
+client:
+  base_url: https://api.helpscout.net/v2/
+  auth:
+    type: bearer
+    token: "{app_secret}"
+  # Help Scout uses 1-based page-number pagination.
+  # Default page size: 25 for conversations, 50 for all other resources.
+  # Response includes page.totalPages and _links.next for navigation.
+  paginator:
+    type: page_number
+    page_param: page
+    base_page: 1
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+# HAL+JSON format: every list response wraps its records in _embedded.<resource>.
+resources:
+  # Conversations — incremental via modifiedSince, default page size 25.
+  - name: conversations
+    endpoint:
+      path: conversations
+      data_selector: "_embedded.conversations"
+      params:
+        status: all
+        modifiedSince: "{incremental.start_value}"
+    incremental:
+      cursor_path: modifiedAt
+      initial_value: "2000-01-01T00:00:00Z"
+
+  # Customers — incremental via modifiedSince, default page size 50.
+  - name: customers
+    endpoint:
+      path: customers
+      data_selector: "_embedded.customers"
+      params:
+        modifiedSince: "{incremental.start_value}"
+    incremental:
+      cursor_path: updatedAt
+      initial_value: "2000-01-01T00:00:00Z"
+
+  # Mailboxes — all inboxes the authenticated user can access.
+  - name: mailboxes
+    endpoint:
+      path: mailboxes
+      data_selector: "_embedded.mailboxes"
+
+  # Users — all agents/users on the account.
+  - name: users
+    endpoint:
+      path: users
+      data_selector: "_embedded.users"
+
+  # Tags — all tags used across inboxes, ordered alphabetically.
+  - name: tags
+    endpoint:
+      path: tags
+      data_selector: "_embedded.tags"
+
+  # Teams — all teams on the account.
+  - name: teams
+    endpoint:
+      path: teams
+      data_selector: "_embedded.teams"
+
+  # Workflows — automatic and manual workflows across inboxes.
+  - name: workflows
+    endpoint:
+      path: workflows
+      data_selector: "_embedded.workflows"
+
+write_endpoints:
+  # Create a new conversation (requires subject, type, mailboxId, status, customer, threads).
+  - name: create_conversation
+    description: "Create a new conversation"
+    method: POST
+    path: conversations
+
+  # Update a conversation using JSON Patch operations (op, path, value).
+  # Supports replacing subject, status, assignee, mailbox, primary customer.
+  - name: update_conversation
+    description: "Update a conversation (JSON Patch)"
+    method: PATCH
+    path: conversations/{conversationId}
+
+  # Delete a conversation permanently (returns 204 No Content).
+  - name: delete_conversation
+    description: "Delete a conversation"
+    method: DELETE
+    path: conversations/{conversationId}
+
+  # Create a new customer record.
+  - name: create_customer
+    description: "Create a new customer"
+    method: POST
+    path: customers
+
+  # Update a customer using JSON Patch operations (op, path, value array).
+  - name: update_customer
+    description: "Update a customer (JSON Patch)"
+    method: PATCH
+    path: customers/{customerId}

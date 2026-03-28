@@ -1,0 +1,167 @@
+name: clickup
+description: "ClickUp (tasks, spaces, lists, folders, goals, teams)"
+oauth: true
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: CLICKUP_API_KEY
+    prompt: "ClickUp API token"
+    secret: true
+
+client:
+  base_url: "https://api.clickup.com/api/v2/"
+  auth:
+    type: bearer
+    token: "{api_key}"
+  # ClickUp uses page-based (0-indexed) pagination for tasks.
+  # Responses are capped at 100 items per page; stop when the page returns
+  # fewer than 100 items (no explicit next-page indicator in the body).
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size: 100
+    base_page: 0
+    stop_after_empty_page: true
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+
+resources:
+  # ─── Workspaces (called "teams" in the ClickUp API) ──────────────────────
+  # GET /team  →  { "teams": [...] }
+  # No pagination: returns all workspaces for the authenticated user.
+  - name: teams
+    endpoint:
+      path: "team"
+      data_selector: "teams"
+      paginator: none
+
+  # ─── Spaces ───────────────────────────────────────────────────────────────
+  # GET /team/{team_id}/space  →  { "spaces": [...] }
+  # Requires team_id path variable (resolved from the teams resource above).
+  - name: spaces
+    endpoint:
+      path: "team/{team_id}/space"
+      data_selector: "spaces"
+      paginator: none
+    params:
+      archived: "false"
+
+  # ─── Folders ──────────────────────────────────────────────────────────────
+  # GET /space/{space_id}/folder  →  { "folders": [...] }
+  # Requires space_id path variable (resolved from the spaces resource).
+  - name: folders
+    endpoint:
+      path: "space/{space_id}/folder"
+      data_selector: "folders"
+      paginator: none
+    params:
+      archived: "false"
+
+  # ─── Lists ────────────────────────────────────────────────────────────────
+  # GET /folder/{folder_id}/list  →  { "lists": [...] }
+  # Requires folder_id path variable (resolved from the folders resource).
+  - name: lists
+    endpoint:
+      path: "folder/{folder_id}/list"
+      data_selector: "lists"
+      paginator: none
+    params:
+      archived: "false"
+
+  # ─── Tasks (most important resource) ─────────────────────────────────────
+  # GET /list/{list_id}/task  →  { "tasks": [...] }
+  # Responses are capped at 100 per page; page param is 0-indexed.
+  # Supports incremental sync via date_updated_gt (Unix ms timestamp).
+  # include_closed=true ensures closed tasks are included.
+  # subtasks=true fetches nested subtasks in the same call.
+  - name: tasks
+    endpoint:
+      path: "list/{list_id}/task"
+      data_selector: "tasks"
+    params:
+      include_closed: "true"
+      subtasks: "true"
+      order_by: "updated"
+    incremental:
+      cursor_path: date_updated
+      param: date_updated_gt
+      initial_value: "0"
+
+  # ─── Goals ────────────────────────────────────────────────────────────────
+  # GET /team/{team_id}/goal  →  { "goals": [...] }
+  # Requires team_id path variable (resolved from the teams resource).
+  - name: goals
+    endpoint:
+      path: "team/{team_id}/goal"
+      data_selector: "goals"
+      paginator: none
+
+  # ─── Tags ─────────────────────────────────────────────────────────────────
+  # GET /space/{space_id}/tag  →  { "tags": [...] }
+  # Requires space_id path variable (resolved from the spaces resource).
+  - name: tags
+    endpoint:
+      path: "space/{space_id}/tag"
+      data_selector: "tags"
+      paginator: none
+
+  # ─── Members ──────────────────────────────────────────────────────────────
+  # GET /list/{list_id}/member  →  { "members": [...] }
+  # Returns workspace members who have explicit access to a given list.
+  # Requires list_id path variable (resolved from the lists resource).
+  - name: members
+    endpoint:
+      path: "list/{list_id}/member"
+      data_selector: "members"
+      paginator: none
+
+write_endpoints:
+  # ─── Tasks ────────────────────────────────────────────────────────────────
+  - name: create_task
+    description: "Create a new task in a list"
+    method: POST
+    path: "list/{list_id}/task"
+
+  - name: update_task
+    description: "Update an existing task"
+    method: PUT
+    path: "task/{task_id}"
+
+  - name: delete_task
+    description: "Delete a task"
+    method: DELETE
+    path: "task/{task_id}"
+
+  # ─── Lists ────────────────────────────────────────────────────────────────
+  - name: create_list
+    description: "Create a new list inside a folder"
+    method: POST
+    path: "folder/{folder_id}/list"
+
+  - name: update_list
+    description: "Update an existing list"
+    method: PUT
+    path: "list/{list_id}"
+
+  - name: delete_list
+    description: "Delete a list"
+    method: DELETE
+    path: "list/{list_id}"
+
+  # ─── Goals ────────────────────────────────────────────────────────────────
+  - name: create_goal
+    description: "Create a new goal in a workspace"
+    method: POST
+    path: "team/{team_id}/goal"
+
+  - name: update_goal
+    description: "Update an existing goal"
+    method: PUT
+    path: "goal/{goal_id}"
+
+  - name: delete_goal
+    description: "Delete a goal"
+    method: DELETE
+    path: "goal/{goal_id}"

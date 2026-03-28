@@ -1,0 +1,265 @@
+name: gusto
+description: "Gusto HR & payroll (companies, employees, payrolls, contractor_payments, pay_schedules, locations, departments, jobs, benefits)"
+oauth: true
+# Gusto uses OAuth 2.0 Bearer token authentication.
+# Obtain an access token via POST /oauth/token (authorization_code or refresh_token grant).
+# All company-scoped endpoints require the company_uuid, which is returned from
+# GET /v1/token_info after authenticating.
+credentials:
+  - name: access_token
+    flag: "--token"
+    env: GUSTO_ACCESS_TOKEN
+    prompt: "Gusto OAuth access token"
+    secret: true
+  - name: company_id
+    flag: "--company-id"
+    env: GUSTO_COMPANY_ID
+    prompt: "Gusto company UUID (from GET /v1/token_info)"
+    secret: false
+
+client:
+  base_url: "https://api.gusto.com/"
+  auth:
+    type: bearer
+    token: "{access_token}"
+  # Gusto uses two pagination styles depending on the endpoint:
+  #
+  # 1. Offset/page-based (most collection endpoints):
+  #    Query params: ?page=N&per=100
+  #    Response headers: X-Page, X-Per-Page, X-Total-Count, X-Total-Pages
+  #    Stop when X-Page >= X-Total-Pages.
+  #
+  # 2. Cursor-based (real-time data models):
+  #    Query params: ?starting_after_uuid={last_uuid}&limit=100
+  #    Response header: X-Has-Next-Page (true|false)
+  #    Pass the UUID of the last record in the page as starting_after_uuid.
+  #
+  # Most resources below use page-based pagination (the default).
+  paginator:
+    type: page_number
+    page_param: "page"
+    page_size_param: "per"
+    page_size: 100
+    base_page: 1
+    total_pages_header: "X-Total-Pages"
+  # Gusto requires an API version header. Pin to the current stable version.
+  headers:
+    X-Gusto-API-Version: "2024-04-01"
+
+resource_defaults:
+  primary_key: uuid
+  write_disposition: merge
+
+resources:
+
+  # ── Companies ───────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id} — returns a single company object (no pagination).
+  # Scope required: company_details:read
+  # Response is the company object directly (not wrapped in an array).
+  - name: companies
+    endpoint:
+      path: "v1/companies/{company_id}"
+      params:
+        company_id: "{company_id}"
+    write_disposition: replace
+
+  # ── Employees ───────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/employees — page-based pagination, default 25/page.
+  # Scope required: employees:read
+  # Optional: include[]=custom_fields to expand custom attribute data.
+  # Response is a JSON array of employee objects (bare array, no wrapper key).
+  # Supports ?terminated= to filter active vs. terminated employees.
+  - name: employees
+    endpoint:
+      path: "v1/companies/{company_id}/employees"
+      params:
+        company_id: "{company_id}"
+        per: 100
+    incremental:
+      cursor_path: "updated_at"
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # ── Payrolls ────────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/payrolls — returns list of payrolls.
+  # Scope required: payrolls:read
+  # Supports ?start_date and ?end_date filters (ISO 8601 dates).
+  # Note: start_date and end_date must be no more than 1 year apart;
+  #       end_date can be at most 3 months in the future.
+  # Response is a JSON array of payroll objects.
+  - name: payrolls
+    endpoint:
+      path: "v1/companies/{company_id}/payrolls"
+      params:
+        company_id: "{company_id}"
+        per: 100
+    incremental:
+      cursor_path: "processed_date"
+      initial_value: "2020-01-01"
+
+  # ── Contractor Payments ──────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/contractor_payments — list contractor payments.
+  # Scope required: payrolls:read
+  # Returns an object containing individual contractor payments within a time period
+  # including totals. Response key is "contractor_payments".
+  # Supports ?start_date and ?end_date query params.
+  - name: contractor_payments
+    endpoint:
+      path: "v1/companies/{company_id}/contractor_payments"
+      data_selector: "contractor_payments"
+      params:
+        company_id: "{company_id}"
+        per: 100
+    incremental:
+      cursor_path: "date"
+      initial_value: "2020-01-01"
+
+  # ── Pay Schedules ────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/pay_schedules — list all pay schedules.
+  # Scope required: pay_schedules:read
+  # Typically a small collection (no cursor pagination needed in practice).
+  # Response is a JSON array of pay schedule objects.
+  - name: pay_schedules
+    endpoint:
+      path: "v1/companies/{company_id}/pay_schedules"
+      params:
+        company_id: "{company_id}"
+    write_disposition: replace
+
+  # ── Locations ────────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/locations — list all company locations.
+  # Scope required: company_locations:read
+  # Response is a JSON array of location objects.
+  # Page-based pagination applies.
+  - name: locations
+    endpoint:
+      path: "v1/companies/{company_id}/locations"
+      params:
+        company_id: "{company_id}"
+        per: 100
+
+  # ── Departments ──────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/departments — list all departments.
+  # Scope required: departments:read
+  # Response is a JSON array of department objects.
+  # Each department object includes a "title" and "uuid".
+  - name: departments
+    endpoint:
+      path: "v1/companies/{company_id}/departments"
+      params:
+        company_id: "{company_id}"
+        per: 100
+
+  # ── Jobs ─────────────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/jobs — list all jobs across employees.
+  # Alternatively available per-employee at /v1/employees/{employee_id}/jobs.
+  # Scope required: jobs:read
+  # Compensation details require additional compensations:read scope.
+  # Response is a JSON array of job objects; each includes rate, payment_unit.
+  - name: jobs
+    endpoint:
+      path: "v1/companies/{company_id}/jobs"
+      params:
+        company_id: "{company_id}"
+        per: 100
+        include: "compensations"
+
+  # ── Benefits ─────────────────────────────────────────────────────────────────
+  # GET /v1/companies/{company_id}/company_benefits — list all company benefits.
+  # Scope required: company_benefits:read
+  # Benefits with Protected Health Information also need company_benefits:read:phi.
+  # Response is a JSON array of company benefit objects.
+  - name: benefits
+    endpoint:
+      path: "v1/companies/{company_id}/company_benefits"
+      params:
+        company_id: "{company_id}"
+        per: 100
+
+write_endpoints:
+
+  # ── Employees ─────────────────────────────────────────────────────────────────
+
+  - name: create_employee
+    description: "Create a new employee for the company. Required: first_name, last_name, email (or ssn). Returns the created employee object."
+    method: POST
+    path: "v1/companies/{company_id}/employees"
+
+  - name: update_employee
+    description: "Update an existing employee by UUID. Accepts partial updates; only provided fields are changed."
+    method: PUT
+    path: "v1/employees/{employee_id}"
+
+  - name: delete_employee
+    description: "Delete an onboarding (not-yet-active) employee. Only valid for employees who have not been fully onboarded."
+    method: DELETE
+    path: "v1/employees/{employee_id}"
+
+  # ── Contractor Payments ────────────────────────────────────────────────────
+
+  - name: create_contractor_payment
+    description: "Create a new contractor payment for the company. Required: contractor_uuid, date, payment_method, wage or hours + hourly_rate."
+    method: POST
+    path: "v1/companies/{company_id}/contractor_payments"
+
+  - name: cancel_contractor_payment
+    description: "Cancel a contractor payment by UUID. Only four-day processing window payments can be cancelled."
+    method: DELETE
+    path: "v1/companies/{company_id}/contractor_payments/{contractor_payment_id}"
+
+  # ── Locations ─────────────────────────────────────────────────────────────
+
+  - name: create_location
+    description: "Create a new company location. Required: phone_number, street_1, city, state, zip."
+    method: POST
+    path: "v1/companies/{company_id}/locations"
+
+  - name: update_location
+    description: "Update an existing location by UUID."
+    method: PUT
+    path: "v1/locations/{location_id}"
+
+  # ── Departments ───────────────────────────────────────────────────────────
+
+  - name: create_department
+    description: "Create a new department for the company. Required: title."
+    method: POST
+    path: "v1/companies/{company_id}/departments"
+
+  - name: update_department
+    description: "Update an existing department by UUID."
+    method: PUT
+    path: "v1/departments/{department_id}"
+
+  - name: delete_department
+    description: "Delete a department by UUID. Department must have no employees assigned."
+    method: DELETE
+    path: "v1/departments/{department_id}"
+
+  # ── Jobs ──────────────────────────────────────────────────────────────────
+
+  - name: create_job
+    description: "Create a new job for an employee. Required: title, hire_date."
+    method: POST
+    path: "v1/employees/{employee_id}/jobs"
+
+  - name: update_job
+    description: "Update an existing job by UUID."
+    method: PUT
+    path: "v1/jobs/{job_id}"
+
+  - name: delete_job
+    description: "Delete a job by UUID. The employee's primary job cannot be deleted."
+    method: DELETE
+    path: "v1/jobs/{job_id}"
+
+  # ── Benefits ──────────────────────────────────────────────────────────────
+
+  - name: create_company_benefit
+    description: "Create a new company benefit. Required: benefit_type_id, active."
+    method: POST
+    path: "v1/companies/{company_id}/company_benefits"
+
+  - name: update_company_benefit
+    description: "Update an existing company benefit by UUID."
+    method: PUT
+    path: "v1/company_benefits/{company_benefit_id}"

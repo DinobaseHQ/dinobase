@@ -54,26 +54,42 @@ def _build_instructions(engine: QueryEngine) -> str:
         "",
     ]
 
-    # Source overview — names, table counts, row counts. No columns.
+    # Source overview — names, table counts, row counts, freshness.
     lines.append("Connected sources:")
+    has_stale = False
     for source in sources:
         table_names = [t["name"] for t in source["tables"]]
-        lines.append(
+        line = (
             f"  {source['name']}: {', '.join(table_names)} "
             f"({source['total_rows']:,} rows total)"
         )
+        if source.get("is_stale"):
+            line += f" — STALE (last sync: {source.get('age', '?')} ago)"
+            has_stale = True
+        elif source.get("age"):
+            line += f" — fresh ({source['age']} ago)"
+        lines.append(line)
     lines.append("")
 
     # How to use the tools
     lines.append("How to work with this database:")
-    lines.append("1. Use `list_sources` to see what data is available")
+    lines.append("1. Use `list_sources` to see what data is available (includes freshness)")
     lines.append("2. Use `describe` on a table to see its columns, types, annotations, and sample data")
     lines.append("3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)")
+    if has_stale:
+        lines.append("4. Use `refresh` to re-sync a stale source before querying")
     lines.append("")
     lines.append(
         "Cross-source joins work via shared columns. Use `describe` to find join keys — "
         "columns annotated as join keys or with matching names across sources (e.g., email)."
     )
+    if has_stale:
+        lines.append("")
+        lines.append(
+            "Some sources are stale. For bulk queries, use `refresh` to re-sync. "
+            "For single-record lookups by ID on stale sources, the system will "
+            "automatically fetch live data from the source API."
+        )
 
     return "\n".join(lines)
 
@@ -100,10 +116,10 @@ def _create_server() -> FastMCP:
 
     @server.tool()
     def query(
-        sql: Annotated[str, Field(description="SQL query to execute (DuckDB dialect). Reference tables as schema.table, e.g. salesforce.opportunities")],
+        sql: Annotated[str, Field(description="SQL query to execute (DuckDB dialect). Reference tables as schema.table, e.g. salesforce.opportunities. For mutations (UPDATE/INSERT/DELETE), append --force to skip confirmation and execute immediately.")],
         max_rows: Annotated[int, Field(description="Maximum rows to return", ge=1, le=10000)] = 200,
     ) -> str:
-        """Execute a SQL query against the database. Use `describe` first to understand table columns and data types."""
+        """Execute a SQL query against the database. Use `describe` first to understand table columns and data types. Mutations return a preview by default — append --force to the SQL to execute immediately, or call confirm() with the mutation_id."""
         eng = _get_engine()
         result = eng.execute(sql, max_rows=max_rows)
         return json.dumps(result, indent=2, default=str)
@@ -128,7 +144,7 @@ def _create_server() -> FastMCP:
     def confirm(
         mutation_id: Annotated[str, Field(description="The mutation_id from a pending mutation to confirm and execute")],
     ) -> str:
-        """Confirm and execute a pending mutation. Mutations (UPDATE/INSERT) return a preview first — call this with the mutation_id to actually execute it."""
+        """Confirm and execute a pending mutation. Mutations (UPDATE/INSERT/DELETE) return a preview first — call this with the mutation_id to actually execute it. Alternatively, use --force in the SQL to skip this step."""
         from dinobase.query.mutations import MutationEngine
         eng = _get_engine()
         mutation_engine = MutationEngine(eng.db)
@@ -156,6 +172,41 @@ def _create_server() -> FastMCP:
         mutation_engine = MutationEngine(eng.db)
         result = mutation_engine.cancel(mutation_id)
         return json.dumps(result, indent=2, default=str)
+
+    @server.tool()
+    def refresh(
+        source: Annotated[str, Field(description="Name of the source to re-sync (e.g. 'stripe', 'hubspot')")],
+    ) -> str:
+        """Re-sync a source to get fresh data. Use when data is stale or you need up-to-date results before querying. This call blocks until sync completes (typically 10-60 seconds depending on the source size)."""
+        from dinobase.config import load_config
+        from dinobase.sync.engine import SyncEngine
+
+        eng = _get_engine()
+
+        # Look up source config
+        config = load_config()
+        sources_config = config.get("sources", {})
+        if source not in sources_config:
+            return json.dumps({"error": f"Source '{source}' not found"})
+
+        source_config = sources_config[source]
+        if source_config.get("type") in ("parquet", "csv"):
+            return json.dumps({"error": f"File source '{source}' reads live data — no sync needed"})
+
+        # Run sync
+        sync_engine = SyncEngine(eng.db)
+        sync_result = sync_engine.sync(source, source_config)
+
+        # Get updated freshness
+        freshness = eng.get_freshness(source)
+
+        return json.dumps({
+            "status": sync_result.status,
+            "tables_synced": sync_result.tables_synced,
+            "rows_synced": sync_result.rows_synced,
+            "error": sync_result.error,
+            "freshness": freshness,
+        }, indent=2, default=str)
 
     return server
 

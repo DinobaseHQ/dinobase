@@ -80,18 +80,167 @@ CREATE TABLE IF NOT EXISTS {META_SCHEMA}.mutations (
 """
 
 
+_META_TABLES = ["sync_log", "tables", "columns", "live_rows", "mutations"]
+
+
 class DinobaseDB:
-    def __init__(self, db_path: Path | str | None = None):
-        self.db_path = str(db_path or get_db_path())
+    def __init__(self, db_path: Path | str | None = None, storage_url: str | None = None):
+        # Auto-detect cloud mode from config when no explicit args
+        if storage_url is None and db_path is None:
+            from dinobase.config import get_storage_config
+            sc = get_storage_config()
+            if sc["type"] != "local":
+                storage_url = sc["url"]
+
+        self.storage_url = storage_url
+        self.is_cloud = storage_url is not None
+        self.db_path = str(db_path or (":memory:" if self.is_cloud else get_db_path()))
         self._conn: duckdb.DuckDBPyConnection | None = None
 
     @property
     def conn(self) -> duckdb.DuckDBPyConnection:
         if self._conn is None:
-            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-            self._conn = duckdb.connect(self.db_path)
+            if self.is_cloud:
+                self._conn = duckdb.connect(":memory:")
+                self._setup_cloud()
+            else:
+                Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+                self._conn = duckdb.connect(self.db_path)
             self._init_metadata()
+            if self.is_cloud:
+                self._load_cloud_metadata()
+                self._register_cloud_views()
         return self._conn
+
+    def _setup_cloud(self) -> None:
+        """Install DuckDB extensions and configure cloud credentials."""
+        import os
+        from dinobase.config import _storage_type_from_url
+
+        storage_type = _storage_type_from_url(self.storage_url) if self.storage_url else "s3"
+
+        if storage_type == "azure":
+            self._setup_azure()
+        else:
+            self._setup_httpfs(storage_type)
+
+    def _setup_httpfs(self, storage_type: str) -> None:
+        """Configure httpfs for S3 or GCS."""
+        import os
+
+        self._conn.execute("INSTALL httpfs")
+        self._conn.execute("LOAD httpfs")
+
+        if storage_type == "gcs":
+            # GCS via S3-compatible interface — needs HMAC keys
+            self._conn.execute("SET s3_endpoint = 'storage.googleapis.com'")
+            if os.environ.get("GCS_HMAC_KEY_ID"):
+                self._conn.execute(f"SET s3_access_key_id = '{os.environ['GCS_HMAC_KEY_ID']}'")
+            if os.environ.get("GCS_HMAC_SECRET"):
+                self._conn.execute(f"SET s3_secret_access_key = '{os.environ['GCS_HMAC_SECRET']}'")
+        else:
+            # S3
+            if os.environ.get("AWS_ACCESS_KEY_ID"):
+                self._conn.execute(f"SET s3_access_key_id = '{os.environ['AWS_ACCESS_KEY_ID']}'")
+            if os.environ.get("AWS_SECRET_ACCESS_KEY"):
+                self._conn.execute(f"SET s3_secret_access_key = '{os.environ['AWS_SECRET_ACCESS_KEY']}'")
+            if os.environ.get("AWS_DEFAULT_REGION"):
+                self._conn.execute(f"SET s3_region = '{os.environ['AWS_DEFAULT_REGION']}'")
+            elif os.environ.get("AWS_REGION"):
+                self._conn.execute(f"SET s3_region = '{os.environ['AWS_REGION']}'")
+            # S3-compatible endpoints (MinIO, R2, etc.)
+            if os.environ.get("S3_ENDPOINT"):
+                self._conn.execute(f"SET s3_endpoint = '{os.environ['S3_ENDPOINT']}'")
+                self._conn.execute("SET s3_url_style = 'path'")
+
+    def _setup_azure(self) -> None:
+        """Configure Azure Blob Storage extension."""
+        import os
+
+        self._conn.execute("INSTALL azure")
+        self._conn.execute("LOAD azure")
+
+        if os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
+            self._conn.execute(
+                f"SET azure_storage_connection_string = "
+                f"'{os.environ['AZURE_STORAGE_CONNECTION_STRING']}'"
+            )
+        else:
+            if os.environ.get("AZURE_STORAGE_ACCOUNT_NAME"):
+                self._conn.execute(
+                    f"SET azure_account_name = "
+                    f"'{os.environ['AZURE_STORAGE_ACCOUNT_NAME']}'"
+                )
+            if os.environ.get("AZURE_STORAGE_ACCOUNT_KEY"):
+                self._conn.execute(
+                    f"SET azure_account_key = "
+                    f"'{os.environ['AZURE_STORAGE_ACCOUNT_KEY']}'"
+                )
+
+    def _load_cloud_metadata(self) -> None:
+        """Load metadata tables from cloud parquet files."""
+        for table in _META_TABLES:
+            url = f"{self.storage_url}_meta/{table}.parquet"
+            try:
+                self._conn.execute(
+                    f"INSERT INTO {META_SCHEMA}.{table} "
+                    f"SELECT * FROM read_parquet('{url}')"
+                )
+            except Exception:
+                pass  # File doesn't exist yet (fresh install)
+
+    def _register_cloud_views(self) -> None:
+        """Create DuckDB views over cloud parquet data for all known sources."""
+        rows = self._conn.execute(
+            f"SELECT DISTINCT source_name, table_name FROM {META_SCHEMA}.tables"
+        ).fetchall()
+
+        schemas_created: set[str] = set()
+        for source_name, table_name in rows:
+            if source_name not in schemas_created:
+                self._conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{source_name}"')
+                schemas_created.add(source_name)
+
+            parquet_glob = f"{self.storage_url}data/{source_name}/{table_name}/*.parquet"
+            staging_table = f"_live_{table_name}"
+
+            try:
+                # Create empty staging table with same schema as parquet
+                self._conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{source_name}"."{staging_table}" '
+                    f"AS SELECT * FROM read_parquet('{parquet_glob}') WHERE false"
+                )
+                # Create view merging parquet + staging
+                self._conn.execute(
+                    f'CREATE OR REPLACE VIEW "{source_name}"."{table_name}" AS '
+                    f'SELECT * FROM "{source_name}"."{staging_table}" '
+                    f"UNION ALL "
+                    f"SELECT * FROM read_parquet('{parquet_glob}') "
+                    f"WHERE CAST(id AS VARCHAR) NOT IN ("
+                    f'  SELECT CAST(id AS VARCHAR) FROM "{source_name}"."{staging_table}"'
+                    f")"
+                )
+            except Exception:
+                pass  # Parquet files may not exist yet
+
+    def save_cloud_metadata(self) -> None:
+        """Persist metadata tables to cloud storage as parquet files."""
+        if not self.is_cloud or self._conn is None:
+            return
+        for table in _META_TABLES:
+            self._save_meta_table(table)
+
+    def _save_meta_table(self, table: str) -> None:
+        """Save a single metadata table to cloud parquet."""
+        url = f"{self.storage_url}_meta/{table}.parquet"
+        try:
+            self._conn.execute(
+                f"COPY (SELECT * FROM {META_SCHEMA}.{table}) "
+                f"TO '{url}' (FORMAT PARQUET)"
+            )
+        except Exception as e:
+            import sys
+            print(f"[cloud] failed to save {table}: {e}", file=sys.stderr)
 
     def _init_metadata(self) -> None:
         for statement in INIT_SQL.split(";"):
@@ -173,6 +322,8 @@ class DinobaseDB:
             f"WHERE id = ?",
             [status, tables_synced, rows_synced, error_message, sync_id],
         )
+        if self.is_cloud:
+            self._save_meta_table("sync_log")
 
     def update_table_metadata(
         self,
@@ -223,6 +374,9 @@ class DinobaseDB:
                         col_ann.get("note"),
                     ],
                 )
+        if self.is_cloud:
+            self._save_meta_table("tables")
+            self._save_meta_table("columns")
 
     def get_column_annotations(self, schema_name: str, table_name: str) -> dict[str, dict[str, str | None]]:
         """Get annotations for all columns in a table. Returns {col_name: {description, note}}."""
@@ -259,6 +413,8 @@ class DinobaseDB:
             f"mutation_id = excluded.mutation_id",
             [source_name, table_name, record_id, json.dumps(row_data, default=str), mutation_id],
         )
+        if self.is_cloud:
+            self._save_meta_table("live_rows")
 
     def get_live_row_ids(self, source_name: str, table_name: str) -> list[str]:
         """Get IDs of all live rows for a source.table."""
@@ -279,9 +435,13 @@ class DinobaseDB:
         else:
             sql = f"DELETE FROM {META_SCHEMA}.live_rows WHERE source_name = ?"
             result = self.conn.execute(sql, [source_name])
-        return result.fetchone()[0] if result.description else 0
+        count = result.fetchone()[0] if result.description else 0
+        if self.is_cloud:
+            self._save_meta_table("live_rows")
+        return count
 
     def close(self) -> None:
         if self._conn is not None:
+            self.save_cloud_metadata()
             self._conn.close()
             self._conn = None

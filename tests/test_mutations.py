@@ -75,9 +75,18 @@ def test_parse_insert():
     assert result["columns"] == ["id", "dealname", "amount"]
 
 
-def test_block_delete():
+def test_parse_delete():
     result = _parse_mutation_sql("DELETE FROM hubspot.deals WHERE id = '9001'")
+    assert result["operation"] == "DELETE"
+    assert result["schema"] == "hubspot"
+    assert result["table"] == "deals"
+    assert result["where"] == "id = '9001'"
+
+
+def test_delete_requires_where():
+    result = _parse_mutation_sql("DELETE FROM hubspot.deals")
     assert "error" in result
+    assert "WHERE" in result["error"]
 
 
 def test_block_drop():
@@ -223,7 +232,7 @@ def test_multi_statement_partial_error(mutation_engine):
     """One valid statement + one invalid should return partial results."""
     result = mutation_engine.handle_sql(
         "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9001'; "
-        "DELETE FROM stripe.customers WHERE id = 'cus_1'"
+        "DROP TABLE stripe.customers"
     )
     # First is valid, second is blocked
     assert result["valid"] == 1
@@ -317,12 +326,192 @@ def test_query_engine_routes_multi_statement(engine):
     assert len(result["mutations"]) == 2
 
 
-def test_query_engine_blocks_delete(engine):
+def test_query_engine_routes_delete(engine):
     result = engine.execute("DELETE FROM hubspot.deals WHERE id = '9001'")
-    assert "error" in result
+    assert "mutation_id" in result
+    assert result["status"] == "pending_confirmation"
+    assert result["preview"]["operation"] == "DELETE"
 
 
 def test_query_engine_select_still_works(engine):
     result = engine.execute("SELECT * FROM hubspot.deals ORDER BY id")
     assert "rows" in result
     assert result["row_count"] == 5
+
+
+# --- DELETE operations ---
+
+def test_single_row_delete_preview(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE id = '9001'"
+    )
+    assert result["status"] == "pending_confirmation"
+    assert result["preview"]["operation"] == "DELETE"
+    assert result["preview"]["rows_affected"] == 1
+    assert len(result["preview"]["rows_to_delete"]) == 1
+    assert result["preview"]["rows_to_delete"][0]["id"] == "9001"
+
+
+def test_single_row_delete_confirm(mutation_engine, db):
+    preview = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE id = '9001'"
+    )
+    result = mutation_engine.confirm(preview["mutation_id"])
+    assert result["status"] == "executed"
+
+    rows = db.query("SELECT * FROM hubspot.deals WHERE id = '9001'")
+    assert len(rows) == 0
+
+    # Other rows still exist
+    remaining = db.query("SELECT COUNT(*) as cnt FROM hubspot.deals")
+    assert remaining[0]["cnt"] == 4
+
+
+def test_multi_row_delete_preview(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE dealstage = 'proposal'"
+    )
+    assert result["status"] == "pending_confirmation"
+    assert result["preview"]["rows_affected"] == 2
+    assert len(result["preview"]["rows_to_delete"]) == 2
+
+    ids = [r["id"] for r in result["preview"]["rows_to_delete"]]
+    assert "9001" in ids
+    assert "9004" in ids
+
+
+def test_multi_row_delete_confirm(mutation_engine, db):
+    preview = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE dealstage = 'proposal'"
+    )
+    result = mutation_engine.confirm(preview["mutation_id"])
+    assert result["status"] == "executed"
+
+    rows = db.query("SELECT * FROM hubspot.deals WHERE dealstage = 'proposal'")
+    assert len(rows) == 0
+
+    remaining = db.query("SELECT COUNT(*) as cnt FROM hubspot.deals")
+    assert remaining[0]["cnt"] == 3
+
+
+def test_delete_too_many_rows(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE amount > 0",
+        max_affected_rows=2,
+    )
+    assert "error" in result
+    assert "5 rows" in result["error"]
+
+
+def test_delete_no_matching_rows(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE id = 'nonexistent'"
+    )
+    assert "error" in result
+
+
+def test_delete_unknown_schema(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM nonexistent.deals WHERE id = '9001'"
+    )
+    assert "error" in result
+
+
+def test_delete_audit_log(mutation_engine, db):
+    preview = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE id = '9001'"
+    )
+    mutation_engine.confirm(preview["mutation_id"])
+
+    rows = db.query(
+        f"SELECT * FROM {META_SCHEMA}.mutations WHERE mutation_id = '{preview['mutation_id']}'"
+    )
+    assert len(rows) == 1
+    assert rows[0]["status"] == "executed"
+    assert rows[0]["operation"] == "DELETE"
+    assert rows[0]["source_name"] == "hubspot"
+
+
+def test_multi_statement_with_delete(mutation_engine):
+    """Mixed batch: UPDATE + DELETE should both generate previews."""
+    result = mutation_engine.handle_sql(
+        "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9002'; "
+        "DELETE FROM hubspot.deals WHERE id = '9001'"
+    )
+    assert "batch_id" in result
+    assert result["valid"] == 2
+    assert len(result["mutations"]) == 2
+
+    ops = [m["preview"]["operation"] for m in result["mutations"]]
+    assert "UPDATE" in ops
+    assert "DELETE" in ops
+
+
+# --- --force flag ---
+
+def test_force_skips_confirmation(mutation_engine, db):
+    result = mutation_engine.handle_sql(
+        "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9001' --force"
+    )
+    assert result["status"] == "executed"
+
+    rows = db.query("SELECT dealstage FROM hubspot.deals WHERE id = '9001'")
+    assert rows[0]["dealstage"] == "closedwon"
+
+
+def test_force_delete(mutation_engine, db):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals WHERE id = '9001' --force"
+    )
+    assert result["status"] == "executed"
+
+    rows = db.query("SELECT * FROM hubspot.deals WHERE id = '9001'")
+    assert len(rows) == 0
+
+
+def test_force_batch(mutation_engine, db):
+    result = mutation_engine.handle_sql(
+        "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9002'; "
+        "DELETE FROM hubspot.deals WHERE id = '9001' --force"
+    )
+    assert result["status"] == "batch_executed"
+    assert result["succeeded"] == 2
+
+
+def test_force_with_error_still_returns_error(mutation_engine):
+    result = mutation_engine.handle_sql(
+        "DELETE FROM hubspot.deals --force"
+    )
+    assert "error" in result
+
+
+# --- TTL expiration ---
+
+def test_pending_mutations_expire(mutation_engine, db):
+    """Pending mutations older than TTL should be auto-expired."""
+    preview = mutation_engine.handle_sql(
+        "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9001'"
+    )
+    mutation_id = preview["mutation_id"]
+
+    # Backdate the created_at to simulate an old mutation
+    db.conn.execute(
+        f"UPDATE {META_SCHEMA}.mutations SET created_at = current_timestamp - INTERVAL '20 minutes' "
+        f"WHERE mutation_id = ?",
+        [mutation_id],
+    )
+
+    # Trying to confirm should fail — it's expired
+    result = mutation_engine.confirm(mutation_id)
+    assert "error" in result
+    assert "expired" in result["error"].lower()
+
+
+def test_fresh_mutations_not_expired(mutation_engine):
+    """Mutations within TTL should not be expired."""
+    preview = mutation_engine.handle_sql(
+        "UPDATE hubspot.deals SET dealstage = 'closedwon' WHERE id = '9001'"
+    )
+    # Confirm immediately — should work fine
+    result = mutation_engine.confirm(preview["mutation_id"])
+    assert result["status"] == "executed"

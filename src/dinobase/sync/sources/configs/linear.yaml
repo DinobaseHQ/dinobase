@@ -1,0 +1,493 @@
+# NOTE: Linear uses a GraphQL API, not REST. This file uses type: graphql so
+# the registry dispatches to dinobase.sync.sources.graphql.graphql_source
+# instead of dlt's rest_api_source. The structure below maps GraphQL concepts
+# onto the Dinobase YAML spec as closely as possible, with annotations where
+# GraphQL and REST diverge.
+#
+# GRAPHQL vs REST MAPPING NOTES:
+#   - There is a single endpoint: POST https://api.linear.app/graphql
+#   - Each "resource" below POSTs a different GraphQL query to that endpoint.
+#   - "path" would always be "graphql"; "method" is always POST.
+#   - Pagination is Relay cursor-based (nodes + pageInfo.hasNextPage/endCursor),
+#     handled natively by graphql.py using data_path / cursor_path.
+#   - Write operations (mutations) also POST to /graphql; the mutation string
+#     lives in the request body, not the URL, so write_endpoints are documented
+#     as POST /graphql with the mutation body shape in comments.
+#
+# AUTH NOTE:
+#   Linear personal API keys use a bare Authorization header with no prefix:
+#     Authorization: <API_KEY>
+#   OAuth access tokens use the standard Bearer prefix:
+#     Authorization: Bearer <ACCESS_TOKEN>
+#   auth_prefix is set to "" for personal API keys. Swap to "Bearer " for OAuth.
+
+type: graphql
+
+name: linear
+description: "Linear (issues, projects, teams, cycles, labels, users, comments)"
+oauth: true
+# ── Credentials ────────────────────────────────────────────────────────────────
+# registry.py reads the `auth` block via _build_credentials().
+# The `credentials` list below mirrors the prompt spec for documentation;
+# the loader uses the `auth` key.
+auth:
+  field: api_key
+  cli_flag: "--api-key"
+  env_var: LINEAR_API_KEY
+  prompt: "Linear API key (personal API key or OAuth access token)"
+  secret: true
+
+# Personal API keys: no "Bearer" prefix. Switch to "Bearer " for OAuth tokens.
+auth_prefix: ""
+
+# ── Endpoint ───────────────────────────────────────────────────────────────────
+# All queries and mutations go to this single GraphQL endpoint.
+endpoint: "https://api.linear.app/graphql"
+
+# ── Resources (Read Queries) ───────────────────────────────────────────────────
+# Each resource POSTs one GraphQL query. graphql.py:
+#   data_path   – dot-separated path to the nodes array in the JSON response
+#   cursor_path – dot-separated path to the pageInfo object (omit for singletons)
+# The $cursor variable is automatically injected as the `after` argument on
+# subsequent pages. Page size (first: N) is tuned to Linear's default complexity
+# budget; reduce if you hit complexity errors.
+
+resources:
+
+  # ── Issues ───────────────────────────────────────────────────────────────────
+  # All issues across the workspace, ordered by most-recently-updated first.
+  - name: issues
+    query: |
+      query($cursor: String) {
+        issues(first: 100, after: $cursor, orderBy: updatedAt) {
+          nodes {
+            id
+            identifier
+            title
+            description
+            priority
+            priorityLabel
+            state          { id name type color }
+            team           { id name key }
+            assignee       { id name email }
+            creator        { id name email }
+            project        { id name }
+            cycle          { id name number }
+            labels         { nodes { id name color } }
+            parent         { id identifier title }
+            estimate
+            dueDate
+            completedAt
+            canceledAt
+            autoClosedAt
+            createdAt
+            updatedAt
+            archivedAt
+            url
+            branchName
+            customerTicketCount
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.issues.nodes"
+    cursor_path: "data.issues.pageInfo"
+    primary_key: id
+
+  # ── Projects ─────────────────────────────────────────────────────────────────
+  - name: projects
+    query: |
+      query($cursor: String) {
+        projects(first: 100, after: $cursor) {
+          nodes {
+            id
+            name
+            description
+            slugId
+            icon
+            color
+            state
+            progress
+            scope
+            priority
+            priorityLabel
+            targetDate
+            startDate
+            completedAt
+            canceledAt
+            createdAt
+            updatedAt
+            archivedAt
+            url
+            teams     { nodes { id name key } }
+            members   { nodes { id name email } }
+            lead      { id name email }
+            milestone { id name }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.projects.nodes"
+    cursor_path: "data.projects.pageInfo"
+    primary_key: id
+
+  # ── Teams ────────────────────────────────────────────────────────────────────
+  - name: teams
+    query: |
+      query($cursor: String) {
+        teams(first: 100, after: $cursor) {
+          nodes {
+            id
+            name
+            key
+            description
+            icon
+            color
+            private
+            timezone
+            issueCount
+            cyclesEnabled
+            cycleDuration
+            cycleCooldownTime
+            cycleStartDay
+            triageEnabled
+            defaultIssueEstimate
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.teams.nodes"
+    cursor_path: "data.teams.pageInfo"
+    primary_key: id
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  - name: users
+    query: |
+      query($cursor: String) {
+        users(first: 250, after: $cursor) {
+          nodes {
+            id
+            name
+            displayName
+            email
+            avatarUrl
+            active
+            admin
+            guest
+            timezone
+            statusLabel
+            statusEmoji
+            statusUntilAt
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.users.nodes"
+    cursor_path: "data.users.pageInfo"
+    primary_key: id
+
+  # ── Labels ───────────────────────────────────────────────────────────────────
+  # issueLabels is the top-level query for all labels (workspace + team-scoped).
+  - name: labels
+    query: |
+      query($cursor: String) {
+        issueLabels(first: 250, after: $cursor) {
+          nodes {
+            id
+            name
+            description
+            color
+            parent    { id name }
+            team      { id name key }
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.issueLabels.nodes"
+    cursor_path: "data.issueLabels.pageInfo"
+    primary_key: id
+
+  # ── Cycles ───────────────────────────────────────────────────────────────────
+  - name: cycles
+    query: |
+      query($cursor: String) {
+        cycles(first: 100, after: $cursor) {
+          nodes {
+            id
+            number
+            name
+            description
+            startsAt
+            endsAt
+            completedAt
+            autoArchivedAt
+            progress
+            completedProgress
+            scopeHistory
+            issueCountHistory
+            completedIssueCountHistory
+            inProgressScopeHistory
+            team      { id name key }
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.cycles.nodes"
+    cursor_path: "data.cycles.pageInfo"
+    primary_key: id
+
+  # ── Comments ─────────────────────────────────────────────────────────────────
+  # Top-level comments query (not scoped to a specific issue).
+  - name: comments
+    query: |
+      query($cursor: String) {
+        comments(first: 100, after: $cursor, orderBy: updatedAt) {
+          nodes {
+            id
+            body
+            url
+            reactionData
+            issue     { id identifier title }
+            user      { id name email }
+            parent    { id }
+            createdAt
+            updatedAt
+            editedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.comments.nodes"
+    cursor_path: "data.comments.pageInfo"
+    primary_key: id
+
+  # ── Workflow States ───────────────────────────────────────────────────────────
+  # Issue status states per team (e.g. Backlog, In Progress, Done, Cancelled).
+  - name: workflow_states
+    query: |
+      query($cursor: String) {
+        workflowStates(first: 250, after: $cursor) {
+          nodes {
+            id
+            name
+            description
+            type
+            color
+            position
+            team      { id name key }
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.workflowStates.nodes"
+    cursor_path: "data.workflowStates.pageInfo"
+    primary_key: id
+
+  # ── Project Milestones ────────────────────────────────────────────────────────
+  - name: project_milestones
+    query: |
+      query($cursor: String) {
+        projectMilestones(first: 100, after: $cursor) {
+          nodes {
+            id
+            name
+            description
+            targetDate
+            progress
+            sortOrder
+            project   { id name }
+            createdAt
+            updatedAt
+            archivedAt
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    data_path: "data.projectMilestones.nodes"
+    cursor_path: "data.projectMilestones.pageInfo"
+    primary_key: id
+
+  # ── Viewer (authenticated user — singleton, no pagination) ───────────────────
+  - name: viewer
+    query: |
+      query {
+        viewer {
+          id
+          name
+          displayName
+          email
+          avatarUrl
+          active
+          admin
+          guest
+          createdAt
+          updatedAt
+        }
+      }
+    # Singleton: `data.viewer` is a single object, not a connection.
+    # graphql.py wraps it in a list automatically when it is a dict.
+    data_path: "data.viewer"
+    primary_key: id
+
+# ── Write Endpoints (Mutations) ────────────────────────────────────────────────
+# GraphQL mutations don't map cleanly to REST write endpoints:
+#   - All mutations POST to the same URL (/graphql).
+#   - The operation name and inputs live in the request body, not the URL.
+#   - The HTTP method is always POST regardless of the mutation type (create /
+#     update / delete).
+#
+# These entries document the available mutations in the closest REST equivalent.
+# Callers must build the full {"query": "<mutation>", "variables": {...}} body.
+# The write_client sends it as-is to POST https://api.linear.app/graphql with
+# the Authorization header set to the api_key credential.
+write_endpoints:
+  - name: create_issue
+    description: "Create a new issue (required: teamId, title)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation CreateIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier title } } }",
+    #   "variables": { "input": { "teamId": "<id>", "title": "<title>", "description": "...", "assigneeId": "...", "priority": 0 } }
+    # }
+
+  - name: update_issue
+    description: "Update an existing issue (required: id)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id title } } }",
+    #   "variables": { "id": "<issue-id>", "input": { "title": "...", "stateId": "...", "assigneeId": "..." } }
+    # }
+
+  - name: delete_issue
+    description: "Archive (soft-delete) an issue (required: id)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation DeleteIssue($id: String!) { issueDelete(id: $id) { success } }",
+    #   "variables": { "id": "<issue-id>" }
+    # }
+
+  - name: create_project
+    description: "Create a new project (required: teamIds, name)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation CreateProject($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name } } }",
+    #   "variables": { "input": { "teamIds": ["<team-id>"], "name": "<name>", "description": "..." } }
+    # }
+
+  - name: update_project
+    description: "Update an existing project (required: id)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name } } }",
+    #   "variables": { "id": "<project-id>", "input": { "name": "...", "state": "..." } }
+    # }
+
+  - name: create_comment
+    description: "Add a comment to an issue (required: issueId, body)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation CreateComment($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id body } } }",
+    #   "variables": { "input": { "issueId": "<issue-id>", "body": "<markdown body>" } }
+    # }
+
+  - name: update_comment
+    description: "Edit an existing comment (required: id, body)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation UpdateComment($id: String!, $input: CommentUpdateInput!) { commentUpdate(id: $id, input: $input) { success comment { id body } } }",
+    #   "variables": { "id": "<comment-id>", "input": { "body": "<updated body>" } }
+    # }
+
+  - name: create_label
+    description: "Create an issue label (required: teamId, name)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation CreateLabel($input: IssueLabelCreateInput!) { issueLabelCreate(input: $input) { success issueLabel { id name } } }",
+    #   "variables": { "input": { "teamId": "<team-id>", "name": "<name>", "color": "#RRGGBB" } }
+    # }
+
+  - name: create_cycle
+    description: "Create a sprint cycle for a team (required: teamId, startsAt, endsAt)"
+    method: POST
+    base_url: "https://api.linear.app/"
+    path: graphql
+    auth: bearer
+    # Request body:
+    # {
+    #   "query": "mutation CreateCycle($input: CycleCreateInput!) { cycleCreate(input: $input) { success cycle { id number name } } }",
+    #   "variables": { "input": { "teamId": "<team-id>", "startsAt": "<ISO datetime>", "endsAt": "<ISO datetime>" } }
+    # }

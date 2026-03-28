@@ -1,0 +1,284 @@
+name: quickbooks
+description: "QuickBooks Online Accounting API (invoices, customers, items, accounts, bills, payments, vendors, employees, estimates)"
+oauth: true
+# QuickBooks Online uses OAuth 2.0 for authentication.
+# Obtain credentials from: Intuit Developer Portal > your app > Keys & OAuth.
+# The realm_id (company ID) is returned during the OAuth authorization flow and
+# identifies which QBO company to query. It appears in every API URL path.
+#
+# OAuth scopes needed: com.intuit.quickbooks.accounting
+credentials:
+  - name: oauth_token
+    flag: "--oauth-token"
+    env: QUICKBOOKS_OAUTH_TOKEN
+    prompt: "QuickBooks Online OAuth 2.0 access token"
+    secret: true
+  - name: realm_id
+    flag: "--realm-id"
+    env: QUICKBOOKS_REALM_ID
+    prompt: "QuickBooks Online realm ID (company ID, returned during OAuth flow)"
+    secret: false
+
+client:
+  # All QBO v3 Accounting API calls are scoped to a company via the realm_id.
+  # Pattern: https://quickbooks.api.intuit.com/v3/company/{realm_id}/{resource}
+  # For sandbox replace the host with: sandbox-quickbooks.api.intuit.com
+  base_url: "https://quickbooks.api.intuit.com/v3/company/{realm_id}/"
+
+  auth:
+    # QBO uses OAuth 2.0 Bearer tokens. Pass the access token in the
+    # Authorization header as "Bearer <token>".
+    type: bearer
+    token: "{oauth_token}"
+
+  # QBO requires all responses be JSON. The Accept header must be set to
+  # application/json; otherwise the API returns XML by default.
+  headers:
+    Accept: "application/json"
+
+  # QuickBooks Online uses offset-based pagination via its SQL-like query language.
+  # Queries use STARTPOSITION (1-based row offset) and MAXRESULTS (page size, max 1000).
+  # The paginator passes startPosition and maxResults as query parameters appended
+  # to the query POST. Responses wrap results under QueryResponse.<EntityName>.
+  # There is no cursor or link header — the client increments startPosition by
+  # maxResults until the returned row count is less than maxResults.
+  paginator:
+    type: offset
+    offset_param: "startPosition"
+    limit_param: "maxResults"
+    offset_start: 1
+
+resource_defaults:
+  # QBO uses "Id" (capital I) as the primary key for all accounting entities.
+  primary_key: Id
+  write_disposition: merge
+  endpoint:
+    # All list queries go through the /query endpoint using a SQL-like SELECT.
+    # Example: SELECT * FROM Invoice STARTPOSITION 1 MAXRESULTS 100
+    # Responses: { "QueryResponse": { "Invoice": [...], "totalCount": N }, "time": "..." }
+    # The data_selector navigates into QueryResponse; each resource overrides the
+    # entity-specific key (e.g. QueryResponse.Invoice, QueryResponse.Customer).
+    method: POST
+    path: "query"
+    content_type: "application/text"
+    params:
+      maxResults: 100
+
+resources:
+
+  # ── Invoices ─────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Invoice STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Invoice": [...], "totalCount": N }, "time": "..." }
+  # Invoices track sales to customers. Key fields: Id, DocNumber, TxnDate, DueDate,
+  # TotalAmt, Balance, CustomerRef, Line, LinkedTxn, EmailStatus, PrintStatus.
+  # MetaData.LastUpdatedTime enables incremental syncs.
+  - name: invoices
+    endpoint:
+      body: "SELECT * FROM Invoice ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Invoice"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Customer STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Customer": [...], "totalCount": N } }
+  # Key fields: Id, DisplayName, CompanyName, GivenName, FamilyName, PrimaryEmailAddr,
+  # PrimaryPhone, BillAddr, Balance, Active, CurrencyRef, SyncToken.
+  - name: customers
+    endpoint:
+      body: "SELECT * FROM Customer ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Customer"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Items ─────────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Item STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Item": [...], "totalCount": N } }
+  # Items represent products and services sold or purchased. Key fields: Id, Name,
+  # Type (Inventory|NonInventory|Service), UnitPrice, PurchaseCost, IncomeAccountRef,
+  # ExpenseAccountRef, AssetAccountRef, QtyOnHand, Active, SyncToken.
+  - name: items
+    endpoint:
+      body: "SELECT * FROM Item ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Item"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Accounts ──────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Account STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Account": [...], "totalCount": N } }
+  # Chart of Accounts entries. Key fields: Id, Name, AccountType, AccountSubType,
+  # Classification, CurrencyRef, CurrentBalance, Active, SyncToken.
+  - name: accounts
+    endpoint:
+      body: "SELECT * FROM Account ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Account"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Bills ─────────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Bill STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Bill": [...], "totalCount": N } }
+  # Accounts payable transactions. Key fields: Id, VendorRef, TxnDate, DueDate,
+  # TotalAmt, Balance, Line, APAccountRef, SyncToken.
+  - name: bills
+    endpoint:
+      body: "SELECT * FROM Bill ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Bill"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Payments ──────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Payment STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Payment": [...], "totalCount": N } }
+  # Customer payments applied to invoices. Key fields: Id, CustomerRef, TotalAmt,
+  # TxnDate, PaymentRefNum, PaymentMethodRef, DepositToAccountRef, Line, SyncToken.
+  - name: payments
+    endpoint:
+      body: "SELECT * FROM Payment ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Payment"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Vendors ───────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Vendor STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Vendor": [...], "totalCount": N } }
+  # Supplier/contractor records. Key fields: Id, DisplayName, CompanyName, GivenName,
+  # FamilyName, PrimaryEmailAddr, PrimaryPhone, BillAddr, Balance, Active,
+  # Vendor1099, SyncToken.
+  - name: vendors
+    endpoint:
+      body: "SELECT * FROM Vendor ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Vendor"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Employees ─────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Employee STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Employee": [...], "totalCount": N } }
+  # Employee records for payroll/time tracking. Key fields: Id, DisplayName,
+  # GivenName, FamilyName, SSN, EmployeeNumber, Active, PrimaryAddr, BillRate,
+  # HiredDate, SyncToken.
+  - name: employees
+    endpoint:
+      body: "SELECT * FROM Employee ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Employee"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+  # ── Estimates ─────────────────────────────────────────────────────────────────
+  # POST /company/{realm_id}/query
+  # Body: SELECT * FROM Estimate STARTPOSITION 1 MAXRESULTS 100
+  # Response: { "QueryResponse": { "Estimate": [...], "totalCount": N } }
+  # Sales quotes/proposals. Key fields: Id, DocNumber, TxnDate, ExpirationDate,
+  # TotalAmt, CustomerRef, Line, TxnStatus (Pending|Accepted|Closed|Rejected),
+  # EmailStatus, PrintStatus, SyncToken.
+  - name: estimates
+    endpoint:
+      body: "SELECT * FROM Estimate ORDERBY MetaData.LastUpdatedTime ASC"
+      data_selector: "QueryResponse.Estimate"
+    incremental:
+      cursor_path: "MetaData.LastUpdatedTime"
+      initial_value: "2020-01-01T00:00:00-07:00"
+
+write_endpoints:
+
+  # ── Invoices ─────────────────────────────────────────────────────────────────
+  # QBO write operations for transactions use POST to the lowercase entity path.
+  # Create: POST /company/{realm_id}/invoice  (no Id in body)
+  # Update: POST /company/{realm_id}/invoice  (Id + SyncToken required in body)
+  # Delete: POST /company/{realm_id}/invoice?operation=delete  (Id + SyncToken in body)
+  # Required for create: CustomerRef, Line (at least one line item).
+  # Required for update: Id, SyncToken (optimistic concurrency token), plus changed fields.
+
+  - name: create_invoice
+    description: "Create a new invoice. Required fields: CustomerRef, Line (array of line items with DetailType, Amount, and SalesItemLineDetail or similar)."
+    method: POST
+    path: "invoice"
+
+  - name: update_invoice
+    description: "Update an existing invoice. Id and SyncToken are required in the body for optimistic concurrency. Fetch the current SyncToken via a GET before updating."
+    method: POST
+    path: "invoice"
+
+  - name: delete_invoice
+    description: "Delete an invoice. POST body must include Id and SyncToken. The ?operation=delete query param triggers deletion."
+    method: POST
+    path: "invoice"
+    params:
+      operation: "delete"
+
+  - name: void_invoice
+    description: "Void an invoice (marks it cancelled without removing it from the ledger). POST body must include Id and SyncToken."
+    method: POST
+    path: "invoice"
+    params:
+      operation: "void"
+
+  - name: send_invoice
+    description: "Send an invoice by email. sendTo is the recipient email address; if omitted QBO uses the customer's primary email."
+    method: POST
+    path: "invoice/{invoice_id}/send"
+
+  # ── Customers ────────────────────────────────────────────────────────────────
+  # Create: POST /company/{realm_id}/customer  (DisplayName is required)
+  # Update: POST /company/{realm_id}/customer  (Id + SyncToken required)
+  # Note: QBO does not support deleting customers; use the Active=false flag to inactivate.
+
+  - name: create_customer
+    description: "Create a new customer. DisplayName is required and must be unique. Optional: CompanyName, GivenName, FamilyName, PrimaryEmailAddr, PrimaryPhone, BillAddr."
+    method: POST
+    path: "customer"
+
+  - name: update_customer
+    description: "Update an existing customer. Id and SyncToken are required in the body. To inactivate a customer set Active to false."
+    method: POST
+    path: "customer"
+
+  # ── Payments ─────────────────────────────────────────────────────────────────
+  # Create: POST /company/{realm_id}/payment
+  # Required: CustomerRef, TotalAmt. To apply to an invoice include Line with
+  # LinkedTxn referencing the invoice Id and TxnType "Invoice".
+  # Update: POST /company/{realm_id}/payment  (Id + SyncToken required)
+  # Delete: POST /company/{realm_id}/payment?operation=delete
+  # Void:   POST /company/{realm_id}/payment?operation=void
+
+  - name: create_payment
+    description: "Record a customer payment. Required: CustomerRef, TotalAmt. To apply to invoices, include Line items with LinkedTxn referencing each Invoice Id."
+    method: POST
+    path: "payment"
+
+  - name: update_payment
+    description: "Update a payment record. Id and SyncToken are required. Can modify TotalAmt, TxnDate, PaymentMethodRef, or re-apply to different invoices."
+    method: POST
+    path: "payment"
+
+  - name: delete_payment
+    description: "Delete a payment record. POST body must include Id and SyncToken."
+    method: POST
+    path: "payment"
+    params:
+      operation: "delete"
+
+  - name: void_payment
+    description: "Void a payment (reverses the payment without deleting the record). POST body must include Id and SyncToken."
+    method: POST
+    path: "payment"
+    params:
+      operation: "void"

@@ -1,14 +1,15 @@
 """Mutation engine — handles writes back to source systems via SQL.
 
 Flow:
-1. Agent writes SQL (UPDATE/INSERT, single or multi-statement, cross-source)
+1. Agent writes SQL (UPDATE/INSERT/DELETE, single or multi-statement, cross-source)
 2. Engine parses each statement, validates guardrails, generates a preview
 3. Agent confirms the mutation batch
 4. Engine executes locally then calls each source API per affected row
 5. Everything is logged in _dinobase.mutations with per-row results
 
 Guardrails:
-- Only UPDATE and INSERT allowed (no DELETE, DROP, ALTER, TRUNCATE)
+- Only UPDATE, INSERT, and DELETE allowed (no DROP, ALTER, TRUNCATE)
+- DELETE requires a WHERE clause (no bulk deletes)
 - Preview by default — shows diff per row, doesn't execute
 - Row limit — blocks mutations affecting too many rows
 - Audit log — every mutation is recorded with per-row API results
@@ -25,19 +26,39 @@ from typing import Any
 from dinobase.db import DinobaseDB, META_SCHEMA
 
 
-BLOCKED_STATEMENTS = {"DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT", "REVOKE"}
+BLOCKED_STATEMENTS = {"DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT", "REVOKE"}
 DEFAULT_MAX_AFFECTED_ROWS = 50
+PENDING_TTL_MINUTES = 10
 
 
 class MutationEngine:
     def __init__(self, db: DinobaseDB):
         self.db = db
 
+    def _expire_stale(self) -> None:
+        """Auto-expire pending mutations older than PENDING_TTL_MINUTES."""
+        self.db.conn.execute(
+            f"UPDATE {META_SCHEMA}.mutations SET status = 'expired' "
+            f"WHERE status = 'pending' "
+            f"AND created_at < current_timestamp - INTERVAL '{PENDING_TTL_MINUTES} minutes'"
+        )
+
     def handle_sql(
         self, sql: str, max_affected_rows: int = DEFAULT_MAX_AFFECTED_ROWS
     ) -> dict[str, Any]:
         """Handle one or more SQL mutations. Splits multi-statement SQL and
-        creates a single mutation batch with previews for all statements."""
+        creates a single mutation batch with previews for all statements.
+
+        Append --force to skip the confirmation step and execute immediately.
+        """
+        self._expire_stale()
+
+        # Check for --force flag
+        force = False
+        stripped = sql.strip()
+        if stripped.endswith("--force"):
+            force = True
+            sql = stripped[:-len("--force")].strip()
 
         statements = _split_statements(sql)
         if not statements:
@@ -45,10 +66,20 @@ class MutationEngine:
 
         # Single statement — return flat preview
         if len(statements) == 1:
-            return self._handle_single(statements[0], max_affected_rows)
+            result = self._handle_single(statements[0], max_affected_rows)
+        else:
+            # Multi-statement — return a batch preview
+            result = self._handle_batch(statements, max_affected_rows)
 
-        # Multi-statement — return a batch preview
-        return self._handle_batch(statements, max_affected_rows)
+        # Auto-confirm if --force was specified
+        if force and "error" not in result:
+            if "mutation_id" in result:
+                return self.confirm(result["mutation_id"])
+            elif "mutations" in result:
+                mutation_ids = [m["mutation_id"] for m in result["mutations"]]
+                return self.confirm_batch(mutation_ids)
+
+        return result
 
     def _handle_single(
         self, sql: str, max_affected_rows: int
@@ -65,6 +96,8 @@ class MutationEngine:
             return self._preview_update(sql, parsed, source_info, max_affected_rows)
         elif parsed["operation"] == "INSERT":
             return self._preview_insert(sql, parsed, source_info)
+        elif parsed["operation"] == "DELETE":
+            return self._preview_delete(sql, parsed, source_info, max_affected_rows)
         return {"error": f"Unsupported operation: {parsed['operation']}"}
 
     def _handle_batch(
@@ -106,6 +139,7 @@ class MutationEngine:
 
     def confirm(self, mutation_id: str) -> dict[str, Any]:
         """Confirm and execute a pending mutation."""
+        self._expire_stale()
         rows = self.db.query(
             f"SELECT * FROM {META_SCHEMA}.mutations WHERE mutation_id = '{mutation_id}'"
         )
@@ -153,6 +187,14 @@ class MutationEngine:
         )
 
     def cancel(self, mutation_id: str) -> dict[str, Any]:
+        rows = self.db.query(
+            f"SELECT status FROM {META_SCHEMA}.mutations WHERE mutation_id = '{mutation_id}'"
+        )
+        if not rows:
+            return {"error": f"Mutation '{mutation_id}' not found"}
+        if rows[0]["status"] != "pending":
+            return {"error": f"Mutation '{mutation_id}' is {rows[0]['status']}, not pending"}
+
         self.db.conn.execute(
             f"UPDATE {META_SCHEMA}.mutations SET status = 'cancelled' "
             f"WHERE mutation_id = ? AND status = 'pending'",
@@ -266,6 +308,67 @@ class MutationEngine:
             f"(mutation_id, source_name, table_name, operation, sql_text, preview, status) "
             f"VALUES (?, ?, ?, ?, ?, ?, 'pending')",
             [mutation_id, schema, table, "INSERT", sql, json.dumps(preview_data, default=str)],
+        )
+
+        return {
+            "mutation_id": mutation_id,
+            "status": "pending_confirmation",
+            "preview": preview_data,
+            "confirm": f"Call confirm with mutation_id '{mutation_id}' to execute",
+        }
+
+    def _preview_delete(
+        self, sql: str, parsed: dict, source_info: dict, max_affected_rows: int
+    ) -> dict[str, Any]:
+        schema = parsed["schema"]
+        table = parsed["table"]
+        where_clause = parsed["where"]  # guaranteed non-empty by parser
+
+        count_sql = f'SELECT COUNT(*) as cnt FROM "{schema}"."{table}" WHERE {where_clause}'
+        try:
+            affected = self.db.query(count_sql)[0]["cnt"]
+        except Exception as e:
+            return {"error": f"Failed to count affected rows: {e}"}
+
+        if affected == 0:
+            return {"error": "No rows match the WHERE clause. Nothing to delete."}
+
+        if affected > max_affected_rows:
+            return {
+                "error": f"This DELETE would affect {affected} rows (limit: {max_affected_rows}). "
+                f"Add a more specific WHERE clause or increase max_affected_rows.",
+                "rows_affected": affected,
+            }
+
+        select_sql = f'SELECT * FROM "{schema}"."{table}" WHERE {where_clause}'
+        try:
+            doomed_rows = self.db.query(select_sql)
+        except Exception as e:
+            return {"error": f"Failed to fetch affected rows: {e}"}
+
+        row_previews = []
+        for row in doomed_rows:
+            row_previews.append({k: str(v) if v is not None else "NULL" for k, v in row.items()})
+
+        mutation_id = f"mut_{uuid.uuid4().hex[:12]}"
+
+        preview_data = {
+            "operation": "DELETE",
+            "source": schema,
+            "table": table,
+            "rows_affected": affected,
+            "rows_to_delete": row_previews,
+            "side_effects": [
+                f"Will call API to delete {affected} record(s) from {source_info['type']} "
+                f"(one API call per row)"
+            ],
+        }
+
+        self.db.conn.execute(
+            f"INSERT INTO {META_SCHEMA}.mutations "
+            f"(mutation_id, source_name, table_name, operation, sql_text, preview, status) "
+            f"VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+            [mutation_id, schema, table, "DELETE", sql, json.dumps(preview_data, default=str)],
         )
 
         return {
@@ -421,6 +524,30 @@ class MutationEngine:
                 )
                 return {"method": "staging_table", "rows_inserted": 1}
 
+        elif operation == "DELETE":
+            rows_to_delete = preview.get("rows_to_delete", [])
+            if not rows_to_delete:
+                return None
+
+            deleted_ids = []
+            for row in rows_to_delete:
+                record_id = str(row.get("id", ""))
+                if not record_id or record_id == "NULL":
+                    continue
+                self.db.conn.execute(
+                    f'DELETE FROM "{schema}"."{staging_table}" WHERE CAST(id AS VARCHAR) = ?',
+                    [record_id],
+                )
+                deleted_ids.append(record_id)
+
+            # Execute the original DELETE against the table directly
+            try:
+                self.db.conn.execute(mutation["sql_text"])
+                return {"method": "direct_sql", "rows_deleted": len(deleted_ids)}
+            except Exception:
+                # View-based delete may fail; staging cleanup + API call is authoritative
+                return {"method": "staging_cleanup", "rows_cleaned": len(deleted_ids)}
+
         return None
 
     def _write_back_to_source(
@@ -517,24 +644,72 @@ class MutationEngine:
                     "details": [result] if result.get("error") else None,
                 }
 
+        elif operation == "DELETE" and preview:
+            rows_to_delete = preview.get("rows_to_delete", [])
+            if not rows_to_delete:
+                return None
+
+            row_results = []
+            for row in rows_to_delete:
+                record_id = str(row.get("id", ""))
+                if not record_id or record_id == "NULL":
+                    row_results.append({"id": "unknown", "status": "error", "error": "No id field"})
+                    continue
+                result = client.execute(
+                    endpoint_name, {}, path_params={"id": record_id}
+                )
+                row_results.append({
+                    "id": record_id,
+                    "status": result.get("status", "error"),
+                    "error": result.get("error"),
+                })
+
+            succeeded = sum(1 for r in row_results if r.get("status") == "ok")
+            failed = sum(1 for r in row_results if r.get("error"))
+
+            return {
+                "total_rows": len(rows_to_delete),
+                "api_calls": len(row_results),
+                "succeeded": succeeded,
+                "failed": failed,
+                "details": row_results if failed > 0 else None,
+            }
+
         return None
 
     def _match_write_endpoint(
         self, client: Any, table: str, operation: str
     ) -> str | None:
-        update_methods = {"PUT", "PATCH"}
-        create_methods = {"POST"}
-        target_methods = update_methods if operation == "UPDATE" else create_methods
+        method_map = {
+            "UPDATE": {"PUT", "PATCH"},
+            "INSERT": {"POST"},
+            "DELETE": {"DELETE"},
+        }
+        prefix_map = {
+            "UPDATE": "update",
+            "INSERT": "create",
+            "DELETE": "delete",
+        }
+        target_methods = method_map.get(operation, {"POST"})
+        op_prefix = prefix_map.get(operation, "create")
 
-        op_prefix = "update" if operation == "UPDATE" else "create"
+        # Priority 1: name contains table AND prefix
         for ep in client.write_endpoints:
             if table in ep["name"] and op_prefix in ep["name"]:
                 return ep["name"]
 
+        # Priority 2: name contains table AND method matches
         for ep in client.write_endpoints:
             if table in ep["name"] and ep.get("method", "POST").upper() in target_methods:
                 return ep["name"]
 
+        # Priority 3: singular form match (table "customers" → "delete_customer")
+        table_singular = table.rstrip("s")
+        for ep in client.write_endpoints:
+            if table_singular in ep["name"] and op_prefix in ep["name"]:
+                return ep["name"]
+
+        # Priority 4: any endpoint with matching method
         for ep in client.write_endpoints:
             if ep.get("method", "POST").upper() in target_methods:
                 return ep["name"]
@@ -566,13 +741,15 @@ def _parse_mutation_sql(sql: str) -> dict[str, Any]:
     first_word = stripped.split()[0].upper() if stripped else ""
 
     if first_word in BLOCKED_STATEMENTS:
-        return {"error": f"{first_word} statements are not allowed. Only UPDATE and INSERT are supported."}
+        return {"error": f"{first_word} statements are not allowed. Only UPDATE, INSERT, and DELETE are supported."}
 
-    if first_word not in ("UPDATE", "INSERT"):
-        return {"error": f"Not a mutation statement. Got '{first_word}', expected UPDATE or INSERT."}
+    if first_word not in ("UPDATE", "INSERT", "DELETE"):
+        return {"error": f"Not a mutation statement. Got '{first_word}', expected UPDATE, INSERT, or DELETE."}
 
     if first_word == "UPDATE":
         return _parse_update(stripped)
+    if first_word == "DELETE":
+        return _parse_delete(stripped)
     return _parse_insert(stripped)
 
 
@@ -632,6 +809,26 @@ def _parse_insert(sql: str) -> dict[str, Any]:
         "table": match.group(2),
         "columns": [c.strip().strip('"') for c in match.group(3).split(",")],
         "values": [v.strip().strip("'\"") for v in match.group(4).split(",")],
+    }
+
+
+def _parse_delete(sql: str) -> dict[str, Any]:
+    match = re.match(
+        r'DELETE\s+FROM\s+"?(\w+)"?\."?(\w+)"?(?:\s+WHERE\s+(.+))?$',
+        sql, re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return {"error": "Could not parse DELETE statement. Use: DELETE FROM schema.table WHERE condition"}
+
+    where = match.group(3).strip() if match.group(3) else ""
+    if not where:
+        return {"error": "DELETE without WHERE clause is not allowed. Specify which rows to delete."}
+
+    return {
+        "operation": "DELETE",
+        "schema": match.group(1),
+        "table": match.group(2),
+        "where": where,
     }
 
 
