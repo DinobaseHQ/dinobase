@@ -1,0 +1,47 @@
+{
+  "question_id": "revops_t1_01",
+  "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+  "model": "gpt-5.4",
+  "approach": "dinobase",
+  "expected_answer": 184,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the correct total deal count of 184, which directly answers the question asked, along with helpful additional breakdown information.",
+    "method": "llm_judge",
+    "judge_tokens": 396
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 31m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 31m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT COUNT(*) AS total_deals,\n       COUNT(*) FILTER (WHERE lower(coalesce(dealstage,'')) NOT IN ('closedwon','closedlost')) AS open_deals,\n       COUNT(*) FILTER (WHERE lower(coalesce(dealstage,'')) = 'closedwon') AS closed_won,\n       COUNT(*) FILTER (WHERE lower(coalesce(dealstage,'')) = 'closedlost') AS closed_lost\nFROM hubspot.deals;",
+        "max_rows": 10
+      },
+      "output": "{\n  \"columns\": [\n    \"total_deals\",\n    \"open_deals\",\n    \"closed_won\",\n    \"closed_lost\"\n  ],\n  \"rows\": [\n    {\n      \"total_deals\": 184,\n      \"open_deals\": 77,\n      \"closed_won\": 80,\n      \"closed_lost\": 27\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 285
+    },
+    {
+      "role": "assistant",
+      "content": "Quick snapshot of your sales pipeline:\n\n- Total deals: 184\n- Currently open / in progress: 77\n- Closed won: 80\n- Closed lost: 27\n\nSo you\u2019re actively working 77 deals right now.\n\nNote: HubSpot data is a bit stale (~4.5 hours old)."
+    }
+  ]
+}

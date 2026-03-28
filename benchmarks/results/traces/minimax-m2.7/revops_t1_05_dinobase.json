@@ -1,0 +1,37 @@
+{
+  "question_id": "revops_t1_05",
+  "question": "I think we have a payment processing issue \u2014 how many charges are failing?",
+  "model": "minimax-m2.7",
+  "approach": "dinobase",
+  "expected_answer": 45,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 45 failing charges, which matches the ground truth answer exactly, and provided helpful supporting context with a breakdown table and failure rate calculation.",
+    "method": "llm_judge",
+    "judge_tokens": 420
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (5m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (5m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "I think we have a payment processing issue \u2014 how many charges are failing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT status, COUNT(*) as count FROM stripe.charges GROUP BY status"
+      },
+      "output": "{\n  \"columns\": [\n    \"status\",\n    \"count\"\n  ],\n  \"rows\": [\n    {\n      \"status\": \"pending\",\n      \"count\": 12\n    },\n    {\n      \"status\": \"failed\",\n      \"count\": 45\n    },\n    {\n      \"status\": \"succeeded\",\n      \"count\": 509\n    }\n  ],\n  \"row_count\": 3,\n  \"total_rows\": 3,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 303
+    },
+    {
+      "role": "assistant",
+      "content": "**45 charges are failing** out of 566 total charges.\n\nHere's the breakdown:\n| Status | Count |\n|--------|-------|\n| Succeeded | 509 |\n| **Failed** | **45** |\n| Pending | 12 |\n\nThat's about **7.9% failure rate**. Want me to dig deeper into the failed charges \u2014 e.g., by customer, amount, or error code?"
+    }
+  ]
+}

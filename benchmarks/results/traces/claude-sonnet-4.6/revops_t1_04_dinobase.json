@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_04",
+  "question": "Where are most of our deals sitting in the pipeline right now?",
+  "model": "claude-sonnet-4.6",
+  "approach": "dinobase",
+  "expected_answer": "closedwon",
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 'Closed Won' as the stage with the most deals (80 deals, 43.5%), which is the mode of the distribution and directly answers the question of where most deals are sitting in the pipeline.",
+    "method": "llm_judge",
+    "judge_tokens": 771
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 5h 12m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 5h 12m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Where are most of our deals sitting in the pipeline right now?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT\n  dealstage,\n  COUNT(*) AS deal_count,\n  SUM(amount) AS total_value,\n  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS pct_of_deals\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY deal_count DESC\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"deal_count\",\n    \"total_value\",\n    \"pct_of_deals\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"deal_count\": 80,\n      \"total_value\": 2398693.0,\n      \"pct_of_deals\": 43.5\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"deal_count\": 27,\n      \"total_value\": 935089.0,\n      \"pct_of_deals\": 14.7\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"deal_count\": 21,\n      \"total_value\": 604738.0,\n      \"pct_of_deals\": 11.4\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"deal_count\": 17,\n      \"total_value\": 678595.0,\n      \"pct_of_deals\": 9.2\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"deal_count\": 15,\n      \"total_value\": 600691.0,\n      \"pct_of_deals\": 8.2\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"deal_count\": 12,\n      \"total_value\": 347900.0,\n      \"pct_of_deals\": 6.5\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"deal_count\": 12,\n      \"total_value\": 325204.0,\n      \"pct_of_deals\": 6.5\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1104
+    },
+    {
+      "role": "assistant",
+      "content": "Here's a snapshot of where your 184 deals currently stand across the pipeline:\n\n| Stage | # Deals | Total Value | % of All Deals |\n|---|---|---|---|\n| \u2705 Closed Won | 80 | $2,398,693 | 43.5% |\n| \u274c Closed Lost | 27 | $935,089 | 14.7% |\n| \ud83e\udd1d Decision Maker Bought In | 21 | $604,738 | 11.4% |\n| \ud83d\udcc5 Appointment Scheduled | 17 | $678,595 | 9.2% |\n| \ud83d\udcc4 Contract Sent | 15 | $600,691 | 8.2% |\n| \ud83d\udda5\ufe0f Presentation Scheduled | 12 | $347,900 | 6.5% |\n| \u2714\ufe0f Qualified to Buy | 12 | $325,204 | 6.5% |\n\n**Key takeaways:**\n- **Most deals are closed** \u2014 43.5% won and 14.7% lost, so the majority of your pipeline has already resolved.\n- **Active pipeline** holds **77 open deals worth ~$2.56M** across 5 stages.\n- The biggest active cluster is **\"Decision Maker Bought In\"** (21 deals, $605K) \u2014 these are late-stage and likely close to converting.\n- **Contract Sent** (15 deals, $601K) is another high-value group that may just need a nudge to close.\n- The top of the funnel (Appointment Scheduled, Presentation Scheduled, Qualified to Buy) has a healthy spread of early-stage deals feeding in.\n\nWould you like to drill into any specific stage, look at deal owners, or analyze win rates?"
+    }
+  ]
+}

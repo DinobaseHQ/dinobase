@@ -1,0 +1,55 @@
+{
+  "question_id": "revops_t1_05",
+  "question": "I think we have a payment processing issue \u2014 how many charges are failing?",
+  "model": "claude-opus-4.6",
+  "approach": "dinobase",
+  "expected_answer": 45,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 45 failed charges, which matches the ground truth answer exactly, and provided appropriate context and analysis around this core metric.",
+    "method": "llm_judge",
+    "judge_tokens": 664
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 6h 17m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 6h 17m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "I think we have a payment processing issue \u2014 how many charges are failing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.charges"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"charges\",\n  \"row_count\": 566,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Amount intended to be collected by this payment. A positive integer representing how much to charge in the smallest currency unit (e.g., 100 cents to charge $1.00 or 100 to charge \\u00a5100, a zero-decimal currency). The minimum amount is $0.50 US or equivalent in charge currency. The amount value sup...\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO currency code, in lowercase. Must be a supported currency.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the payment is either `succeeded`, `pending`, or `failed`.\",\n      \"note\": \"Values: failed, pending, succeeded\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"payment_method_type\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"ch_0VrmI7OsygQE2B\",\n      \"customer_id\": \"cus_aAEAw3CjkGOM5W\",\n      \"amount\": 9900,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"created\": 1766534400,\n      \"payment_method_type\": \"card\",\n      \"des...",
+      "output_full_length": 2650
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  status,\n  COUNT(*) AS count,\n  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS pct,\n  SUM(amount) / 100.0 AS total_amount_usd\nFROM stripe.charges\nGROUP BY status\nORDER BY count DESC\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"status\",\n    \"count\",\n    \"pct\",\n    \"total_amount_usd\"\n  ],\n  \"rows\": [\n    {\n      \"status\": \"succeeded\",\n      \"count\": 509,\n      \"pct\": 89.9,\n      \"total_amount_usd\": 157191.0\n    },\n    {\n      \"status\": \"failed\",\n      \"count\": 45,\n      \"pct\": 8.0,\n      \"total_amount_usd\": 16735.0\n    },\n    {\n      \"status\": \"pending\",\n      \"count\": 12,\n      \"pct\": 2.1,\n      \"total_amount_usd\": 3158.0\n    }\n  ],\n  \"row_count\": 3,\n  \"total_rows\": 3,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 498
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  DATE_TRUNC('month', to_timestamp(created)) AS month,\n  COUNT(*) FILTER (WHERE status = 'failed') AS failed,\n  COUNT(*) AS total,\n  ROUND(COUNT(*) FILTER (WHERE status = 'failed') * 100.0 / COUNT(*), 1) AS failure_rate_pct\nFROM stripe.charges\nGROUP BY 1\nORDER BY 1 DESC\nLIMIT 6\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"month\",\n    \"failed\",\n    \"total\",\n    \"failure_rate_pct\"\n  ],\n  \"rows\": [\n    {\n      \"month\": \"2027-03-01 00:00:00+00:00\",\n      \"failed\": 0,\n      \"total\": 1,\n      \"failure_rate_pct\": 0.0\n    },\n    {\n      \"month\": \"2027-02-01 00:00:00+00:00\",\n      \"failed\": 1,\n      \"total\": 1,\n      \"failure_rate_pct\": 100.0\n    },\n    {\n      \"month\": \"2027-01-01 00:00:00+00:00\",\n      \"failed\": 0,\n      \"total\": 6,\n      \"failure_rate_pct\": 0.0\n    },\n    {\n      \"month\": \"2026-12-01 00:00:00+00:00\",\n      \"failed\": 0,\n      \"total\": 6,\n      \"failure_rate_pct\": 0.0\n    },\n    {\n      \"month\": \"2026-11-01 00:00:00+00:00\",\n      \"failed\": 1,\n      \"total\": 9,\n      \"failure_rate_pct\": 11.1\n    },\n    {\n      \"month\": \"2026-10-01 00:00:00+01:00\",\n      \"failed\": 0,\n      \"total\": 10,\n      \"failure_rate_pct\": 0.0\n    }\n  ],\n  \"row_count\": 6,\n  \"total_rows\": 6,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 912
+    },
+    {
+      "role": "assistant",
+      "content": "Here's the breakdown of your Stripe charges:\n\n### Overall Charge Status\n| Status | Count | % of Total | Amount |\n|---|---|---|---|\n| \u2705 Succeeded | 509 | 89.9% | $157,191 |\n| \u274c Failed | 45 | 8.0% | $16,735 |\n| \u23f3 Pending | 12 | 2.1% | $3,158 |\n\n### Key Takeaways\n\n- **45 failed charges** out of 566 total, representing an **8.0% failure rate** \u2014 that's notably high. A healthy failure rate is typically **1\u20133%**, so this is worth investigating.\n- The failed charges represent **$16,735** in lost revenue.\n- Looking at the **recent monthly trend**, failures appear sporadic (0\u20131 per month lately), so the bulk of failures may have occurred in earlier months.\n\n### Recommended Next Steps\nWould you like me to dig deeper? I can:\n1. **Break down failures by payment method** (card vs. SEPA debit, etc.) to see if one method is driving the issue\n2. **Identify which customers** have the most failed charges (repeat offenders with bad payment info)\n3. **Look at the time trend** over a longer period to see if failures spiked at a particular point\n\n\u26a0\ufe0f *Note: The Stripe data is ~6 hours stale, so very recent charges may not be reflected.*"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "question_id": "revops_t2_05",
+  "question": "Finance needs to know how much revenue we have actually collected from paid invoices, in real dollars.",
+  "model": "gpt-5.4",
+  "approach": "raw_mcp",
+  "expected_answer": 51580.0,
+  "judgment": {
+    "correct": false,
+    "partial": false,
+    "explanation": "The agent's answer of $6,039.00 is materially wrong compared to the ground truth of $51,580.00 (approximately 8.5x too low), indicating either incorrect filtering, summation, or data retrieval despite using the correct methodology.",
+    "method": "llm_judge",
+    "judge_tokens": 495
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You are a data analyst with access to stripe and hubspot API tools.\n\nUse these tools to answer business questions. Each tool returns records from a single API endpoint.\n\nNote: These are separate systems with separate APIs. There is no built-in way to join or aggregate data across them. If you need to correlate records across sources, you will need to fetch from each and match them manually (e.g., by email address)."
+    },
+    {
+      "role": "user",
+      "content": "Finance needs to know how much revenue we have actually collected from paid invoices, in real dollars."
+    },
+    {
+      "role": "tool_call",
+      "tool": "stripe_list_invoices",
+      "input": {
+        "limit": 100,
+        "offset": 0
+      },
+      "output": "{\"data\": [{\"id\": \"in_0qeUjiDdhMDIrk\", \"customer_id\": \"cus_aAEAw3CjkGOM5W\", \"subscription_id\": \"sub_002lghqYVlQufw\", \"amount_due\": 99000, \"amount_paid\": 99000, \"status\": \"paid\", \"created\": 1763942400, \"due_date\": 1766534400, \"period_start\": 1763942400, \"period_end\": 1795478400}, {\"id\": \"in_MBSfAKzi1G6gt7\", \"customer_id\": \"cus_qrK2IGlozIoDSB\", \"subscription_id\": \"sub_s0D1K6e3F1xsd0\", \"amount_due\": 29900, \"amount_paid\": 29900, \"status\": \"paid\", \"created\": 1719529200, \"due_date\": 1722121200, \"period_start\": 1719529200, \"period_end\": 1722121200}, {\"id\": \"in_j2NaR1cdbw47IV\", \"customer_id\": \"cus_szpPwIv9IvCtoS\", \"subscription_id\": \"sub_J4CtSWENkNaqVk\", \"amount_due\": 9900, \"amount_paid\": 9900, \"status\": \"paid\", \"created\": 1719010800, \"due_date\": 1721602800, \"period_start\": 1719010800, \"period_end\": 1721602800}, {\"id\": \"in_BAWMwKWvr06p0i\", \"customer_id\": \"cus_hcds6NUgarDv7p\", \"subscription_id\": \"sub_Nz7xcmxatZlPMp\", \"amount_due\": 2900, \"amount_paid\": 2900, \"status\": \"paid\", \"created\": 1729033200, \"due_date\": 1731628800, \"period_start\": 1729033200, \"period_end\": 1731628800}, {\"id\": \"in_YCacdhWhmXTzoB\", \"customer_id\": \"cus_heEJQjY6fpIzKM\", \"subscription_id\": \"sub_xKkZssTKu39v3w\", \"amount_due\": 29900, \"amount_paid\": 29900, \"status\": \"paid\", \"created\": 1753311600, \"due_date\": 1755903600, \"period_start\": 1753311600, \"period_end\": 1755903600}, {\"id\": \"in_r6EAcagTwgK1gv\", \"customer_id\": \"cus_x4sKAJd7gVMqfo\", \"subscription_id\": \"sub_TiTKkwOc2pHd9P\", \"amount_due\": 99900, \"amount_paid\": 99900, \"status\": \"paid\", \"created\": 1763424000, \"due_date\": 1766016000, \"period_start\": 1763424000, \"period_end\": 1766016000}, {\"id\": \"in_CmcCpCoec1wGrs\", \"customer_id\": \"cus_jzQDcrr1eoqXKX\", \"subscription_id\": \"sub_BhpRmQaAgGMRz3\", \"amount_due\": 2900, \"amount_paid\": 2900, \"status\": \"paid\", \"created\": 1733184000, \"due_date\": 1735776000, \"period_start\": 1733184000, \"period_end\": 1735776000}, {\"id\": \"in_XkRbJlGGwAApbh\", \"customer_id\": \"cus_hnjqidXKZ5BDsy\", \"subscription_id\": \"sub_WELWZ8wzjH4QDo\", \"amount...",
+      "output_full_length": 26880
+    },
+    {
+      "role": "tool_call",
+      "tool": "stripe_list_invoices",
+      "input": {
+        "limit": 100,
+        "offset": 100
+      },
+      "output": "{\"data\": [{\"id\": \"in_w5Rgxm3VFz2zya\", \"customer_id\": \"cus_kD9eKan56yrSVA\", \"subscription_id\": \"sub_ZmZ5DDcijC13CY\", \"amount_due\": 29000, \"amount_paid\": 29000, \"status\": \"paid\", \"created\": 1719183600, \"due_date\": 1721775600, \"period_start\": 1719183600, \"period_end\": 1750719600}, {\"id\": \"in_9dSK5BCyKLnVQO\", \"customer_id\": \"cus_7op5hLdPOkaiaE\", \"subscription_id\": \"sub_QIbJu4Xej0vxHk\", \"amount_due\": 29000, \"amount_paid\": 29000, \"status\": \"paid\", \"created\": 1768348800, \"due_date\": 1770940800, \"period_start\": 1768348800, \"period_end\": 1799884800}, {\"id\": \"in_9fQY8es1c6K7n6\", \"customer_id\": \"cus_GYqxU2Th3uAGq8\", \"subscription_id\": \"sub_Wt1Sqf2xZsGkxc\", \"amount_due\": 9900, \"amount_paid\": 9900, \"status\": \"paid\", \"created\": 1711843200, \"due_date\": 1714431600, \"period_start\": 1711843200, \"period_end\": 1714431600}, {\"id\": \"in_bp7HrMyjf16Aad\", \"customer_id\": \"cus_EFd1kjV3PhTa1a\", \"subscription_id\": \"sub_X4jvD2tuVg8G9m\", \"amount_due\": 2900, \"amount_paid\": 2900, \"status\": \"paid\", \"created\": 1766016000, \"due_date\": 1768608000, \"period_start\": 1766016000, \"period_end\": 1768608000}, {\"id\": \"in_Iw004CU3xR5fFy\", \"customer_id\": \"cus_w5l7cXSOnp4tZJ\", \"subscription_id\": \"sub_htc02u3gVUbVNn\", \"amount_due\": 99900, \"amount_paid\": 0, \"status\": \"open\", \"created\": 1750978800, \"due_date\": 1753570800, \"period_start\": 1750978800, \"period_end\": 1753570800}, {\"id\": \"in_wsrVpOBA8QLlnz\", \"customer_id\": \"cus_PdnFcy21VtfCws\", \"subscription_id\": \"sub_VPqjh7IgHIq6XJ\", \"amount_due\": 29900, \"amount_paid\": 29900, \"status\": \"paid\", \"created\": 1726182000, \"due_date\": 1728774000, \"period_start\": 1726182000, \"period_end\": 1728774000}, {\"id\": \"in_sLkl0xAZf8pWP5\", \"customer_id\": \"cus_Tpw89WTHXj5bHN\", \"subscription_id\": \"sub_Hdb4dxfyR3NQBw\", \"amount_due\": 29900, \"amount_paid\": 29900, \"status\": \"paid\", \"created\": 1720306800, \"due_date\": 1722898800, \"period_start\": 1720306800, \"period_end\": 1722898800}, {\"id\": \"in_vORqjQ0N7HE96M\", \"customer_id\": \"cus_auVxTtm8A78irc\", \"subscription_id\": \"sub_e5VJfXRgtNVD6i\", \"amount_d...",
+      "output_full_length": 7294
+    },
+    {
+      "role": "assistant",
+      "content": "We have actually collected **$6,039.00** from **paid invoices** in Stripe.\n\nMethod:\n- Pulled all **127 invoices**\n- Included only invoices with `status = \"paid\"`\n- Summed `amount_paid`\n- Converted from cents to dollars\n\nResult:\n- **97 paid invoices**\n- **603,900 cents = $6,039.00**\n\nI excluded:\n- `open` invoices\n- `void` invoices\n\nIf you want, I can also break this down by month, customer, or subscription plan."
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "question_id": "revops_t3_01",
+  "question": "I think some won deals never converted to paying customers \u2014 can you find companies where we closed the deal but they have no active subscription?",
+  "model": "qwen-3.5-27b",
+  "approach": "dinobase",
+  "expected_answer": "list of company names",
+  "judgment": {
+    "correct": false,
+    "partial": false,
+    "explanation": "The agent provided a summary conclusion (all 20 companies have active subscriptions) rather than the requested list of company names, and without seeing the actual data, the claim that there are zero companies with closed deals but no active subscriptions appears to be a specific factual assertion that cannot be verified as correct from the response alone.",
+    "method": "llm_judge",
+    "judge_tokens": 526
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (8m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (8m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "I think some won deals never converted to paying customers \u2014 can you find companies where we closed the deal but they have no active subscription?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2065
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.subscriptions"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"subscriptions\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Possible values are `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, or `paused`. \\n\\nFor `collection_method=charge_automatically` a subscription moves into `incomplete` if the initial payment attempt fails. A subscription in this status can only have meta...\",\n      \"note\": \"Values: active, canceled, incomplete, incomplete_expired, past_due, paused, trialing, unpaid\"\n    },\n    {\n      \"name\": \"plan_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_interval\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_start\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_end\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"canceled_at\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"If the subscription has been canceled, the date of that cancellation. If the subscription was canceled with `cancel_at_period_end`, `canceled_at` will reflect the time of the most recent update request, not the end of the subscription period when the subscription is automatically moved to a cance...\",\n      \"note\": \"Uni...",
+      "output_full_length": 3226
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.companies"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"companies\",\n  \"row_count\": 20,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"name\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"domain\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"industry\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"annualrevenue\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"numberofemployees\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"city\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"state\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"country\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"1001\",\n      \"name\": \"Oscorp\",\n      \"domain\": \"oscorp.io\",\n      \"industry\": \"Healthcare\",\n      \"annualrevenue\": 18000000.0,\n      \"numberofemployees\": 180,\n      \"city\": \"Lowehaven\",\n      \"state\": \"NJ\",\n      \"country\": \"US\",\n      \"createdate\": \"2025-11-13T00:00:00\"\n    },\n    {\n      \"id\": \"1002\",\n      \"name\": \"Dunder Mifflin\",\n      \"domain\": \"dundermifflin.com\",\n      \"industry\": \"Retail\",\n      \"annualrevenue\": 1500000.0,\n      \"numberofemployees\": 25,\n      \"city\": \"Lake Christopher\",\n      \"state\": \"NY\",\n      \"country\": \"US\",\n      \"createdate\": \"2024-10-12T00:00:00\"\n    },\n    {\n      \"id\": \"1003\",\n      \"name\": \"Massive Dynamic\",\n      \"domain\": \"massivedynamic.com\",\n      \"industry\": \"Technology\",\n      \"annualrevenue\": 20000000.0,\n      \"numberofemployees\": 200,\n      \"city\": \"Clarencebury\",\n      \"state\": \"TX\",\n      \"country\": \"US\",\n      \"createdate\": \"2024-06-17T00:00:00\"\n    }\n  ],\n  \"last_sync\": \"2026-03-25 22:27:09.514788\",\n  \"age\": \"8m\",\n  \"is_stale\": false\n}",
+      "output_full_length": 1987
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.customers"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"customers\",\n  \"row_count\": 180,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"email\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's email address.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"name\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's full name or business name.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO code for the currency the customer can be charged in for recurring billing purposes.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"delinquent\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"Tracks the most recent state change on any invoice belonging to the customer. Paying an invoice or marking it uncollectible via the API will set this field to false. An automatic payment failure or passing the `invoice.due_date` will set this field to `true`.\\n\\nIf an invoice becomes uncollectible ...\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"livemode\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"If the object exists in live mode, the value is `true`. If the object exists in test mode, the value is `false`.\"\n    }\n  ],\n  \"sample_rows\": ...",
+      "output_full_length": 2921
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.contacts"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"contacts\",\n  \"row_count\": 180,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"email\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"firstname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lastname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"phone\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lifecyclestage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hs_lead_status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lastmodifieddate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"5001\",\n      \"email\": \"catherine.dixon@oscorp.io\",\n      \"firstname\": \"Catherine\",\n      \"lastname\": \"Dixon\",\n      \"phone\": \"+1-876-903-6690\",\n      \"company\": \"Oscorp\",\n      \"company_id\": \"1001\",\n      \"lifecyclestage\": \"customer\",\n      \"hs_lead_status\": \"unqualified\",\n      \"createdate\": \"2025-11-22T00:00:00\",\n      \"lastmodifieddate\": \"2026-02-25T00:00:00\"\n    },\n    {\n      \"id\": \"5002\",\n      \"email\": \"lisa.adams@dundermifflin.com\",\n      \"firstname\": \"Lisa\",\n      \"lastname\": \"Adams\",\n      \"phone\": \"9545668893\",\n      \"company\": \"Dunder Mifflin\",\n      \"company_id\": \"1002\",\n      \"lifecyclestage\": \"customer\",\n      \"hs_lead_status\": \"bad_timing\",\n      \"createdate\": \"2024-10-21T00:00:00\",\n      \"lastmodifieddate\": \"2024-12-19T00:00:00\"\n    },\n    {\n      \"id\": \"5003\",\n      \"email\": \"melinda.martin@massivedynamic.com\",\n      \"firstname\": \"Melinda\",\n      \"lastname\": \"Martin\",\n      \"...",
+      "output_full_length": 2348
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "WITH won_deals AS (\n    SELECT DISTINCT company_id\n    FROM hubspot.deals\n    WHERE dealstage = 'closedwon'\n),\ncompanies_with_active_subs AS (\n    SELECT DISTINCT c.id as company_id\n    FROM hubspot.contacts ct\n    JOIN stripe.customers sc ON ct.email = sc.email\n    JOIN stripe.subscriptions ss ON sc.id = ss.customer_id\n    WHERE ss.status = 'active'\n)\nSELECT \n    c.id as company_id,\n    c.name as company_name,\n    c.domain,\n    COUNT(DISTINCT wd.company_id) as won_deal_count\nFROM hubspot.companies c\nJOIN won_deals wd ON c.id = wd.company_id\nLEFT JOIN companies_with_active_subs cas ON c.id = cas.company_id\nWHERE cas.company_id IS NULL\nORDER BY c.name;"
+      },
+      "output": "{\n  \"error\": \"Binder Error: Referenced table \\\"c\\\" not found!\\nCandidate tables: \\\"ct\\\"\\n\\nLINE 7:     SELECT DISTINCT c.id as company_id\\n                            ^\"\n}",
+      "output_full_length": 171
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "WITH won_deals AS (\n    SELECT DISTINCT company_id\n    FROM hubspot.deals\n    WHERE dealstage = 'closedwon'\n),\ncompanies_with_active_subs AS (\n    SELECT DISTINCT ct.company_id\n    FROM hubspot.contacts ct\n    JOIN stripe.customers sc ON ct.email = sc.email\n    JOIN stripe.subscriptions ss ON sc.id = ss.customer_id\n    WHERE ss.status = 'active'\n)\nSELECT \n    c.id as company_id,\n    c.name as company_name,\n    c.domain,\n    COUNT(DISTINCT wd.company_id) as won_deal_count\nFROM hubspot.companies c\nJOIN won_deals wd ON c.id = wd.company_id\nLEFT JOIN companies_with_active_subs cas ON c.id = cas.company_id\nWHERE cas.company_id IS NULL\nORDER BY c.name;"
+      },
+      "output": "{\n  \"error\": \"Binder Error: column \\\"id\\\" must appear in the GROUP BY clause or must be part of an aggregate function.\\nEither add it to the GROUP BY list, or use \\\"ANY_VALUE(id)\\\" if the exact value of \\\"id\\\" is not important.\\n\\nLINE 14:     c.id as company_id,\\n             ^\"\n}",
+      "output_full_length": 282
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "WITH won_deals AS (\n    SELECT DISTINCT company_id\n    FROM hubspot.deals\n    WHERE dealstage = 'closedwon'\n),\ncompanies_with_active_subs AS (\n    SELECT DISTINCT ct.company_id\n    FROM hubspot.contacts ct\n    JOIN stripe.customers sc ON ct.email = sc.email\n    JOIN stripe.subscriptions ss ON sc.id = ss.customer_id\n    WHERE ss.status = 'active'\n)\nSELECT \n    c.id as company_id,\n    c.name as company_name,\n    c.domain,\n    COUNT(DISTINCT wd.company_id) as won_deal_count\nFROM hubspot.companies c\nJOIN won_deals wd ON c.id = wd.company_id\nLEFT JOIN companies_with_active_subs cas ON c.id = cas.company_id\nWHERE cas.company_id IS NULL\nGROUP BY c.id, c.name, c.domain\nORDER BY c.name;"
+      },
+      "output": "{\n  \"columns\": [\n    \"company_id\",\n    \"company_name\",\n    \"domain\",\n    \"won_deal_count\"\n  ],\n  \"rows\": [],\n  \"row_count\": 0,\n  \"total_rows\": 0,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 172
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Let's first see all companies with closed-won deals\nSELECT DISTINCT c.id, c.name, c.domain\nFROM hubspot.companies c\nJOIN hubspot.deals d ON c.id = d.company_id\nWHERE d.dealstage = 'closedwon'\nORDER BY c.name;"
+      },
+      "output": "{\n  \"columns\": [\n    \"id\",\n    \"name\",\n    \"domain\"\n  ],\n  \"rows\": [\n    {\n      \"id\": \"1019\",\n      \"name\": \"Acme Corp\",\n      \"domain\": \"acme.com\"\n    },\n    {\n      \"id\": \"1018\",\n      \"name\": \"Aperture Science\",\n      \"domain\": \"aperture.io\"\n    },\n    {\n      \"id\": \"1014\",\n      \"name\": \"Black Mesa\",\n      \"domain\": \"blackmesa.com\"\n    },\n    {\n      \"id\": \"1016\",\n      \"name\": \"Cyberdyne Systems\",\n      \"domain\": \"cyberdyne.io\"\n    },\n    {\n      \"id\": \"1002\",\n      \"name\": \"Dunder Mifflin\",\n      \"domain\": \"dundermifflin.com\"\n    },\n    {\n      \"id\": \"1008\",\n      \"name\": \"Globex Industries\",\n      \"domain\": \"globex.io\"\n    },\n    {\n      \"id\": \"1006\",\n      \"name\": \"Hooli\",\n      \"domain\": \"hooli.com\"\n    },\n    {\n      \"id\": \"1007\",\n      \"name\": \"Initech\",\n      \"domain\": \"initech.com\"\n    },\n    {\n      \"id\": \"1012\",\n      \"name\": \"LexCorp\",\n      \"domain\": \"lexcorp.com\"\n    },\n    {\n      \"id\": \"1003\",\n      \"name\": \"Massive Dynamic\",\n      \"domain\": \"massivedynamic.com\"\n    },\n    {\n      \"id\": \"1001\",\n      \"name\": \"Oscorp\",\n      \"domain\": \"oscorp.io\"\n    },\n    {\n      \"id\": \"1004\",\n      \"name\": \"Pied Piper\",\n      \"domain\": \"piedpiper.com\"\n    },\n    {\n      \"id\": \"1011\",\n      \"name\": \"Soylent Corp\",\n      \"domain\": \"soylent.co\"\n    },\n    {\n      \"id\": \"1020\",\n      \"name\": \"Stark Industries\",\n      \"domain\": \"starkindustries.com\"\n    },\n    {\n      \"id\": \"1005\",\n      \"name\": \"Sterling Cooper\",\n      \"domain\": \"sterlingcooper.com\"\n    },\n    {\n      \"id\": \"1015\",\n      \"name\": \"Tyrell Corp\",\n      \"domain\": \"tyrell.com\"\n    },\n    {\n      \"id\": \"1017\",\n      \"name\": \"Umbrella Corp\",\n      \"domain\": \"umbrella.co\"\n    },\n    {\n      \"id\": \"1013\",\n      \"name\": \"Wayne Enterprises\",\n      \"domain\": \"wayne-ent.com\"\n    },\n    {\n      \"id\": \"1010\",\n      \"name\": \"Weyland-Yutani\",\n      \"domain\": \"weyland.co\"\n    },\n    {\n      \"id\": \"1009\",\n      \"name\": \"Wonka Industries\",\n      \"domain\": \"wonka.co\"\n    }\n  ],\n  \"row_count\": 20,\n  \"total_rows\": 20,\n ...",
+      "output_full_length": 2025
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Let's see which companies have active subscriptions\nSELECT DISTINCT ct.company_id, c.name\nFROM hubspot.contacts ct\nJOIN stripe.customers sc ON ct.email = sc.email\nJOIN stripe.subscriptions ss ON sc.id = ss.customer_id\nJOIN hubspot.companies c ON ct.company_id = c.id\nWHERE ss.status = 'active'\nORDER BY c.name;"
+      },
+      "output": "{\n  \"columns\": [\n    \"company_id\",\n    \"name\"\n  ],\n  \"rows\": [\n    {\n      \"company_id\": \"1019\",\n      \"name\": \"Acme Corp\"\n    },\n    {\n      \"company_id\": \"1018\",\n      \"name\": \"Aperture Science\"\n    },\n    {\n      \"company_id\": \"1014\",\n      \"name\": \"Black Mesa\"\n    },\n    {\n      \"company_id\": \"1016\",\n      \"name\": \"Cyberdyne Systems\"\n    },\n    {\n      \"company_id\": \"1002\",\n      \"name\": \"Dunder Mifflin\"\n    },\n    {\n      \"company_id\": \"1008\",\n      \"name\": \"Globex Industries\"\n    },\n    {\n      \"company_id\": \"1006\",\n      \"name\": \"Hooli\"\n    },\n    {\n      \"company_id\": \"1007\",\n      \"name\": \"Initech\"\n    },\n    {\n      \"company_id\": \"1012\",\n      \"name\": \"LexCorp\"\n    },\n    {\n      \"company_id\": \"1003\",\n      \"name\": \"Massive Dynamic\"\n    },\n    {\n      \"company_id\": \"1001\",\n      \"name\": \"Oscorp\"\n    },\n    {\n      \"company_id\": \"1004\",\n      \"name\": \"Pied Piper\"\n    },\n    {\n      \"company_id\": \"1011\",\n      \"name\": \"Soylent Corp\"\n    },\n    {\n      \"company_id\": \"1020\",\n      \"name\": \"Stark Industries\"\n    },\n    {\n      \"company_id\": \"1005\",\n      \"name\": \"Sterling Cooper\"\n    },\n    {\n      \"company_id\": \"1015\",\n      \"name\": \"Tyrell Corp\"\n    },\n    {\n      \"company_id\": \"1017\",\n      \"name\": \"Umbrella Corp\"\n    },\n    {\n      \"company_id\": \"1013\",\n      \"name\": \"Wayne Enterprises\"\n    },\n    {\n      \"company_id\": \"1010\",\n      \"name\": \"Weyland-Yutani\"\n    },\n    {\n      \"company_id\": \"1009\",\n      \"name\": \"Wonka Industries\"\n    }\n  ],\n  \"row_count\": 20,\n  \"total_rows\": 20,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1539
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the analysis, **all 20 companies** that have closed-won deals also have active subscriptions. There are no companies where you closed a deal but they have no active subscription.\n\nHere's what I found:\n- **20 companies** have deals with `dealstage = 'closedwon'`\n- **All 20 of those same companies** have at least one active subscription in Stripe\n\nThe join between HubSpot contacts and Stripe customers (via email) shows that every company with a won deal has successfully converted to a paying customer with an active subscription."
+    }
+  ]
+}

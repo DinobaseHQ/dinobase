@@ -1,0 +1,62 @@
+{
+  "question_id": "revops_t2_01",
+  "question": "I need our MRR number for the investor update \u2014 what are we at?",
+  "model": "claude-haiku-4.5",
+  "approach": "dinobase",
+  "expected_answer": 22498.83,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the exact MRR figure of $22,498.83, correctly converted annual subscriptions to monthly equivalents, and properly formatted the answer in dollars.",
+    "method": "llm_judge",
+    "judge_tokens": 448
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (38m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (38m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "I need our MRR number for the investor update \u2014 what are we at?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "list_sources",
+      "input": {},
+      "output": "{\n  \"sources\": [\n    {\n      \"name\": \"hubspot\",\n      \"tables\": [\n        {\n          \"name\": \"companies\",\n          \"rows\": 20\n        },\n        {\n          \"name\": \"contacts\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"deals\",\n          \"rows\": 184\n        }\n      ],\n      \"table_count\": 3,\n      \"total_rows\": 384,\n      \"last_sync\": \"2026-03-25 23:17:52.003653\",\n      \"age\": \"38m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": false\n    },\n    {\n      \"name\": \"stripe\",\n      \"tables\": [\n        {\n          \"name\": \"charges\",\n          \"rows\": 566\n        },\n        {\n          \"name\": \"customers\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"invoices\",\n          \"rows\": 127\n        },\n        {\n          \"name\": \"subscriptions\",\n          \"rows\": 127\n        }\n      ],\n      \"table_count\": 4,\n      \"total_rows\": 1000,\n      \"last_sync\": \"2026-03-25 23:17:51.958592\",\n      \"age\": \"38m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": false\n    }\n  ]\n}",
+      "output_full_length": 1016
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.subscriptions"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"subscriptions\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Possible values are `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, or `paused`. \\n\\nFor `collection_method=charge_automatically` a subscription moves into `incomplete` if the initial payment attempt fails. A subscription in this status can only have meta...\",\n      \"note\": \"Values: active, canceled, incomplete, incomplete_expired, past_due, paused, trialing, unpaid\"\n    },\n    {\n      \"name\": \"plan_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_interval\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_start\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_end\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"canceled_at\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"If the subscription has been canceled, the date of that cancellation. If the subscription was canceled with `cancel_at_period_end`, `canceled_at` will reflect the time of the most recent update request, not the end of the subscription period when the subscription is automatically moved to a cance...\",\n      \"note\": \"Uni...",
+      "output_full_length": 3227
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.invoices"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"invoices\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object. For preview invoices created using the create preview endpoint, this id will be prefixed with `upcoming_in`.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"subscription_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount_due\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Final amount due at this time for this invoice. If the invoice's total is smaller than the minimum charge amount, for example, or if there is account credit that can be applied to the invoice, the `amount_due` may be 0. If there is a positive `starting_balance` for the invoice (the customer owes ...\"\n    },\n    {\n      \"name\": \"amount_paid\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The amount, in cents (or local equivalent), that was paid.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the invoice, one of `draft`, `open`, `paid`, `uncollectible`, or `void`. Learn more\",\n      \"note\": \"Values: draft, open, paid, uncollectible, void Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"due_date\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The date on which payment for this invoice is due. This value will be `null` for invoices where `collection_method=charge_automatically`.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert. Can be null\"\n    ...",
+      "output_full_length": 3929
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  SUM(CASE \n    WHEN plan_interval = 'month' THEN plan_amount\n    WHEN plan_interval = 'year' THEN plan_amount / 12\n    ELSE 0\n  END) as mrr_cents,\n  SUM(CASE \n    WHEN plan_interval = 'month' THEN plan_amount\n    WHEN plan_interval = 'year' THEN plan_amount / 12\n    ELSE 0\n  END) / 100.0 as mrr_dollars,\n  COUNT(*) as active_subscriptions,\n  COUNT(CASE WHEN plan_interval = 'month' THEN 1 END) as monthly_subs,\n  COUNT(CASE WHEN plan_interval = 'year' THEN 1 END) as annual_subs\nFROM stripe.subscriptions\nWHERE status = 'active'\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"mrr_cents\",\n    \"mrr_dollars\",\n    \"active_subscriptions\",\n    \"monthly_subs\",\n    \"annual_subs\"\n  ],\n  \"rows\": [\n    {\n      \"mrr_cents\": 2249883.3333333335,\n      \"mrr_dollars\": 22498.833333333336,\n      \"active_subscriptions\": 88,\n      \"monthly_subs\": 57,\n      \"annual_subs\": 31\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 380
+    },
+    {
+      "role": "assistant",
+      "content": "## Your MRR: **$22,498.83**\n\nHere's the breakdown:\n- **Active Subscriptions:** 88\n  - 57 monthly subscriptions\n  - 31 annual subscriptions (normalized to monthly)\n\nThis is calculated from your Stripe data (synced 38 minutes ago) by taking all active subscriptions and converting annual plans to their monthly equivalent (dividing by 12)."
+    }
+  ]
+}

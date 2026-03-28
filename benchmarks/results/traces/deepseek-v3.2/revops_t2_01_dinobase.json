@@ -1,0 +1,98 @@
+{
+  "question_id": "revops_t2_01",
+  "question": "I need our MRR number for the investor update \u2014 what are we at?",
+  "model": "deepseek-v3.2",
+  "approach": "dinobase",
+  "expected_answer": 22498.83,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the exact MRR figure of $22,498.83, correctly converted annual plans to monthly (dividing by 12) and handled the cents-to-dollars conversion (dividing by 100), with accurate supporting metrics and a well-structured investor update recommendation.",
+    "method": "llm_judge",
+    "judge_tokens": 926
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 1h 7m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 1h 7m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "I need our MRR number for the investor update \u2014 what are we at?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "list_sources",
+      "input": {},
+      "output": "{\n  \"sources\": [\n    {\n      \"name\": \"hubspot\",\n      \"tables\": [\n        {\n          \"name\": \"companies\",\n          \"rows\": 20\n        },\n        {\n          \"name\": \"contacts\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"deals\",\n          \"rows\": 184\n        }\n      ],\n      \"table_count\": 3,\n      \"total_rows\": 384,\n      \"last_sync\": \"2026-03-25 23:17:52.003653\",\n      \"age\": \"1h 7m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": true\n    },\n    {\n      \"name\": \"stripe\",\n      \"tables\": [\n        {\n          \"name\": \"charges\",\n          \"rows\": 566\n        },\n        {\n          \"name\": \"customers\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"invoices\",\n          \"rows\": 127\n        },\n        {\n          \"name\": \"subscriptions\",\n          \"rows\": 127\n        }\n      ],\n      \"table_count\": 4,\n      \"total_rows\": 1000,\n      \"last_sync\": \"2026-03-25 23:17:51.958592\",\n      \"age\": \"1h 7m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": true\n    }\n  ]\n}",
+      "output_full_length": 1018
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.subscriptions"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"subscriptions\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Possible values are `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, or `paused`. \\n\\nFor `collection_method=charge_automatically` a subscription moves into `incomplete` if the initial payment attempt fails. A subscription in this status can only have meta...\",\n      \"note\": \"Values: active, canceled, incomplete, incomplete_expired, past_due, paused, trialing, unpaid\"\n    },\n    {\n      \"name\": \"plan_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_interval\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_start\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_end\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"canceled_at\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"If the subscription has been canceled, the date of that cancellation. If the subscription was canceled with `cancel_at_period_end`, `canceled_at` will reflect the time of the most recent update request, not the end of the subscription period when the subscription is automatically moved to a cance...\",\n      \"note\": \"Uni...",
+      "output_full_length": 3228
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.invoices"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"invoices\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object. For preview invoices created using the create preview endpoint, this id will be prefixed with `upcoming_in`.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"subscription_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount_due\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Final amount due at this time for this invoice. If the invoice's total is smaller than the minimum charge amount, for example, or if there is account credit that can be applied to the invoice, the `amount_due` may be 0. If there is a positive `starting_balance` for the invoice (the customer owes ...\"\n    },\n    {\n      \"name\": \"amount_paid\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The amount, in cents (or local equivalent), that was paid.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the invoice, one of `draft`, `open`, `paid`, `uncollectible`, or `void`. Learn more\",\n      \"note\": \"Values: draft, open, paid, uncollectible, void Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"due_date\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The date on which payment for this invoice is due. This value will be `null` for invoices where `collection_method=charge_automatically`.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert. Can be null\"\n    ...",
+      "output_full_length": 3930
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Calculate MRR from active subscriptions\n-- Convert annual plans to monthly equivalent (divide by 12)\n-- Convert amounts from cents to dollars (divide by 100)\n\nSELECT \n  COUNT(*) as active_subscriptions,\n  SUM(\n    CASE \n      WHEN plan_interval = 'year' THEN plan_amount / 12.0\n      WHEN plan_interval = 'month' THEN plan_amount\n      WHEN plan_interval = 'week' THEN plan_amount * 4.33  -- approximate weeks to month\n      WHEN plan_interval = 'day' THEN plan_amount * 30.44  -- approximate days to month\n      ELSE plan_amount  -- fallback\n    END\n  ) / 100.0 as mrr_in_dollars\nFROM stripe.subscriptions \nWHERE status = 'active'"
+      },
+      "output": "{\n  \"columns\": [\n    \"active_subscriptions\",\n    \"mrr_in_dollars\"\n  ],\n  \"rows\": [\n    {\n      \"active_subscriptions\": 88,\n      \"mrr_in_dollars\": 22498.833333333336\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 240
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Breakdown of MRR by plan type\nSELECT \n  plan_id,\n  plan_interval,\n  COUNT(*) as subscription_count,\n  SUM(plan_amount) / 100.0 as total_amount_cents,\n  SUM(\n    CASE \n      WHEN plan_interval = 'year' THEN plan_amount / 12.0\n      WHEN plan_interval = 'month' THEN plan_amount\n      WHEN plan_interval = 'week' THEN plan_amount * 4.33\n      WHEN plan_interval = 'day' THEN plan_amount * 30.44\n      ELSE plan_amount\n    END\n  ) / 100.0 as monthly_recurring_revenue\nFROM stripe.subscriptions \nWHERE status = 'active'\nGROUP BY plan_id, plan_interval\nORDER BY monthly_recurring_revenue DESC"
+      },
+      "output": "{\n  \"columns\": [\n    \"plan_id\",\n    \"plan_interval\",\n    \"subscription_count\",\n    \"total_amount_cents\",\n    \"monthly_recurring_revenue\"\n  ],\n  \"rows\": [\n    {\n      \"plan_id\": \"plan_enterprise\",\n      \"plan_interval\": \"month\",\n      \"subscription_count\": 14,\n      \"total_amount_cents\": 13986.0,\n      \"monthly_recurring_revenue\": 13986.0\n    },\n    {\n      \"plan_id\": \"plan_business\",\n      \"plan_interval\": \"month\",\n      \"subscription_count\": 18,\n      \"total_amount_cents\": 5382.0,\n      \"monthly_recurring_revenue\": 5382.0\n    },\n    {\n      \"plan_id\": \"plan_pro\",\n      \"plan_interval\": \"month\",\n      \"subscription_count\": 12,\n      \"total_amount_cents\": 1188.0,\n      \"monthly_recurring_revenue\": 1188.0\n    },\n    {\n      \"plan_id\": \"plan_pro_yr\",\n      \"plan_interval\": \"year\",\n      \"subscription_count\": 14,\n      \"total_amount_cents\": 13860.0,\n      \"monthly_recurring_revenue\": 1155.0\n    },\n    {\n      \"plan_id\": \"plan_starter_yr\",\n      \"plan_interval\": \"year\",\n      \"subscription_count\": 17,\n      \"total_amount_cents\": 4930.0,\n      \"monthly_recurring_revenue\": 410.83333333333326\n    },\n    {\n      \"plan_id\": \"plan_starter\",\n      \"plan_interval\": \"month\",\n      \"subscription_count\": 13,\n      \"total_amount_cents\": 377.0,\n      \"monthly_recurring_revenue\": 377.0\n    }\n  ],\n  \"row_count\": 6,\n  \"total_rows\": 6,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1362
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Check recent paid invoices to see revenue trend\nSELECT \n  DATE(FROM_UNIXTIME(created)) as invoice_date,\n  COUNT(*) as invoice_count,\n  SUM(amount_paid) / 100.0 as total_revenue\nFROM stripe.invoices \nWHERE status = 'paid'\n  AND created >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 90 DAY))\nGROUP BY DATE(FROM_UNIXTIME(created))\nORDER BY invoice_date DESC\nLIMIT 30"
+      },
+      "output": "{\n  \"error\": \"Catalog Error: Scalar Function with name unix_timestamp does not exist!\\nDid you mean \\\"to_timestamp\\\"?\\n\\nLINE 8:   AND created >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 90 DAY))\\n                         ^\"\n}",
+      "output_full_length": 232
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Check recent paid invoices to see revenue trend\n-- Using DuckDB syntax for date functions\nSELECT \n  DATE(to_timestamp(created)) as invoice_date,\n  COUNT(*) as invoice_count,\n  SUM(amount_paid) / 100.0 as total_revenue\nFROM stripe.invoices \nWHERE status = 'paid'\n  AND created >= (CAST(EXTRACT(epoch FROM CURRENT_DATE - INTERVAL 90 DAY) AS BIGINT))\nGROUP BY DATE(to_timestamp(created))\nORDER BY invoice_date DESC\nLIMIT 30"
+      },
+      "output": "{\n  \"columns\": [\n    \"invoice_date\",\n    \"invoice_count\",\n    \"total_revenue\"\n  ],\n  \"rows\": [\n    {\n      \"invoice_date\": \"2026-03-19\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 290.0\n    },\n    {\n      \"invoice_date\": \"2026-03-14\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 999.0\n    },\n    {\n      \"invoice_date\": \"2026-03-08\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 29.0\n    },\n    {\n      \"invoice_date\": \"2026-02-20\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 990.0\n    },\n    {\n      \"invoice_date\": \"2026-02-15\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 99.0\n    },\n    {\n      \"invoice_date\": \"2026-02-13\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 999.0\n    },\n    {\n      \"invoice_date\": \"2026-02-09\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 299.0\n    },\n    {\n      \"invoice_date\": \"2026-01-29\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 29.0\n    },\n    {\n      \"invoice_date\": \"2026-01-23\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 990.0\n    },\n    {\n      \"invoice_date\": \"2026-01-22\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 29.0\n    },\n    {\n      \"invoice_date\": \"2026-01-18\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 290.0\n    },\n    {\n      \"invoice_date\": \"2026-01-14\",\n      \"invoice_count\": 1,\n      \"total_revenue\": 290.0\n    }\n  ],\n  \"row_count\": 12,\n  \"total_rows\": 12,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1408
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "-- Summary of subscription statuses\nSELECT \n  status,\n  COUNT(*) as subscription_count,\n  SUM(plan_amount) / 100.0 as total_amount_dollars\nFROM stripe.subscriptions \nGROUP BY status\nORDER BY subscription_count DESC"
+      },
+      "output": "{\n  \"columns\": [\n    \"status\",\n    \"subscription_count\",\n    \"total_amount_dollars\"\n  ],\n  \"rows\": [\n    {\n      \"status\": \"active\",\n      \"subscription_count\": 88,\n      \"total_amount_dollars\": 39723.0\n    },\n    {\n      \"status\": \"canceled\",\n      \"subscription_count\": 19,\n      \"total_amount_dollars\": 8544.0\n    },\n    {\n      \"status\": \"past_due\",\n      \"subscription_count\": 12,\n      \"total_amount_dollars\": 5961.0\n    },\n    {\n      \"status\": \"trialing\",\n      \"subscription_count\": 8,\n      \"total_amount_dollars\": 5847.0\n    }\n  ],\n  \"row_count\": 4,\n  \"total_rows\": 4,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 606
+    },
+    {
+      "role": "assistant",
+      "content": "Based on my analysis of your Stripe data, here's the **MRR number for your investor update**:\n\n## **Current MRR: $22,498.83**\n\n### **Key Metrics:**\n- **Active Subscriptions:** 88\n- **Monthly Recurring Revenue:** $22,498.83\n- **Total Active Subscription Value:** $39,723.00 (in raw plan amounts)\n\n### **MRR Breakdown by Plan:**\n1. **Enterprise Plan:** $13,986.00 (14 subscriptions)\n2. **Business Plan:** $5,382.00 (18 subscriptions) \n3. **Pro Plan:** $1,188.00 (12 subscriptions)\n4. **Pro Annual:** $1,155.00 (14 subscriptions - converted from $13,860/year)\n5. **Starter Plan:** $377.00 (13 subscriptions)\n6. **Starter Annual:** $410.83 (17 subscriptions - converted from $4,930/year)\n\n### **Subscription Health:**\n- **Active:** 88 subscriptions ($39,723 total value)\n- **Canceled:** 19 subscriptions ($8,544 lost value)\n- **Past Due:** 12 subscriptions ($5,961 at risk)\n- **Trialing:** 8 subscriptions ($5,847 potential future MRR)\n\n### **Recent Revenue Activity:**\nThe most recent paid invoice was on **March 19, 2026** for $290.00. There's been consistent revenue activity over the past 90 days with invoices ranging from $29 to $999.\n\n### **Recommendation for Investor Update:**\n1. Lead with the **$22.5K MRR** figure\n2. Highlight the **88 active customers** as your customer base\n3. Mention the **strong enterprise segment** ($14K of MRR from just 14 customers)\n4. Note the **8 trialing customers** as near-term growth potential\n5. Consider addressing the **12 past due subscriptions** ($5,961 at risk) in your churn mitigation strategy\n\n**Note:** The data is about 1 hour stale. For the most precise investor update numbers, you might want to refresh the Stripe source, but the $22.5K MRR should be accurate for reporting purposes."
+    }
+  ]
+}

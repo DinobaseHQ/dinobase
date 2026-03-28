@@ -1,0 +1,1544 @@
+{
+  "metadata": {
+    "description": "Dinobase benchmark: 75 questions across 5 verticals, 3 tiers each",
+    "version": "2.0",
+    "tiers": {
+      "1": "Simple single-table queries (filters, counts, aggregations)",
+      "2": "Multi-step within one source (joins, window functions, CTEs)",
+      "3": "Cross-source joins requiring shared keys"
+    },
+    "total_questions": 75
+  },
+  "verticals": {
+    "revops": {
+      "description": "Revenue Operations: CRM pipeline + billing data for a B2B SaaS company",
+      "sources": {
+        "hubspot": [
+          "contacts",
+          "companies",
+          "deals"
+        ],
+        "stripe": [
+          "customers",
+          "subscriptions",
+          "charges",
+          "invoices"
+        ]
+      },
+      "join_key": "email (stripe.customers.email = hubspot.contacts.email)",
+      "questions": [
+        {
+          "id": "revops_t1_01",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM hubspot.deals",
+          "expected_answer": 184,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple count of all deals in the CRM.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 184,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t1_02",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "What is our active subscriber count right now? I need it for the weekly metrics email.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM stripe.subscriptions WHERE status = 'active'",
+          "expected_answer": 88,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on subscription status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 88,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t1_03",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "What's our total closed-won deal value? The board wants the number for the investor deck.",
+          "ground_truth_sql": "SELECT SUM(amount) AS answer FROM hubspot.deals WHERE dealstage = 'closedwon'",
+          "expected_answer": 2398693.0,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Sum of deal amounts filtered to closed-won stage. HubSpot amounts are already in dollars.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 2398693.0,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t1_04",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Where are most of our deals sitting in the pipeline right now?",
+          "ground_truth_sql": "SELECT dealstage AS answer, COUNT(*) AS cnt FROM hubspot.deals GROUP BY dealstage ORDER BY cnt DESC LIMIT 1",
+          "expected_answer": "closedwon",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Group by deal stage and find the mode.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [
+              "closedwon"
+            ],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t1_05",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "I think we have a payment processing issue \u2014 how many charges are failing?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM stripe.charges WHERE status = 'failed'",
+          "expected_answer": 45,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on charge status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 45,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t2_01",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "I need our MRR number for the investor update \u2014 what are we at?",
+          "ground_truth_sql": "SELECT ROUND(SUM(CASE WHEN plan_interval = 'month' THEN plan_amount ELSE plan_amount / 12.0 END) / 100.0, 2) AS answer FROM stripe.subscriptions WHERE status = 'active'",
+          "expected_answer": 22498.83,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "MRR requires converting annual plans to monthly (divide by 12) and converting cents to dollars (divide by 100). Both transformations are needed.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 22498.83,
+            "tolerance": 1124.94,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "revops_t2_02",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?",
+          "ground_truth_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN dealstage = 'closedwon' THEN 1 ELSE 0 END) / SUM(CASE WHEN dealstage IN ('closedwon', 'closedlost') THEN 1 ELSE 0 END), 1) AS answer FROM hubspot.deals",
+          "expected_answer": 74.8,
+          "answer_type": "number",
+          "answer_unit": "percent",
+          "explanation": "Win rate = closedwon / (closedwon + closedlost). Must NOT include open/other stages in denominator.",
+          "semantic_trap": "win_rate_formula",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "percentage",
+            "value": 74.8,
+            "tolerance": 2,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t2_03",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Break down our average deal size by stage \u2014 I want to see where the big deals are landing.",
+          "ground_truth_sql": "SELECT dealstage, ROUND(AVG(amount), 2) AS avg_amount FROM hubspot.deals GROUP BY dealstage ORDER BY avg_amount DESC LIMIT 3",
+          "expected_answer": "top 3 stages by avg deal size",
+          "answer_type": "ranked_list",
+          "answer_unit": "dollars",
+          "explanation": "Aggregation with GROUP BY and ordering. Tests ability to rank stages.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 3,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t2_04",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which customers are in real trouble \u2014 delinquent AND failing payments? I want to flag them for the collections team.",
+          "ground_truth_sql": "SELECT COUNT(DISTINCT c.id) AS answer FROM stripe.customers c JOIN stripe.charges ch ON c.id = ch.customer_id WHERE c.delinquent = true AND ch.status = 'failed'",
+          "expected_answer": 3,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Join within Stripe source between customers and charges, filtering on both tables.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 3,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t2_05",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Finance needs to know how much revenue we have actually collected from paid invoices, in real dollars.",
+          "ground_truth_sql": "SELECT ROUND(SUM(amount_paid) / 100.0, 2) AS answer FROM stripe.invoices WHERE status = 'paid'",
+          "expected_answer": 51580.0,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Must filter to paid invoices and convert cents to dollars.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 51580.0,
+            "tolerance": 0,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "revops_t3_01",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "I think some won deals never converted to paying customers \u2014 can you find companies where we closed the deal but they have no active subscription?",
+          "ground_truth_sql": "SELECT DISTINCT co.name AS answer FROM hubspot.deals d JOIN hubspot.contacts ct ON d.contact_id = ct.id JOIN hubspot.companies co ON ct.company_id = co.id WHERE d.dealstage = 'closedwon' AND ct.email NOT IN (SELECT c.email FROM stripe.customers c JOIN stripe.subscriptions s ON c.id = s.customer_id WHERE s.status = 'active')",
+          "expected_answer": "none \u2014 all companies with closed-won deals have active subscriptions",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Requires joining HubSpot deals->contacts->companies then anti-joining against Stripe subscriptions via email. Finds revenue leakage.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "revops_t3_02",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "How much MRR are we getting from contacts that HubSpot considers actual customers? I want to validate our CRM lifecycle stages.",
+          "ground_truth_sql": "SELECT ROUND(SUM(CASE WHEN s.plan_interval = 'month' THEN s.plan_amount ELSE s.plan_amount / 12.0 END) / 100.0, 2) AS answer FROM hubspot.contacts hc JOIN stripe.customers sc ON hc.email = sc.email JOIN stripe.subscriptions s ON sc.id = s.customer_id WHERE hc.lifecyclestage = 'customer' AND s.status = 'active'",
+          "expected_answer": 12849.67,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Cross-source join via email. Must convert cents to dollars and normalize annual to monthly.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 12849.67,
+            "tolerance": 642.48,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "revops_t3_03",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "I am prepping for the QBR \u2014 can you show me how subscription value correlates with deal stage? Like, what do people at each stage actually pay us?",
+          "ground_truth_sql": "SELECT d.dealstage, ROUND(AVG(CASE WHEN s.plan_interval = 'month' THEN s.plan_amount ELSE s.plan_amount / 12.0 END) / 100.0, 2) AS avg_monthly_dollars FROM hubspot.deals d JOIN hubspot.contacts hc ON d.contact_id = hc.id JOIN stripe.customers sc ON hc.email = sc.email JOIN stripe.subscriptions s ON sc.id = s.customer_id WHERE s.status = 'active' GROUP BY d.dealstage ORDER BY avg_monthly_dollars DESC",
+          "expected_answer": "table of deal stages with avg subscription amounts",
+          "answer_type": "table",
+          "answer_unit": "dollars",
+          "explanation": "Complex cross-source join: deals->contacts->stripe customers->subscriptions. Requires cents conversion and annual normalization.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "revops_t3_04",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Which industry vertical is bringing in the most actual revenue? Not pipeline \u2014 real charges collected.",
+          "ground_truth_sql": "SELECT co.industry AS answer, ROUND(SUM(ch.amount) / 100.0, 2) AS total_revenue FROM hubspot.contacts hc JOIN hubspot.companies co ON hc.company_id = co.id JOIN stripe.customers sc ON hc.email = sc.email JOIN stripe.charges ch ON sc.id = ch.customer_id WHERE ch.status = 'succeeded' GROUP BY co.industry ORDER BY total_revenue DESC LIMIT 1",
+          "expected_answer": "top industry name",
+          "answer_type": "table",
+          "answer_unit": "dollars",
+          "explanation": "Multi-hop cross-source join: contacts->companies for industry, contacts->stripe customers->charges for revenue.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 1,
+            "tolerance": null,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "revops_t3_05",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Pull me a report of our top 5 highest-spending contacts with their CRM details \u2014 lifecycle stage, company, the works. For the account review meeting.",
+          "ground_truth_sql": "SELECT hc.firstname || ' ' || hc.lastname AS contact_name, hc.lifecyclestage, co.name AS company_name, ROUND(SUM(ch.amount) / 100.0, 2) AS total_charges_dollars FROM hubspot.contacts hc JOIN hubspot.companies co ON hc.company_id = co.id JOIN stripe.customers sc ON hc.email = sc.email JOIN stripe.charges ch ON sc.id = ch.customer_id WHERE ch.status = 'succeeded' GROUP BY hc.firstname, hc.lastname, hc.lifecyclestage, co.name ORDER BY total_charges_dollars DESC LIMIT 5",
+          "expected_answer": "ranked list of top 5 contacts with charges",
+          "answer_type": "ranked_list",
+          "answer_unit": "dollars",
+          "explanation": "Full cross-source join enriching Stripe billing data with HubSpot CRM context.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": 100
+          }
+        }
+      ]
+    },
+    "ecommerce": {
+      "description": "E-commerce analytics: Shopify storefront + Stripe payment processing",
+      "sources": {
+        "shopify": [
+          "products",
+          "orders",
+          "customers"
+        ],
+        "stripe_ecom": [
+          "customers",
+          "charges"
+        ]
+      },
+      "join_key": "email (shopify.customers.email = stripe_ecom.customers.email)",
+      "questions": [
+        {
+          "id": "ecom_t1_01",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Quick check \u2014 how many orders have come through the store?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM shopify.orders",
+          "expected_answer": 415,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple count of all orders.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 415,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t1_02",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "What is our AOV looking like? I need it for the marketing deck.",
+          "ground_truth_sql": "SELECT ROUND(AVG(total_price), 2) AS answer FROM shopify.orders",
+          "expected_answer": 85.25,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Simple average on Shopify orders. Prices already in dollars.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 85.25,
+            "tolerance": 4.26,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t1_03",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "What do we actually have live on the storefront right now? I want the active product count.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM shopify.products WHERE status = 'active'",
+          "expected_answer": 36,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on product status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 36,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t1_04",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Are we having a refund problem? How many orders have been refunded?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM shopify.orders WHERE financial_status = 'refunded'",
+          "expected_answer": 18,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count. Refund rate is ~4.3% of 415 orders.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 18,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t1_05",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "How big is our product catalog in total, including stuff that is not active?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM shopify.products",
+          "expected_answer": 50,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple unfiltered count of products.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 50,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t2_01",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "What is our refund rate? I want to know if it is getting out of hand.",
+          "ground_truth_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN financial_status IN ('refunded', 'partially_refunded') THEN 1 ELSE 0 END) / COUNT(*), 1) AS answer FROM shopify.orders",
+          "expected_answer": 9.4,
+          "answer_type": "number",
+          "answer_unit": "percent",
+          "explanation": "Must include both 'refunded' and 'partially_refunded' in numerator.",
+          "semantic_trap": "refund_includes_partial",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "percentage",
+            "value": 9.4,
+            "tolerance": 2,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t2_02",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which product categories are actually driving revenue? Give me the top 5.",
+          "ground_truth_sql": "SELECT p.product_type, ROUND(SUM(o.total_price), 2) AS total_revenue FROM shopify.orders o JOIN shopify.products p ON o.product_id = p.id WHERE o.financial_status = 'paid' GROUP BY p.product_type ORDER BY total_revenue DESC LIMIT 5",
+          "expected_answer": "ranked list of product types",
+          "answer_type": "ranked_list",
+          "answer_unit": "dollars",
+          "explanation": "Join orders to products within Shopify, aggregate by product type.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t2_03",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How much have we actually processed through Stripe? I need the total in dollars, not cents.",
+          "ground_truth_sql": "SELECT ROUND(SUM(amount) / 100.0, 2) AS answer FROM stripe_ecom.charges WHERE status = 'succeeded'",
+          "expected_answer": 26676.56,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Stripe amounts are in cents. Must divide by 100 to get dollars.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 26676.56,
+            "tolerance": 1333.83,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "ecom_t2_04",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which vendor commands the highest price point on average? Trying to figure out our premium tier.",
+          "ground_truth_sql": "SELECT vendor AS answer, ROUND(AVG(price), 2) AS avg_price FROM shopify.products WHERE status = 'active' GROUP BY vendor ORDER BY avg_price DESC LIMIT 1",
+          "expected_answer": "vendor name",
+          "answer_type": "table",
+          "answer_unit": "dollars",
+          "explanation": "Group by vendor, compute average price, rank.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 1,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t2_05",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "We have a fulfillment backlog \u2014 what percentage of orders are still unfulfilled?",
+          "ground_truth_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN fulfillment_status = 'unfulfilled' THEN 1 ELSE 0 END) / COUNT(*), 1) AS answer FROM shopify.orders",
+          "expected_answer": 16.6,
+          "answer_type": "number",
+          "answer_unit": "percent",
+          "explanation": "Percentage calculation on fulfillment status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "percentage",
+            "value": 16.6,
+            "tolerance": 2,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t3_01",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Finance flagged a discrepancy between what Shopify says we sold and what Stripe actually charged. Can you reconcile the numbers for customers in both systems?",
+          "ground_truth_sql": "SELECT ROUND(ABS(SUM(o.total_price) - SUM(DISTINCT ch.amount) / 100.0), 2) AS discrepancy_dollars FROM shopify.customers sc JOIN shopify.orders o ON sc.email = o.email JOIN stripe_ecom.customers stc ON sc.email = stc.email JOIN stripe_ecom.charges ch ON stc.id = ch.customer_id WHERE o.financial_status = 'paid' AND ch.status = 'succeeded'",
+          "expected_answer": 106092.11,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Cross-source revenue reconciliation. Stripe is in cents, Shopify in dollars. The discrepancy reveals payment processing differences.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 106092.11,
+            "tolerance": 5304.61,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "ecom_t3_02",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "We are losing customers somewhere in the funnel \u2014 who placed Shopify orders but never got charged in Stripe?",
+          "ground_truth_sql": "SELECT DISTINCT sc.email AS answer FROM shopify.customers sc JOIN shopify.orders o ON sc.email = o.email WHERE sc.email NOT IN (SELECT stc.email FROM stripe_ecom.customers stc JOIN stripe_ecom.charges ch ON stc.id = ch.customer_id)",
+          "expected_answer": "list of customer emails",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Anti-join pattern across sources to find customers missing from Stripe.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "ecom_t3_03",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Take our top 10 customers by order volume and tell me what they have actually been charged in Stripe. I want to see if the numbers line up.",
+          "ground_truth_sql": "WITH top_shopify AS (SELECT sc.email, sc.orders_count FROM shopify.customers sc ORDER BY sc.orders_count DESC LIMIT 10) SELECT ts.email, ts.orders_count, ROUND(SUM(ch.amount) / 100.0, 2) AS stripe_total_dollars FROM top_shopify ts JOIN stripe_ecom.customers stc ON ts.email = stc.email JOIN stripe_ecom.charges ch ON stc.id = ch.customer_id WHERE ch.status = 'succeeded' GROUP BY ts.email, ts.orders_count ORDER BY ts.orders_count DESC",
+          "expected_answer": "table of top 10 customers with Shopify orders and Stripe charges",
+          "answer_type": "ranked_list",
+          "answer_unit": "dollars",
+          "explanation": "CTE to find top Shopify customers, then cross-source join to Stripe for charge data. Cents-to-dollars conversion required.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "ecom_t3_04",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "What does the average Stripe charge look like per Shopify order? I am trying to understand our effective take rate.",
+          "ground_truth_sql": "WITH shopify_totals AS (SELECT o.email, COUNT(*) AS order_count FROM shopify.orders o WHERE o.financial_status = 'paid' GROUP BY o.email), stripe_totals AS (SELECT stc.email, SUM(ch.amount) / 100.0 AS total_charges_dollars FROM stripe_ecom.customers stc JOIN stripe_ecom.charges ch ON stc.id = ch.customer_id WHERE ch.status = 'succeeded' GROUP BY stc.email) SELECT ROUND(AVG(st.total_charges_dollars / sht.order_count), 2) AS answer FROM shopify_totals sht JOIN stripe_totals st ON sht.email = st.email",
+          "expected_answer": 83.2,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Cross-source ratio: Stripe charge dollars per Shopify order. Requires aggregating both sides then joining.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 83.2,
+            "tolerance": 4.16,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "ecom_t3_05",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Which product categories are causing the most payment refunds? I need to figure out if we have a quality issue in a specific category.",
+          "ground_truth_sql": "SELECT p.product_type, ROUND(100.0 * SUM(CASE WHEN ch.status = 'refunded' THEN 1 ELSE 0 END) / COUNT(*), 1) AS refund_rate FROM shopify.orders o JOIN shopify.products p ON o.product_id = p.id JOIN stripe_ecom.customers stc ON o.email = stc.email JOIN stripe_ecom.charges ch ON stc.id = ch.customer_id GROUP BY p.product_type ORDER BY refund_rate DESC LIMIT 5",
+          "expected_answer": "ranked list of product types by Stripe refund rate",
+          "answer_type": "ranked_list",
+          "answer_unit": "percent",
+          "explanation": "Three-way cross-source join: Shopify orders->products for product type, then to Stripe charges for refund status.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        }
+      ]
+    },
+    "knowledge_base": {
+      "description": "Knowledge management: Notion wiki + GitHub issues + Slack discussions",
+      "sources": {
+        "notion": [
+          "databases",
+          "pages"
+        ],
+        "github": [
+          "repos",
+          "issues"
+        ],
+        "slack": [
+          "channels",
+          "messages"
+        ]
+      },
+      "join_key": "username (notion.pages.created_by = github.issues.author = slack.messages.user)",
+      "questions": [
+        {
+          "id": "kb_t1_01",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "How much of our Notion wiki is actually published and available to the team?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM notion.pages WHERE status = 'published'",
+          "expected_answer": 142,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on page status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 142,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t1_02",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Give me a health check on our issue backlog \u2014 how many open GitHub issues do we have?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM github.issues WHERE state = 'open'",
+          "expected_answer": 99,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count. NOTE: Do NOT use github.repos.open_issues_count as it is stale.",
+          "semantic_trap": "stale_open_issues_count",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 99,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t1_03",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "How active is Slack? I want to know how many top-level conversations are happening, not just thread noise.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM slack.messages WHERE thread_ts IS NULL",
+          "expected_answer": 569,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "thread_ts IS NULL means top-level message. NOT NULL means thread reply.",
+          "semantic_trap": "thread_ts_null_is_toplevel",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 569,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t1_04",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Quick one \u2014 what is our total repo count?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM github.repos",
+          "expected_answer": 30,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple count of all repos.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 30,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t1_05",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Trying to understand our knowledge base structure \u2014 what is the total Notion database count?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM notion.databases",
+          "expected_answer": 15,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple count of Notion databases.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 15,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t2_01",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which Slack channels have the most engaged discussions? I want to see where the real threaded conversations are happening.",
+          "ground_truth_sql": "SELECT c.name AS channel_name, COUNT(*) AS thread_replies FROM slack.messages m JOIN slack.channels c ON m.channel_id = c.id WHERE m.thread_ts IS NOT NULL GROUP BY c.name ORDER BY thread_replies DESC LIMIT 5",
+          "expected_answer": "ranked list of channels by thread activity",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Join messages to channels, filter to thread replies (thread_ts NOT NULL), aggregate.",
+          "semantic_trap": "thread_ts_null_is_toplevel",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t2_02",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How fast are we closing issues on average? I need the cycle time for the engineering retrospective.",
+          "ground_truth_sql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at::TIMESTAMP - created_at::TIMESTAMP)) / 86400.0), 1) AS answer FROM github.issues WHERE state = 'closed' AND closed_at IS NOT NULL",
+          "expected_answer": 31.4,
+          "answer_type": "number",
+          "answer_unit": "days",
+          "explanation": "Time difference between created_at and closed_at for closed issues.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 31.4,
+            "tolerance": 1.57,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t2_03",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which repos are creating the most backlog pain? Show me where open issues are piling up \u2014 and do not use the stale counter on the repo, count from actual issues.",
+          "ground_truth_sql": "SELECT r.name, COUNT(*) AS open_issues FROM github.issues i JOIN github.repos r ON i.repo_id = r.id WHERE i.state = 'open' GROUP BY r.name ORDER BY open_issues DESC LIMIT 5",
+          "expected_answer": "ranked list of repos by open issue count",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Must count from issues table, NOT use repos.open_issues_count which is stale.",
+          "semantic_trap": "stale_open_issues_count",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t2_04",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How much content have we actually written across our Notion wiki? Break it down by database so I can see which areas are well-documented.",
+          "ground_truth_sql": "SELECT d.title AS database_name, SUM(p.word_count) AS total_words FROM notion.pages p JOIN notion.databases d ON p.parent_id = d.id WHERE p.status = 'published' GROUP BY d.title ORDER BY total_words DESC",
+          "expected_answer": "table of databases with word counts",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Join pages to databases, filter published, aggregate word count.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t2_05",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which programming language is getting the most community love in terms of stars?",
+          "ground_truth_sql": "SELECT language AS answer, SUM(stargazers_count) AS total_stars FROM github.repos WHERE language IS NOT NULL GROUP BY language ORDER BY total_stars DESC LIMIT 1",
+          "expected_answer": "language name",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Aggregate stars by language across repos.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 1,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t3_01",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Who on the team is truly cross-functional? I want to find people who are active across Notion, GitHub, AND Slack.",
+          "ground_truth_sql": "SELECT n.created_by AS username FROM (SELECT DISTINCT created_by FROM notion.pages) n JOIN (SELECT DISTINCT author FROM github.issues) g ON n.created_by = g.author JOIN (SELECT DISTINCT user FROM slack.messages) s ON n.created_by = s.user ORDER BY username",
+          "expected_answer": "list of usernames active across all three platforms",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Three-way cross-source join on username to find users present in all systems.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t3_02",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "I am curious if people who write a lot of docs also file a lot of issues, or if they are different personas. Can you compare Notion output vs GitHub activity per person?",
+          "ground_truth_sql": "WITH notion_counts AS (SELECT created_by AS username, COUNT(*) AS page_count FROM notion.pages GROUP BY created_by), github_counts AS (SELECT author AS username, COUNT(*) AS issue_count FROM github.issues GROUP BY author) SELECT n.username, n.page_count, g.issue_count FROM notion_counts n JOIN github_counts g ON n.username = g.username ORDER BY n.page_count DESC",
+          "expected_answer": "table showing page count vs issue count per user",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Cross-source join on username to compare productivity across Notion and GitHub.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t3_03",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "We have some people who are super chatty in Slack but I wonder if they are actually shipping. Show me the top Slack posters and how many GitHub issues they have filed.",
+          "ground_truth_sql": "WITH slack_activity AS (SELECT user AS username, COUNT(*) AS message_count FROM slack.messages GROUP BY user ORDER BY message_count DESC LIMIT 5), github_activity AS (SELECT author AS username, COUNT(*) AS issue_count FROM github.issues GROUP BY author) SELECT sa.username, sa.message_count, COALESCE(ga.issue_count, 0) AS issue_count FROM slack_activity sa LEFT JOIN github_activity ga ON sa.username = ga.username ORDER BY sa.message_count DESC",
+          "expected_answer": "table of top 5 Slack users with their GitHub issue counts",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Cross-source comparison of Slack activity vs GitHub activity per user.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t3_04",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "For each of our repos, how much cross-platform buzz is there? I want to know which repos get talked about in Slack and documented in Notion.",
+          "ground_truth_sql": "SELECT r.name AS repo_name, (SELECT COUNT(*) FROM slack.messages m WHERE m.text_length > 0 AND m.channel_id IN (SELECT c.id FROM slack.channels c WHERE c.name LIKE '%' || r.name || '%')) AS slack_mentions, (SELECT COUNT(*) FROM notion.pages p WHERE p.title LIKE '%' || r.name || '%') AS notion_pages FROM github.repos r ORDER BY repo_name",
+          "expected_answer": "table of repos with cross-platform reference counts",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Cross-source analysis using repo names to find mentions in Slack channels and Notion pages. Approximate due to text matching.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "kb_t3_05",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Who are our most prolific contributors when you combine docs writing and issue filing? I need this for the eng productivity review.",
+          "ground_truth_sql": "WITH notion_counts AS (SELECT created_by AS username, COUNT(*) AS contributions FROM notion.pages GROUP BY created_by), github_counts AS (SELECT author AS username, COUNT(*) AS contributions FROM github.issues GROUP BY author), combined AS (SELECT COALESCE(n.username, g.username) AS username, COALESCE(n.contributions, 0) + COALESCE(g.contributions, 0) AS total_contributions FROM notion_counts n FULL OUTER JOIN github_counts g ON n.username = g.username) SELECT username, total_contributions FROM combined ORDER BY total_contributions DESC LIMIT 10",
+          "expected_answer": "ranked list of users by total contributions across Notion and GitHub",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Full outer join across sources to combine contribution counts. Uses COALESCE for users only in one system.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        }
+      ]
+    },
+    "devops": {
+      "description": "DevOps and reliability: GitHub PRs/deployments + PagerDuty incidents + Datadog monitoring",
+      "sources": {
+        "github": [
+          "pull_requests",
+          "deployments"
+        ],
+        "pagerduty": [
+          "services",
+          "incidents"
+        ],
+        "datadog": [
+          "monitors"
+        ]
+      },
+      "join_key": "service name (pagerduty.services.name ~ github repos ~ datadog.monitors.service_tag)",
+      "questions": [
+        {
+          "id": "devops_t1_01",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Can you pull together our merged PR stats for the engineering standup?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM github.pull_requests WHERE state = 'merged'",
+          "expected_answer": 175,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count. Must use state = 'merged', not just closed.",
+          "semantic_trap": "merged_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 175,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t1_02",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Are we having deploy issues? Give me the failed deployment count.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM github.deployments WHERE status = 'failure'",
+          "expected_answer": 18,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on deployment status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 18,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t1_03",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "How is our incident response looking \u2014 how many PagerDuty incidents have we actually resolved?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM pagerduty.incidents WHERE status = 'resolved'",
+          "expected_answer": 71,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on incident status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 71,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t1_04",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Anything on fire in monitoring right now? How many Datadog alerts are active?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM datadog.monitors WHERE status = 'Alert'",
+          "expected_answer": 9,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on monitor status.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 9,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t1_05",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Is oncall getting hammered? I need the high-urgency incident count.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM pagerduty.incidents WHERE urgency = 'high'",
+          "expected_answer": 32,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on urgency field.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 32,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t2_01",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "What is our MTTR looking like? The VP of Eng wants it for the reliability review.",
+          "ground_truth_sql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (resolved_at::TIMESTAMP - created_at::TIMESTAMP)) / 60.0), 1) AS answer FROM pagerduty.incidents WHERE status = 'resolved' AND resolved_at IS NOT NULL",
+          "expected_answer": 709.6,
+          "answer_type": "number",
+          "answer_unit": "minutes",
+          "explanation": "MTTR should only include resolved incidents (not triggered or acknowledged). Time diff in minutes.",
+          "semantic_trap": "mttr_only_resolved",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 709.6,
+            "tolerance": 35.48,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t2_02",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How reliable are our production deploys? I need the success rate for the SRE report.",
+          "ground_truth_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / COUNT(*), 1) AS answer FROM github.deployments WHERE environment = 'production'",
+          "expected_answer": 85.4,
+          "answer_type": "number",
+          "answer_unit": "percent",
+          "explanation": "Success rate = successful production deploys / total production deploys.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "percentage",
+            "value": 85.4,
+            "tolerance": 2,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t2_03",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Who is shipping the most code? Show me the top contributors by merged PRs.",
+          "ground_truth_sql": "SELECT author, COUNT(*) AS merged_prs FROM github.pull_requests WHERE state = 'merged' GROUP BY author ORDER BY merged_prs DESC LIMIT 5",
+          "expected_answer": "ranked list of authors by merged PR count",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Must filter to merged (not just closed), then group and rank by author.",
+          "semantic_trap": "merged_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t2_04",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Which services are the biggest oncall pain? I want to see where escalations keep happening.",
+          "ground_truth_sql": "SELECT s.name AS service_name, COUNT(*) AS escalated_incidents FROM pagerduty.incidents i JOIN pagerduty.services s ON i.service_id = s.id WHERE i.escalation_count > 0 GROUP BY s.name ORDER BY escalated_incidents DESC LIMIT 5",
+          "expected_answer": "ranked list of services by escalated incidents",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Join incidents to services within PagerDuty, filter escalated, rank.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t2_05",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Are our PRs getting too big? What is the average number of lines added per merged PR?",
+          "ground_truth_sql": "SELECT ROUND(AVG(additions), 1) AS answer FROM github.pull_requests WHERE state = 'merged'",
+          "expected_answer": 965.3,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Average of additions field, filtered to only merged PRs.",
+          "semantic_trap": "merged_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 965.3,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t3_01",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "For each service on PagerDuty, how many failed deploys have there been? I want to see if bad deploys are driving our incidents.",
+          "ground_truth_sql": "SELECT s.name AS service_name, COUNT(d.id) AS failed_deploys FROM pagerduty.services s LEFT JOIN github.deployments d ON s.name = d.repo_id AND d.status = 'failure' GROUP BY s.name ORDER BY failed_deploys DESC",
+          "expected_answer": "table of services with their failed deployment counts",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Cross-source join between PagerDuty services and GitHub deployments via service/repo name.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t3_02",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Which services are in the worst shape right now \u2014 alerting in Datadog AND have unresolved PagerDuty incidents?",
+          "ground_truth_sql": "SELECT DISTINCT dm.service_tag AS service_name FROM datadog.monitors dm JOIN pagerduty.services ps ON dm.service_tag = ps.name JOIN pagerduty.incidents pi ON ps.id = pi.service_id WHERE dm.status = 'Alert' AND pi.status IN ('triggered', 'acknowledged')",
+          "expected_answer": "list of services with both alerts and open incidents",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Cross-source join: Datadog monitors to PagerDuty services via service_tag/name, then to incidents.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t3_03",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "I have a theory that teams that deploy more have more incidents. Can you show me deploy frequency vs incident count by service?",
+          "ground_truth_sql": "WITH deploy_counts AS (SELECT repo_id AS service_name, COUNT(*) AS deploy_count FROM github.deployments WHERE environment = 'production' GROUP BY repo_id), incident_counts AS (SELECT s.name AS service_name, COUNT(*) AS incident_count FROM pagerduty.incidents i JOIN pagerduty.services s ON i.service_id = s.id GROUP BY s.name) SELECT dc.service_name, dc.deploy_count, COALESCE(ic.incident_count, 0) AS incident_count FROM deploy_counts dc LEFT JOIN incident_counts ic ON dc.service_name = ic.service_name ORDER BY dc.deploy_count DESC LIMIT 10",
+          "expected_answer": "table of services with deploy count and incident count",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Cross-source aggregation comparing GitHub deployment frequency with PagerDuty incident frequency per service.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t3_04",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "For our most problematic services \u2014 the ones with high-urgency incidents \u2014 what do their PR merge times and deploy success rates look like? I want to see if there is a process problem.",
+          "ground_truth_sql": "WITH high_urgency_services AS (SELECT DISTINCT s.name FROM pagerduty.incidents i JOIN pagerduty.services s ON i.service_id = s.id WHERE i.urgency = 'high'), pr_stats AS (SELECT repo_id AS service_name, AVG(EXTRACT(EPOCH FROM (merged_at::TIMESTAMP - created_at::TIMESTAMP)) / 3600.0) AS avg_merge_hours FROM github.pull_requests WHERE state = 'merged' AND merged_at IS NOT NULL GROUP BY repo_id), deploy_stats AS (SELECT repo_id AS service_name, ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / COUNT(*), 1) AS success_rate FROM github.deployments WHERE environment = 'production' GROUP BY repo_id) SELECT hus.name AS service_name, ROUND(ps.avg_merge_hours, 1) AS avg_merge_hours, ds.success_rate FROM high_urgency_services hus LEFT JOIN pr_stats ps ON hus.name = ps.service_name LEFT JOIN deploy_stats ds ON hus.name = ds.service_name ORDER BY ds.success_rate ASC",
+          "expected_answer": "table of high-urgency services with merge time and deploy success rate",
+          "answer_type": "table",
+          "answer_unit": null,
+          "explanation": "Three-way cross-source analysis: PagerDuty for incident urgency, GitHub PRs for merge time, GitHub deployments for success rate.",
+          "semantic_trap": "merged_vs_closed",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "devops_t3_05",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Which engineers are shipping the most code to services that keep having incidents? I need to know if specific people are introducing instability.",
+          "ground_truth_sql": "WITH deploy_services AS (SELECT DISTINCT d.repo_id AS service_name FROM github.deployments d WHERE d.environment = 'production'), incident_services AS (SELECT DISTINCT s.name AS service_name FROM pagerduty.incidents i JOIN pagerduty.services s ON i.service_id = s.id), problem_services AS (SELECT ds.service_name FROM deploy_services ds JOIN incident_services iss ON ds.service_name = iss.service_name) SELECT pr.author, COUNT(*) AS merged_prs_to_problem_services FROM github.pull_requests pr JOIN problem_services ps ON pr.repo_id = ps.service_name WHERE pr.state = 'merged' GROUP BY pr.author ORDER BY merged_prs_to_problem_services DESC LIMIT 5",
+          "expected_answer": "ranked list of PR authors by deploys to services with incidents",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Complex cross-source chain: GitHub PRs -> deployments -> PagerDuty services with incidents. Identifies who deploys most to problematic services.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        }
+      ]
+    },
+    "customer_support": {
+      "description": "Customer support operations: Zendesk tickets + product analytics + Stripe billing",
+      "sources": {
+        "zendesk": [
+          "tickets",
+          "agents"
+        ],
+        "analytics": [
+          "events"
+        ],
+        "stripe_support": [
+          "customers",
+          "subscriptions"
+        ]
+      },
+      "join_key": "email (zendesk.tickets.requester_email = analytics.events.user_email = stripe_support.customers.email)",
+      "questions": [
+        {
+          "id": "support_t1_01",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Give me a health check on our support queue \u2014 how many tickets do we have total?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM zendesk.tickets",
+          "expected_answer": 400,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple count of all tickets.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 400,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t1_02",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "What is our solved ticket count? I need it for the support team dashboard.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM zendesk.tickets WHERE status = 'solved'",
+          "expected_answer": 151,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count. Note: solved != closed.",
+          "semantic_trap": "solved_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 151,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t1_03",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Are users hitting a lot of errors in the product? I need the error event count for the bug triage.",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM analytics.events WHERE event_name = 'error'",
+          "expected_answer": 83,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on event type.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 83,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t1_04",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "I am prepping the enterprise QBR deck \u2014 what is our enterprise customer count?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM stripe_support.customers WHERE plan = 'enterprise'",
+          "expected_answer": 37,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count on plan type.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 37,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t1_05",
+          "tier": 1,
+          "tier_name": "simple",
+          "question": "Are there tickets sitting in the queue that nobody has touched yet?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM zendesk.tickets WHERE status = 'new'",
+          "expected_answer": 22,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "Simple filtered count.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 22,
+            "tolerance": 0,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t2_01",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How happy are our customers? I need the CSAT number for the QBR.",
+          "ground_truth_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN satisfaction_rating = 'good' THEN 1 ELSE 0 END) / SUM(CASE WHEN satisfaction_rating IN ('good', 'bad') THEN 1 ELSE 0 END), 1) AS answer FROM zendesk.tickets",
+          "expected_answer": 81.2,
+          "answer_type": "number",
+          "answer_unit": "percent",
+          "explanation": "CSAT = good / (good + bad), NOT good / total. Must exclude 'offered' and 'unoffered' from denominator.",
+          "semantic_trap": "csat_excludes_unoffered",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "percentage",
+            "value": 81.2,
+            "tolerance": 2,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t2_02",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Who are our top support agents? I want to see who is crushing it on ticket resolution.",
+          "ground_truth_sql": "SELECT a.name AS agent_name, COUNT(*) AS solved_count FROM zendesk.tickets t JOIN zendesk.agents a ON t.assignee_id = a.id WHERE t.status = 'solved' GROUP BY a.name ORDER BY solved_count DESC LIMIT 5",
+          "expected_answer": "ranked list of agents by solved tickets",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Join tickets to agents within Zendesk, filter solved, rank.",
+          "semantic_trap": "solved_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 5,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t2_03",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "I need to segment our high-value accounts \u2014 which customers are paying more than $99 a month?",
+          "ground_truth_sql": "SELECT COUNT(*) AS answer FROM stripe_support.customers WHERE mrr_cents > 9900",
+          "expected_answer": 74,
+          "answer_type": "number",
+          "answer_unit": "count",
+          "explanation": "$99 = 9900 cents. Must compare against cents value, not dollar value.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 74,
+            "tolerance": 0,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "support_t2_04",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "How fast are we solving tickets on average? I need to know if our SLA is healthy.",
+          "ground_truth_sql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (solved_at::TIMESTAMP - created_at::TIMESTAMP)) / 3600.0), 1) AS answer FROM zendesk.tickets WHERE status = 'solved' AND solved_at IS NOT NULL",
+          "expected_answer": 86.7,
+          "answer_type": "number",
+          "answer_unit": "hours",
+          "explanation": "Time to solve only for solved tickets with a solved_at timestamp.",
+          "semantic_trap": "solved_vs_closed",
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 86.7,
+            "tolerance": 4.33,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t2_05",
+          "tier": 2,
+          "tier_name": "medium",
+          "question": "Break down our ticket queue by priority \u2014 I want to see how many are urgent vs. low priority and what percentage each is.",
+          "ground_truth_sql": "SELECT priority, COUNT(*) AS ticket_count, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM zendesk.tickets), 1) AS percentage FROM zendesk.tickets GROUP BY priority ORDER BY ticket_count DESC",
+          "expected_answer": "table of priorities with counts and percentages",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Group by priority with both absolute and relative counts.",
+          "semantic_trap": null,
+          "impossible_without_join": false,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t3_01",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Do our paying customers who file support tickets have higher or lower MRR than those who do not? I want to understand if support load correlates with account value.",
+          "ground_truth_sql": "WITH ticket_customers AS (SELECT DISTINCT requester_email FROM zendesk.tickets) SELECT CASE WHEN tc.requester_email IS NOT NULL THEN 'Has tickets' ELSE 'No tickets' END AS segment, ROUND(AVG(sc.mrr_cents) / 100.0, 2) AS avg_mrr_dollars FROM stripe_support.customers sc LEFT JOIN ticket_customers tc ON sc.email = tc.requester_email GROUP BY segment",
+          "expected_answer": "comparison table of MRR for ticket vs no-ticket customers",
+          "answer_type": "table",
+          "answer_unit": "dollars",
+          "explanation": "Cross-source join via email between Zendesk tickets and Stripe customers. MRR in cents must be converted.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [
+              "Has tickets",
+              "No tickets"
+            ],
+            "tolerance": null,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "support_t3_02",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Our enterprise customers are complaining about bugs \u2014 which ones are actually seeing the most errors in the product?",
+          "ground_truth_sql": "SELECT sc.name AS customer_name, sc.email, COUNT(ae.id) AS error_count FROM stripe_support.customers sc JOIN analytics.events ae ON sc.email = ae.user_email WHERE sc.plan = 'enterprise' AND ae.event_name = 'error' GROUP BY sc.name, sc.email ORDER BY error_count DESC LIMIT 10",
+          "expected_answer": "ranked list of enterprise customers by error count",
+          "answer_type": "ranked_list",
+          "answer_unit": "count",
+          "explanation": "Cross-source join: Stripe customers filtered to enterprise, joined to analytics events filtered to errors.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t3_03",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "How much MRR is at risk from unhappy customers? I need to know the revenue exposure from bad CSAT ratings.",
+          "ground_truth_sql": "SELECT ROUND(SUM(DISTINCT sc.mrr_cents) / 100.0, 2) AS mrr_at_risk_dollars FROM zendesk.tickets t JOIN stripe_support.customers sc ON t.requester_email = sc.email WHERE t.satisfaction_rating = 'bad'",
+          "expected_answer": 1426.0,
+          "answer_type": "number",
+          "answer_unit": "dollars",
+          "explanation": "Cross-source join to find MRR of unhappy customers. Must use DISTINCT to avoid double-counting customers with multiple bad tickets.",
+          "semantic_trap": "amounts_in_cents",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "exact_number",
+            "value": 1426.0,
+            "tolerance": 0,
+            "magnitude_trap": 100
+          }
+        },
+        {
+          "id": "support_t3_04",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "I have a hunch that our power users file more support tickets. Can you compare product usage with ticket volume for our most active users?",
+          "ground_truth_sql": "WITH event_counts AS (SELECT user_email, COUNT(*) AS event_count FROM analytics.events GROUP BY user_email ORDER BY event_count DESC LIMIT 10), ticket_counts AS (SELECT requester_email, COUNT(*) AS ticket_count FROM zendesk.tickets GROUP BY requester_email) SELECT ec.user_email, ec.event_count, COALESCE(tc.ticket_count, 0) AS ticket_count FROM event_counts ec LEFT JOIN ticket_counts tc ON ec.user_email = tc.requester_email ORDER BY ec.event_count DESC",
+          "expected_answer": "table comparing product usage with support ticket volume",
+          "answer_type": "table",
+          "answer_unit": "count",
+          "explanation": "Cross-source analysis: analytics events for product usage, Zendesk for ticket volume, joined by email.",
+          "semantic_trap": null,
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "ordered_top_n",
+            "value": 10,
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        },
+        {
+          "id": "support_t3_05",
+          "tier": 3,
+          "tier_name": "cross-source",
+          "question": "Does customer satisfaction vary by pricing tier? I want to see if our free users are happier or angrier than enterprise \u2014 break down CSAT by plan.",
+          "ground_truth_sql": "SELECT sc.plan, ROUND(100.0 * SUM(CASE WHEN t.satisfaction_rating = 'good' THEN 1 ELSE 0 END) / NULLIF(SUM(CASE WHEN t.satisfaction_rating IN ('good', 'bad') THEN 1 ELSE 0 END), 0), 1) AS csat_percentage, COUNT(*) AS total_tickets FROM zendesk.tickets t JOIN stripe_support.customers sc ON t.requester_email = sc.email GROUP BY sc.plan ORDER BY csat_percentage DESC",
+          "expected_answer": "table of plans with their CSAT scores",
+          "answer_type": "table",
+          "answer_unit": "percent",
+          "explanation": "Cross-source join to segment CSAT by billing plan. Must use correct CSAT formula: good/(good+bad).",
+          "semantic_trap": "csat_excludes_unoffered",
+          "impossible_without_join": true,
+          "deterministic_check": {
+            "type": "contains_all",
+            "values": [
+              "free",
+              "starter",
+              "pro",
+              "business",
+              "enterprise"
+            ],
+            "tolerance": null,
+            "magnitude_trap": null
+          }
+        }
+      ]
+    }
+  }
+}

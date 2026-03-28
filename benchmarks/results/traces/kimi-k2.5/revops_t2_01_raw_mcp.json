@@ -1,0 +1,48 @@
+{
+  "question_id": "revops_t2_01",
+  "question": "I need our MRR number for the investor update \u2014 what are we at?",
+  "model": "kimi-k2.5",
+  "approach": "raw_mcp",
+  "expected_answer": 22498.83,
+  "judgment": {
+    "correct": false,
+    "partial": true,
+    "explanation": "The agent used the correct methodology (converting annual to monthly, proper filtering), but calculated $22,323.04 instead of the ground truth $22,498.83, which is a ~0.78% difference but materially wrong for an investor update requiring precision.",
+    "method": "llm_judge",
+    "judge_tokens": 673
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You are a data analyst with access to stripe and hubspot API tools.\n\nUse these tools to answer business questions. Each tool returns records from a single API endpoint.\n\nNote: These are separate systems with separate APIs. There is no built-in way to join or aggregate data across them. If you need to correlate records across sources, you will need to fetch from each and match them manually (e.g., by email address)."
+    },
+    {
+      "role": "user",
+      "content": "I need our MRR number for the investor update \u2014 what are we at?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "stripe_list_subscriptions",
+      "input": {
+        "limit": 100,
+        "offset": 0
+      },
+      "output": "{\"data\": [{\"id\": \"sub_002lghqYVlQufw\", \"customer_id\": \"cus_aAEAw3CjkGOM5W\", \"status\": \"active\", \"plan_id\": \"plan_pro_yr\", \"plan_amount\": 99000, \"plan_interval\": \"year\", \"current_period_start\": 1763942400, \"current_period_end\": 1795478400, \"created\": 1763942400, \"canceled_at\": null}, {\"id\": \"sub_s0D1K6e3F1xsd0\", \"customer_id\": \"cus_qrK2IGlozIoDSB\", \"status\": \"active\", \"plan_id\": \"plan_business\", \"plan_amount\": 29900, \"plan_interval\": \"month\", \"current_period_start\": 1719529200, \"current_period_end\": 1722121200, \"created\": 1719529200, \"canceled_at\": null}, {\"id\": \"sub_J4CtSWENkNaqVk\", \"customer_id\": \"cus_szpPwIv9IvCtoS\", \"status\": \"active\", \"plan_id\": \"plan_pro\", \"plan_amount\": 9900, \"plan_interval\": \"month\", \"current_period_start\": 1719010800, \"current_period_end\": 1721602800, \"created\": 1719010800, \"canceled_at\": null}, {\"id\": \"sub_Nz7xcmxatZlPMp\", \"customer_id\": \"cus_hcds6NUgarDv7p\", \"status\": \"active\", \"plan_id\": \"plan_starter\", \"plan_amount\": 2900, \"plan_interval\": \"month\", \"current_period_start\": 1729033200, \"current_period_end\": 1731628800, \"created\": 1729033200, \"canceled_at\": null}, {\"id\": \"sub_xKkZssTKu39v3w\", \"customer_id\": \"cus_heEJQjY6fpIzKM\", \"status\": \"active\", \"plan_id\": \"plan_business\", \"plan_amount\": 29900, \"plan_interval\": \"month\", \"current_period_start\": 1753311600, \"current_period_end\": 1755903600, \"created\": 1753311600, \"canceled_at\": null}, {\"id\": \"sub_TiTKkwOc2pHd9P\", \"customer_id\": \"cus_x4sKAJd7gVMqfo\", \"status\": \"active\", \"plan_id\": \"plan_enterprise\", \"plan_amount\": 99900, \"plan_interval\": \"month\", \"current_period_start\": 1763424000, \"current_period_end\": 1766016000, \"created\": 1763424000, \"canceled_at\": null}, {\"id\": \"sub_BhpRmQaAgGMRz3\", \"customer_id\": \"cus_jzQDcrr1eoqXKX\", \"status\": \"canceled\", \"plan_id\": \"plan_starter\", \"plan_amount\": 2900, \"plan_interval\": \"month\", \"current_period_start\": 1733184000, \"current_period_end\": 1735776000, \"created\": 1733184000, \"canceled_at\": 1754175600.0}, {\"id\": \"sub_WELWZ8wzjH4QDo\", \"customer_id\": \"cus_hnj...",
+      "output_full_length": 27827
+    },
+    {
+      "role": "tool_call",
+      "tool": "stripe_list_subscriptions",
+      "input": {
+        "limit": 100,
+        "offset": 100
+      },
+      "output": "{\"data\": [{\"id\": \"sub_ZmZ5DDcijC13CY\", \"customer_id\": \"cus_kD9eKan56yrSVA\", \"status\": \"trialing\", \"plan_id\": \"plan_starter_yr\", \"plan_amount\": 29000, \"plan_interval\": \"year\", \"current_period_start\": 1719183600, \"current_period_end\": 1750719600, \"created\": 1719183600, \"canceled_at\": null}, {\"id\": \"sub_QIbJu4Xej0vxHk\", \"customer_id\": \"cus_7op5hLdPOkaiaE\", \"status\": \"active\", \"plan_id\": \"plan_starter_yr\", \"plan_amount\": 29000, \"plan_interval\": \"year\", \"current_period_start\": 1768348800, \"current_period_end\": 1799884800, \"created\": 1768348800, \"canceled_at\": null}, {\"id\": \"sub_Wt1Sqf2xZsGkxc\", \"customer_id\": \"cus_GYqxU2Th3uAGq8\", \"status\": \"active\", \"plan_id\": \"plan_pro\", \"plan_amount\": 9900, \"plan_interval\": \"month\", \"current_period_start\": 1711843200, \"current_period_end\": 1714431600, \"created\": 1711843200, \"canceled_at\": null}, {\"id\": \"sub_X4jvD2tuVg8G9m\", \"customer_id\": \"cus_EFd1kjV3PhTa1a\", \"status\": \"active\", \"plan_id\": \"plan_starter\", \"plan_amount\": 2900, \"plan_interval\": \"month\", \"current_period_start\": 1766016000, \"current_period_end\": 1768608000, \"created\": 1766016000, \"canceled_at\": null}, {\"id\": \"sub_htc02u3gVUbVNn\", \"customer_id\": \"cus_w5l7cXSOnp4tZJ\", \"status\": \"past_due\", \"plan_id\": \"plan_enterprise\", \"plan_amount\": 99900, \"plan_interval\": \"month\", \"current_period_start\": 1750978800, \"current_period_end\": 1753570800, \"created\": 1750978800, \"canceled_at\": null}, {\"id\": \"sub_VPqjh7IgHIq6XJ\", \"customer_id\": \"cus_PdnFcy21VtfCws\", \"status\": \"active\", \"plan_id\": \"plan_business\", \"plan_amount\": 29900, \"plan_interval\": \"month\", \"current_period_start\": 1726182000, \"current_period_end\": 1728774000, \"created\": 1726182000, \"canceled_at\": null}, {\"id\": \"sub_Hdb4dxfyR3NQBw\", \"customer_id\": \"cus_Tpw89WTHXj5bHN\", \"status\": \"past_due\", \"plan_id\": \"plan_business\", \"plan_amount\": 29900, \"plan_interval\": \"month\", \"current_period_start\": 1720306800, \"current_period_end\": 1722898800, \"created\": 1720306800, \"canceled_at\": null}, {\"id\": \"sub_e5VJfXRgtNVD6i\", \"customer_id\": \"cus_...",
+      "output_full_length": 7596
+    },
+    {
+      "role": "assistant",
+      "content": "Based on your Stripe subscription data, here's your **MRR calculation**:\n\n## MRR: **$22,323.04**\n\n### Breakdown by Plan:\n\n| Plan | Count | Monthly Value | MRR Contribution |\n|------|-------|---------------|------------------|\n| **Enterprise** (monthly) | 11 | $999.00 | $10,989.00 |\n| **Business** (monthly) | 15 | $299.00 | $4,485.00 |\n| **Pro** (monthly) | 3 | $99.00 | $297.00 |\n| **Pro** (yearly \u00f712) | 11 | $82.50 | $907.50 |\n| **Starter** (monthly) | 8 | $29.00 | $232.00 |\n| **Starter** (yearly \u00f712) | 12 | $24.17 | $290.04 |\n\n### Notes:\n- Only **active** subscriptions counted (78 total)\n- Excluded: canceled, past due, and trialing subscriptions\n- Yearly plans normalized to monthly equivalent (\u00f712)\n- Amounts in USD\n\n**Annual Run Rate (ARR): ~$267,876**"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_05",
+  "question": "I think we have a payment processing issue \u2014 how many charges are failing?",
+  "model": "gemini-3.1-pro",
+  "approach": "dinobase",
+  "expected_answer": 45,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 45 failed charges, matching the ground truth answer exactly, and provided helpful context with the full breakdown of charge statuses.",
+    "method": "llm_judge",
+    "judge_tokens": 406
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 43m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 43m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "I think we have a payment processing issue \u2014 how many charges are failing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.charges"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"charges\",\n  \"row_count\": 566,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Amount intended to be collected by this payment. A positive integer representing how much to charge in the smallest currency unit (e.g., 100 cents to charge $1.00 or 100 to charge \\u00a5100, a zero-decimal currency). The minimum amount is $0.50 US or equivalent in charge currency. The amount value sup...\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO currency code, in lowercase. Must be a supported currency.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the payment is either `succeeded`, `pending`, or `failed`.\",\n      \"note\": \"Values: failed, pending, succeeded\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"payment_method_type\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"ch_0VrmI7OsygQE2B\",\n      \"customer_id\": \"cus_aAEAw3CjkGOM5W\",\n      \"amount\": 9900,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"created\": 1766534400,\n      \"payment_method_type\": \"card\",\n      \"des...",
+      "output_full_length": 2650
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT status, COUNT(*) as count FROM stripe.charges GROUP BY status;"
+      },
+      "output": "{\n  \"columns\": [\n    \"status\",\n    \"count\"\n  ],\n  \"rows\": [\n    {\n      \"status\": \"pending\",\n      \"count\": 12\n    },\n    {\n      \"status\": \"succeeded\",\n      \"count\": 509\n    },\n    {\n      \"status\": \"failed\",\n      \"count\": 45\n    }\n  ],\n  \"row_count\": 3,\n  \"total_rows\": 3,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 303
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the current data, there are **45 failed charges** out of 566 total charges. \n\nHere is the breakdown of all charge statuses:\n- **Succeeded:** 509\n- **Failed:** 45\n- **Pending:** 12\n\n*(Note: This data is based on the last sync from Stripe, which occurred about 4.5 hours ago.)*"
+    }
+  ]
+}

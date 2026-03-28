@@ -1,0 +1,47 @@
+{
+  "question_id": "revops_t2_03",
+  "question": "Break down our average deal size by stage \u2014 I want to see where the big deals are landing.",
+  "model": "gpt-5.4",
+  "approach": "dinobase",
+  "expected_answer": "top 3 stages by avg deal size",
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified the top 3 stages by average deal size (contractsent at $40,046, appointmentscheduled at $39,917, and closedlost at $34,633), properly ranked them, and provided the full breakdown with appropriate context and insights about deal distribution.",
+    "method": "llm_judge",
+    "judge_tokens": 930
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 32m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 32m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Break down our average deal size by stage \u2014 I want to see where the big deals are landing."
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT\n  dealstage AS stage,\n  COUNT(*) AS deal_count,\n  ROUND(AVG(amount), 2) AS avg_deal_size,\n  ROUND(MEDIAN(amount), 2) AS median_deal_size,\n  ROUND(SUM(amount), 2) AS total_pipeline_value,\n  ROUND(MAX(amount), 2) AS largest_deal\nFROM hubspot.deals\nWHERE amount IS NOT NULL\nGROUP BY 1\nORDER BY avg_deal_size DESC;",
+        "max_rows": 50
+      },
+      "output": "{\n  \"columns\": [\n    \"stage\",\n    \"deal_count\",\n    \"avg_deal_size\",\n    \"median_deal_size\",\n    \"total_pipeline_value\",\n    \"largest_deal\"\n  ],\n  \"rows\": [\n    {\n      \"stage\": \"contractsent\",\n      \"deal_count\": 15,\n      \"avg_deal_size\": 40046.07,\n      \"median_deal_size\": 30591.0,\n      \"total_pipeline_value\": 600691.0,\n      \"largest_deal\": 108780.0\n    },\n    {\n      \"stage\": \"appointmentscheduled\",\n      \"deal_count\": 17,\n      \"avg_deal_size\": 39917.35,\n      \"median_deal_size\": 14252.0,\n      \"total_pipeline_value\": 678595.0,\n      \"largest_deal\": 127747.0\n    },\n    {\n      \"stage\": \"closedlost\",\n      \"deal_count\": 27,\n      \"avg_deal_size\": 34632.93,\n      \"median_deal_size\": 13448.0,\n      \"total_pipeline_value\": 935089.0,\n      \"largest_deal\": 120454.0\n    },\n    {\n      \"stage\": \"closedwon\",\n      \"deal_count\": 80,\n      \"avg_deal_size\": 29983.66,\n      \"median_deal_size\": 12092.5,\n      \"total_pipeline_value\": 2398693.0,\n      \"largest_deal\": 124555.0\n    },\n    {\n      \"stage\": \"presentationscheduled\",\n      \"deal_count\": 12,\n      \"avg_deal_size\": 28991.67,\n      \"median_deal_size\": 10759.5,\n      \"total_pipeline_value\": 347900.0,\n      \"largest_deal\": 102973.0\n    },\n    {\n      \"stage\": \"decisionmakerboughtin\",\n      \"deal_count\": 21,\n      \"avg_deal_size\": 28797.05,\n      \"median_deal_size\": 11023.0,\n      \"total_pipeline_value\": 604738.0,\n      \"largest_deal\": 120099.0\n    },\n    {\n      \"stage\": \"qualifiedtobuy\",\n      \"deal_count\": 12,\n      \"avg_deal_size\": 27100.33,\n      \"median_deal_size\": 14134.0,\n      \"total_pipeline_value\": 325204.0,\n      \"largest_deal\": 120797.0\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1697
+    },
+    {
+      "role": "assistant",
+      "content": "Here\u2019s the average deal size by stage from `hubspot.deals`:\n\n| Stage | Deals | Avg Deal Size | Median Deal Size | Total Value | Largest Deal |\n|---|---:|---:|---:|---:|---:|\n| contractsent | 15 | $40,046.07 | $30,591.00 | $600,691.00 | $108,780.00 |\n| appointmentscheduled | 17 | $39,917.35 | $14,252.00 | $678,595.00 | $127,747.00 |\n| closedlost | 27 | $34,632.93 | $13,448.00 | $935,089.00 | $120,454.00 |\n| closedwon | 80 | $29,983.66 | $12,092.50 | $2,398,693.00 | $124,555.00 |\n| presentationscheduled | 12 | $28,991.67 | $10,759.50 | $347,900.00 | $102,973.00 |\n| decisionmakerboughtin | 21 | $28,797.05 | $11,023.00 | $604,738.00 | $120,099.00 |\n| qualifiedtobuy | 12 | $27,100.33 | $14,134.00 | $325,204.00 | $120,797.00 |\n\nQuick take:\n- The biggest average deal sizes are currently in `contractsent` and `appointmentscheduled`, both around $40K.\n- `closedwon` has the most deals by far and the highest total value at about $2.40M, but its average deal size is lower at about $30K.\n- `closedlost` deals are also relatively large on average, which may suggest some larger opportunities are slipping late in the funnel.\n- In most stages, the median is much lower than the average, so a handful of very large deals are pulling the average up.\n\nIf you want, I can also:\n1. group these into more readable HubSpot stage labels,\n2. break this out by pipeline,\n3. show stage-by-stage deal size distribution bands,\n4. or compare won vs lost average deal size visually."
+    }
+  ]
+}

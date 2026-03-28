@@ -1,0 +1,64 @@
+{
+  "question_id": "revops_t2_04",
+  "question": "Which customers are in real trouble \u2014 delinquent AND failing payments? I want to flag them for the collections team.",
+  "model": "gemini-3.1-pro",
+  "approach": "dinobase",
+  "expected_answer": 3,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 3 customers who are both delinquent and have failed payments, matching the ground truth answer of 3, and provided the specific customer names and emails as supporting evidence.",
+    "method": "llm_judge",
+    "judge_tokens": 466
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 52m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 52m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Which customers are in real trouble \u2014 delinquent AND failing payments? I want to flag them for the collections team."
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.customers"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"customers\",\n  \"row_count\": 180,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"email\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's email address.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"name\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's full name or business name.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO code for the currency the customer can be charged in for recurring billing purposes.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"delinquent\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"Tracks the most recent state change on any invoice belonging to the customer. Paying an invoice or marking it uncollectible via the API will set this field to false. An automatic payment failure or passing the `invoice.due_date` will set this field to `true`.\\n\\nIf an invoice becomes uncollectible ...\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"livemode\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"If the object exists in live mode, the value is `true`. If the object exists in test mode, the value is `false`.\"\n    }\n  ],\n  \"sample_rows\": ...",
+      "output_full_length": 2924
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.charges"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"charges\",\n  \"row_count\": 566,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Amount intended to be collected by this payment. A positive integer representing how much to charge in the smallest currency unit (e.g., 100 cents to charge $1.00 or 100 to charge \\u00a5100, a zero-decimal currency). The minimum amount is $0.50 US or equivalent in charge currency. The amount value sup...\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO currency code, in lowercase. Must be a supported currency.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the payment is either `succeeded`, `pending`, or `failed`.\",\n      \"note\": \"Values: failed, pending, succeeded\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"payment_method_type\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"ch_0VrmI7OsygQE2B\",\n      \"customer_id\": \"cus_aAEAw3CjkGOM5W\",\n      \"amount\": 9900,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"created\": 1766534400,\n      \"payment_method_type\": \"card\",\n      \"des...",
+      "output_full_length": 2650
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.invoices"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"invoices\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object. For preview invoices created using the create preview endpoint, this id will be prefixed with `upcoming_in`.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"subscription_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount_due\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Final amount due at this time for this invoice. If the invoice's total is smaller than the minimum charge amount, for example, or if there is account credit that can be applied to the invoice, the `amount_due` may be 0. If there is a positive `starting_balance` for the invoice (the customer owes ...\"\n    },\n    {\n      \"name\": \"amount_paid\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The amount, in cents (or local equivalent), that was paid.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the invoice, one of `draft`, `open`, `paid`, `uncollectible`, or `void`. Learn more\",\n      \"note\": \"Values: draft, open, paid, uncollectible, void Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"due_date\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The date on which payment for this invoice is due. This value will be `null` for invoices where `collection_method=charge_automatically`.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert. Can be null\"\n    ...",
+      "output_full_length": 3931
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT c.id, c.name, c.email, COUNT(ch.id) as failed_charges_count\nFROM stripe.customers c\nJOIN stripe.charges ch ON c.id = ch.customer_id\nWHERE c.delinquent = true AND ch.status = 'failed'\nGROUP BY c.id, c.name, c.email"
+      },
+      "output": "{\n  \"columns\": [\n    \"id\",\n    \"name\",\n    \"email\",\n    \"failed_charges_count\"\n  ],\n  \"rows\": [\n    {\n      \"id\": \"cus_CTviHl397G0eYd\",\n      \"name\": \"Adam Wise\",\n      \"email\": \"adam.wise@weyland.co\",\n      \"failed_charges_count\": 1\n    },\n    {\n      \"id\": \"cus_qrK2IGlozIoDSB\",\n      \"name\": \"Melinda Martin\",\n      \"email\": \"melinda.martin@massivedynamic.com\",\n      \"failed_charges_count\": 1\n    },\n    {\n      \"id\": \"cus_5uCNG3iFqYuTOS\",\n      \"name\": \"Jerry Robinson\",\n      \"email\": \"jerry.robinson@acme.com\",\n      \"failed_charges_count\": 1\n    }\n  ],\n  \"row_count\": 3,\n  \"total_rows\": 3,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 624
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the data, there are 3 customers who are currently marked as delinquent and have failed payments on record. Here is the list to flag for the collections team:\n\n1. **Adam Wise** (adam.wise@weyland.co)\n2. **Melinda Martin** (melinda.martin@massivedynamic.com)\n3. **Jerry Robinson** (jerry.robinson@acme.com)\n\nEach of these customers has at least one failed charge associated with their delinquent account."
+    }
+  ]
+}

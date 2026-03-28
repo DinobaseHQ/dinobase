@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_04",
+  "question": "Where are most of our deals sitting in the pipeline right now?",
+  "model": "minimax-m2.7",
+  "approach": "dinobase",
+  "expected_answer": "closedwon",
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified that most deals are in 'closedwon' stage (80 deals, ~$2.4M), which is the mode/largest group when grouping by deal stage, directly answering the question asked.",
+    "method": "llm_judge",
+    "judge_tokens": 527
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (4m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (4m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "Where are most of our deals sitting in the pipeline right now?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2065
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT dealstage, COUNT(*) as num_deals, SUM(amount) as total_amount\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY num_deals DESC"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"num_deals\",\n    \"total_amount\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"num_deals\": 80,\n      \"total_amount\": 2398693.0\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"num_deals\": 27,\n      \"total_amount\": 935089.0\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"num_deals\": 21,\n      \"total_amount\": 604738.0\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"num_deals\": 17,\n      \"total_amount\": 678595.0\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"num_deals\": 15,\n      \"total_amount\": 600691.0\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"num_deals\": 12,\n      \"total_amount\": 325204.0\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"num_deals\": 12,\n      \"total_amount\": 347900.0\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 892
+    },
+    {
+      "role": "assistant",
+      "content": "Most of your deals are actually **already closed** (80 deals, ~$2.4M) \u2014 that's the largest group. \n\nBut looking at your **active pipeline**, here's where deals are sitting:\n\n| Stage | # Deals | Value |\n|-------|---------|-------|\n| Decision maker bought in | 21 | $605K |\n| Appointment scheduled | 17 | $679K |\n| Contract sent | 15 | $601K |\n| Qualified to buy | 12 | $325K |\n| Presentation scheduled | 12 | $348K |\n\nThe biggest cluster of open deals (21 deals, $605K) is at the **\"decision maker bought in\"** stage \u2014 so deals are fairly far along, just waiting on final sign-off or paperwork."
+    }
+  ]
+}
