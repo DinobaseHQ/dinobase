@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_01",
+  "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+  "model": "gemini-3.1-pro",
+  "approach": "dinobase",
+  "expected_answer": 184,
+  "judgment": {
+    "correct": false,
+    "partial": false,
+    "explanation": "The agent reported 77 active deals when the ground truth answer is 184 total deals in the CRM; while the agent's breakdown of active deals may be accurate, the question asked for a count of all deals being worked, and the agent's answer of 77 is materially wrong (58% off the correct total).",
+    "method": "llm_judge",
+    "judge_tokens": 533
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 37m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 37m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT dealstage, COUNT(*) as deal_count, SUM(amount) as total_amount FROM hubspot.deals GROUP BY dealstage ORDER BY deal_count DESC;"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"deal_count\",\n    \"total_amount\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"deal_count\": 80,\n      \"total_amount\": 2398693.0\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"deal_count\": 27,\n      \"total_amount\": 935089.0\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"deal_count\": 21,\n      \"total_amount\": 604738.0\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"deal_count\": 17,\n      \"total_amount\": 678595.0\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"deal_count\": 15,\n      \"total_amount\": 600691.0\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"deal_count\": 12,\n      \"total_amount\": 347900.0\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"deal_count\": 12,\n      \"total_amount\": 325204.0\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 900
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a quick snapshot of your current sales pipeline. You are currently working **77 active deals** with a total potential value of **~$2.56 million**. \n\nHere is the breakdown of those active deals by stage:\n* **Decision Maker Bought-In:** 21 deals ($604,738)\n* **Appointment Scheduled:** 17 deals ($678,595)\n* **Contract Sent:** 15 deals ($600,691)\n* **Presentation Scheduled:** 12 deals ($347,900)\n* **Qualified to Buy:** 12 deals ($325,204)\n\n*(Note: This excludes 80 deals that are \"Closed Won\" and 27 deals that are \"Closed Lost\".)*"
+    }
+  ]
+}

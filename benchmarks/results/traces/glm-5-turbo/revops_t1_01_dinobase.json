@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_01",
+  "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+  "model": "glm-5-turbo",
+  "approach": "dinobase",
+  "expected_answer": 184,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 184 total deals in the sales pipeline, which matches the ground truth answer exactly, and provided comprehensive supporting context with breakdown by stage.",
+    "method": "llm_judge",
+    "judge_tokens": 707
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (42m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (42m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2066
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  dealstage,\n  COUNT(*) AS num_deals,\n  SUM(amount) AS total_amount,\n  ROUND(AVG(amount), 2) AS avg_amount\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY total_amount DESC\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"num_deals\",\n    \"total_amount\",\n    \"avg_amount\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"num_deals\": 80,\n      \"total_amount\": 2398693.0,\n      \"avg_amount\": 29983.66\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"num_deals\": 27,\n      \"total_amount\": 935089.0,\n      \"avg_amount\": 34632.93\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"num_deals\": 17,\n      \"total_amount\": 678595.0,\n      \"avg_amount\": 39917.35\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"num_deals\": 21,\n      \"total_amount\": 604738.0,\n      \"avg_amount\": 28797.05\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"num_deals\": 15,\n      \"total_amount\": 600691.0,\n      \"avg_amount\": 40046.07\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"num_deals\": 12,\n      \"total_amount\": 347900.0,\n      \"avg_amount\": 28991.67\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"num_deals\": 12,\n      \"total_amount\": 325204.0,\n      \"avg_amount\": 27100.33\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1120
+    },
+    {
+      "role": "assistant",
+      "content": "Here's a snapshot of your sales pipeline \u2014 **184 total deals** across 7 stages:\n\n| Stage | Deals | Total Value | Avg Deal Size |\n|---|---|---|---|\n| \ud83c\udfc6 Closed Won | 80 | $2,398,693 | $29,984 |\n| \u274c Closed Lost | 27 | $935,089 | $34,633 |\n| \ud83d\udcc5 Appointment Scheduled | 17 | $678,595 | $39,917 |\n| \u2705 Decision Maker Bought In | 21 | $604,738 | $28,797 |\n| \ud83d\udcdd Contract Sent | 15 | $600,691 | $40,046 |\n| \ud83c\udfa4 Presentation Scheduled | 12 | $347,900 | $28,992 |\n| \u2714\ufe0f Qualified to Buy | 12 | $325,204 | $27,100 |\n\n### Key Takeaways:\n- **77 open deals** are actively in the pipeline, worth a combined **$2.55M**.\n- **15 deals ($600K)** have contracts out \u2014 these are closest to closing.\n- **21 deals ($605K)** have the decision maker bought in \u2014 strong near-term potential.\n- **Win rate:** 80 won vs. 27 lost = **~75%** \u2014 that's solid!\n- **Average deal size** across open stages ranges from ~$27K to ~$40K.\n\nWant me to dig deeper into any specific stage, time frame, or rep performance?"
+    }
+  ]
+}

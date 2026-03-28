@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t2_02",
+  "question": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?",
+  "model": "minimax-m2.7",
+  "approach": "dinobase",
+  "expected_answer": 74.8,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly calculated the win rate as 74.8% using the proper formula (80 / (80 + 27) = 74.8%), correctly excluded open/other stages from the denominator, and provided accurate supporting data and context.",
+    "method": "llm_judge",
+    "judge_tokens": 502
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (7m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (7m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2065
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  dealstage,\n  COUNT(*) as count\nFROM hubspot.deals\nGROUP BY dealstage\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"count\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"count\": 12\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"count\": 27\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"count\": 17\n    },\n    {\n      \"dealstage\": \"closedwon\",\n      \"count\": 80\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"count\": 21\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"count\": 12\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"count\": 15\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 615
+    },
+    {
+      "role": "assistant",
+      "content": "Here's the answer for the CEO:\n\n## Win Rate: **74.8%**\n\n| Stage | Deals |\n|---|---|\n| Closed Won | 80 |\n| Closed Lost | 27 |\n| **Total Closed** | **107** |\n\nOut of 184 total deals in the pipeline, 107 have reached a conclusion. Of those, **80 were won** \u2014 giving you a **74.8% win rate**.\n\nFor context, a 75% win rate is generally considered strong in B2B sales, so the team is performing well."
+    }
+  ]
+}

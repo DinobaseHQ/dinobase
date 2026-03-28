@@ -1,0 +1,64 @@
+{
+  "question_id": "revops_t3_02",
+  "question": "How much MRR are we getting from contacts that HubSpot considers actual customers? I want to validate our CRM lifecycle stages.",
+  "model": "gemini-3.1-pro",
+  "approach": "dinobase",
+  "expected_answer": 12849.67,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the exact correct MRR amount of $12,849.67 and demonstrated understanding of the required methodology (cross-source join via email, conversion of annual to monthly, filtering for HubSpot 'customer' lifecycle stage).",
+    "method": "llm_judge",
+    "judge_tokens": 462
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 59m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 59m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "How much MRR are we getting from contacts that HubSpot considers actual customers? I want to validate our CRM lifecycle stages."
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.contacts"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"contacts\",\n  \"row_count\": 180,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"email\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"firstname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lastname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"phone\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lifecyclestage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hs_lead_status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"lastmodifieddate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"5001\",\n      \"email\": \"catherine.dixon@oscorp.io\",\n      \"firstname\": \"Catherine\",\n      \"lastname\": \"Dixon\",\n      \"phone\": \"+1-876-903-6690\",\n      \"company\": \"Oscorp\",\n      \"company_id\": \"1001\",\n      \"lifecyclestage\": \"customer\",\n      \"hs_lead_status\": \"unqualified\",\n      \"createdate\": \"2025-11-22T00:00:00\",\n      \"lastmodifieddate\": \"2026-02-25T00:00:00\"\n    },\n    {\n      \"id\": \"5002\",\n      \"email\": \"lisa.adams@dundermifflin.com\",\n      \"firstname\": \"Lisa\",\n      \"lastname\": \"Adams\",\n      \"phone\": \"9545668893\",\n      \"company\": \"Dunder Mifflin\",\n      \"company_id\": \"1002\",\n      \"lifecyclestage\": \"customer\",\n      \"hs_lead_status\": \"bad_timing\",\n      \"createdate\": \"2024-10-21T00:00:00\",\n      \"lastmodifieddate\": \"2024-12-19T00:00:00\"\n    },\n    {\n      \"id\": \"5003\",\n      \"email\": \"melinda.martin@massivedynamic.com\",\n      \"firstname\": \"Melinda\",\n      \"lastname\": \"Martin\",\n      \"...",
+      "output_full_length": 2351
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.customers"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"customers\",\n  \"row_count\": 180,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"email\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's email address.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"name\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The customer's full name or business name.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO code for the currency the customer can be charged in for recurring billing purposes.\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"delinquent\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"Tracks the most recent state change on any invoice belonging to the customer. Paying an invoice or marking it uncollectible via the API will set this field to false. An automatic payment failure or passing the `invoice.due_date` will set this field to `true`.\\n\\nIf an invoice becomes uncollectible ...\",\n      \"note\": \"Can be null\"\n    },\n    {\n      \"name\": \"livemode\",\n      \"type\": \"BOOLEAN\",\n      \"nullable\": true,\n      \"description\": \"If the object exists in live mode, the value is `true`. If the object exists in test mode, the value is `false`.\"\n    }\n  ],\n  \"sample_rows\": ...",
+      "output_full_length": 2924
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.subscriptions"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"subscriptions\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Possible values are `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, or `paused`. \\n\\nFor `collection_method=charge_automatically` a subscription moves into `incomplete` if the initial payment attempt fails. A subscription in this status can only have meta...\",\n      \"note\": \"Values: active, canceled, incomplete, incomplete_expired, past_due, paused, trialing, unpaid\"\n    },\n    {\n      \"name\": \"plan_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_interval\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_start\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_end\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"canceled_at\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"If the subscription has been canceled, the date of that cancellation. If the subscription was canceled with `cancel_at_period_end`, `canceled_at` will reflect the time of the most recent update request, not the end of the subscription period when the subscription is automatically moved to a cance...\",\n      \"note\": \"Uni...",
+      "output_full_length": 3229
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT \n    SUM(\n        CASE \n            WHEN s.plan_interval = 'month' THEN s.plan_amount \n            WHEN s.plan_interval = 'year' THEN s.plan_amount / 12.0 \n            ELSE 0 \n        END\n    ) / 100.0 AS total_mrr\nFROM hubspot.contacts hc\nJOIN stripe.customers sc ON hc.email = sc.email\nJOIN stripe.subscriptions s ON sc.id = s.customer_id\nWHERE hc.lifecyclestage = 'customer'\n  AND s.status = 'active'"
+      },
+      "output": "{\n  \"columns\": [\n    \"total_mrr\"\n  ],\n  \"rows\": [\n    {\n      \"total_mrr\": 12849.666666666668\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 168
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the data across HubSpot and Stripe, the Monthly Recurring Revenue (MRR) from contacts that HubSpot currently classifies with the lifecycle stage of \"customer\" is **$12,849.67**. \n\nThis was calculated by matching HubSpot contacts to Stripe customers via their email addresses, and then summing up the active subscriptions (normalizing annual plans to their monthly equivalent)."
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "question_id": "revops_t2_02",
+  "question": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?",
+  "model": "kimi-k2.5",
+  "approach": "dinobase",
+  "expected_answer": 74.8,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly calculated the win rate as 74.8% using the proper formula (80 closed won / 107 total closed deals), explicitly excluded open deals from the denominator, and provided accurate supporting metrics and context for the CEO.",
+    "method": "llm_judge",
+    "judge_tokens": 751
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 3h 41m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 3h 41m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "list_sources",
+      "input": {},
+      "output": "{\n  \"sources\": [\n    {\n      \"name\": \"hubspot\",\n      \"tables\": [\n        {\n          \"name\": \"companies\",\n          \"rows\": 20\n        },\n        {\n          \"name\": \"contacts\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"deals\",\n          \"rows\": 184\n        }\n      ],\n      \"table_count\": 3,\n      \"total_rows\": 384,\n      \"last_sync\": \"2026-03-25 23:17:52.003653\",\n      \"age\": \"3h 41m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": true\n    },\n    {\n      \"name\": \"stripe\",\n      \"tables\": [\n        {\n          \"name\": \"charges\",\n          \"rows\": 566\n        },\n        {\n          \"name\": \"customers\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"invoices\",\n          \"rows\": 127\n        },\n        {\n          \"name\": \"subscriptions\",\n          \"rows\": 127\n        }\n      ],\n      \"table_count\": 4,\n      \"total_rows\": 1000,\n      \"last_sync\": \"2026-03-25 23:17:51.958592\",\n      \"age\": \"3h 41m\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": true\n    }\n  ]\n}",
+      "output_full_length": 1020
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT \n    dealstage,\n    COUNT(*) as count,\n    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY count DESC"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"count\",\n    \"percentage\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"count\": 80,\n      \"percentage\": 43.48\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"count\": 27,\n      \"percentage\": 14.67\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"count\": 21,\n      \"percentage\": 11.41\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"count\": 17,\n      \"percentage\": 9.24\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"count\": 15,\n      \"percentage\": 8.15\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"count\": 12,\n      \"percentage\": 6.52\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"count\": 12,\n      \"percentage\": 6.52\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 818
+    },
+    {
+      "role": "assistant",
+      "content": "## Win Rate Summary\n\nBased on your **184 deals** in HubSpot, here's the breakdown:\n\n| Metric | Value |\n|--------|-------|\n| **Win Rate (of closed deals)** | **74.8%** |\n| Won deals | 80 |\n| Lost deals | 27 |\n| **Total closed deals** | **107** |\n| Open deals (in pipeline) | 77 |\n\n### Deal Distribution\n\n| Stage | Count | % of Total |\n|-------|-------|------------|\n| **Closed Won** | 80 | 43.5% |\n| **Closed Lost** | 27 | 14.7% |\n| Decision Maker Bought In | 21 | 11.4% |\n| Appointment Scheduled | 17 | 9.2% |\n| Contract Sent | 15 | 8.2% |\n| Presentation Scheduled | 12 | 6.5% |\n| Qualified to Buy | 12 | 6.5% |\n\n---\n\n### Key Takeaways for the CEO\n\n\ud83c\udfaf **74.8% win rate** \u2014 For every closed deal, you win nearly 3 out of 4. That's strong performance.\n\n\ud83d\udcca **43% of all deals ever created have been won** \u2014 About 42% of deals (77) are still active in the pipeline.\n\n\ud83d\udcb0 Your pipeline health looks good with deals distributed across all stages, from qualification to contract negotiation.\n\n---\n\n*Note: Data is from a sync 3+ hours ago. If you need real-time numbers for a board meeting, I can refresh the source first.*"
+    }
+  ]
+}

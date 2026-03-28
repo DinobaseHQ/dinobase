@@ -1,0 +1,55 @@
+{
+  "question_id": "revops_t1_01",
+  "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+  "model": "minimax-m2.7",
+  "approach": "dinobase",
+  "expected_answer": 184,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the exact count of 184 total deals as stated in the ground truth answer, with a detailed breakdown by pipeline stage that sums correctly to the target number.",
+    "method": "llm_judge",
+    "judge_tokens": 576
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (0s ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (0s ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT COUNT(*) as total_deals, \n       SUM(CASE WHEN stage IS NOT NULL THEN 1 ELSE 0 END) as deals_with_stage\nFROM hubspot.deals"
+      },
+      "output": "{\n  \"error\": \"Binder Error: Referenced column \\\"stage\\\" not found in FROM clause!\\nCandidate bindings: \\\"hubspot_owner_id\\\", \\\"closedate\\\", \\\"contact_id\\\", \\\"createdate\\\"\\n\\nLINE 2:        SUM(CASE WHEN stage IS NOT NULL THEN 1 ELSE 0 END) as deals_with_stage\\n                             ^\"\n}",
+      "output_full_length": 294
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2065
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT dealstage, \n       COUNT(*) as deal_count,\n       SUM(amount) as total_amount\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY SUM(amount) DESC"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"deal_count\",\n    \"total_amount\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"deal_count\": 80,\n      \"total_amount\": 2398693.0\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"deal_count\": 27,\n      \"total_amount\": 935089.0\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"deal_count\": 17,\n      \"total_amount\": 678595.0\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"deal_count\": 21,\n      \"total_amount\": 604738.0\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"deal_count\": 15,\n      \"total_amount\": 600691.0\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"deal_count\": 12,\n      \"total_amount\": 347900.0\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"deal_count\": 12,\n      \"total_amount\": 325204.0\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 900
+    },
+    {
+      "role": "assistant",
+      "content": "Here's your sales pipeline snapshot:\n\n| Stage | Deals | Value |\n|-------|-------|-------|\n| **Active Pipeline** | | |\n| Presentations Scheduled | 12 | $348K |\n| Appointments Scheduled | 17 | $679K |\n| Decision Maker Bought In | 21 | $605K |\n| Contract Sent | 15 | $601K |\n| Qualified to Buy | 12 | $325K |\n| **Closed** | | |\n| Closed Won | 80 | $2.4M |\n| Closed Lost | 27 | $935K |\n\n**Totals:** 184 deals | $6.5M pipeline value\n\n**Highlights:**\n- **80 deals closed** with $2.4M won\n- **77 active deals** in progress with ~$2.6M in pipeline value\n- 27 losses worth $935K\n\nThe bulk of your active pipeline is in the mid-funnel (appointments/decision maker stages), with solid momentum at contract sent."
+    }
+  ]
+}

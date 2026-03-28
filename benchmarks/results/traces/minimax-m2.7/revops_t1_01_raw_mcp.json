@@ -1,0 +1,35 @@
+{
+  "question_id": "revops_t1_01",
+  "question": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?",
+  "model": "minimax-m2.7",
+  "approach": "raw_mcp",
+  "expected_answer": 184,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified the total deal count as 184, which matches the ground truth answer. While the response includes additional pipeline breakdown details beyond what was strictly asked, the core answer to 'how many deals are we working' is accurate.",
+    "method": "llm_judge",
+    "judge_tokens": 558
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You are a data analyst with access to stripe and hubspot API tools.\n\nUse these tools to answer business questions. Each tool returns records from a single API endpoint.\n\nNote: These are separate systems with separate APIs. There is no built-in way to join or aggregate data across them. If you need to correlate records across sources, you will need to fetch from each and match them manually (e.g., by email address)."
+    },
+    {
+      "role": "user",
+      "content": "Give me a quick snapshot of our sales pipeline \u2014 how many deals are we working?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "hubspot_list_deals",
+      "input": {},
+      "output": "{\"data\": [{\"id\": \"9001\", \"dealname\": \"Oscorp - New Business\", \"amount\": 64786.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closedate\": \"2026-02-13T00:00:00\", \"createdate\": \"2026-01-04T00:00:00\", \"contact_id\": \"5001\", \"company_id\": \"1001\", \"hubspot_owner_id\": \"105\"}, {\"id\": \"9002\", \"dealname\": \"Oscorp - Upsell\", \"amount\": 10781.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closedate\": \"2026-03-07T00:00:00\", \"createdate\": \"2025-12-04T00:00:00\", \"contact_id\": \"5001\", \"company_id\": \"1001\", \"hubspot_owner_id\": \"103\"}, {\"id\": \"9003\", \"dealname\": \"Dunder Mifflin - Renewal\", \"amount\": 411.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closedate\": \"2025-05-22T00:00:00\", \"createdate\": \"2024-12-14T00:00:00\", \"contact_id\": \"5002\", \"company_id\": \"1002\", \"hubspot_owner_id\": \"105\"}, {\"id\": \"9004\", \"dealname\": \"Massive Dynamic - Expansion\", \"amount\": 78017.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closedate\": \"2024-11-29T00:00:00\", \"createdate\": \"2024-08-08T00:00:00\", \"contact_id\": \"5003\", \"company_id\": \"1003\", \"hubspot_owner_id\": \"104\"}, {\"id\": \"9005\", \"dealname\": \"Massive Dynamic - Upsell\", \"amount\": 29362.0, \"dealstage\": \"closedlost\", \"pipeline\": \"default\", \"closedate\": \"2024-08-30T00:00:00\", \"createdate\": \"2024-07-14T00:00:00\", \"contact_id\": \"5003\", \"company_id\": \"1003\", \"hubspot_owner_id\": \"102\"}, {\"id\": \"9006\", \"dealname\": \"Oscorp - New Business\", \"amount\": 30108.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closedate\": \"2025-01-17T00:00:00\", \"createdate\": \"2024-11-15T00:00:00\", \"contact_id\": \"5006\", \"company_id\": \"1001\", \"hubspot_owner_id\": \"102\"}, {\"id\": \"9007\", \"dealname\": \"Massive Dynamic - New Business\", \"amount\": 92647.0, \"dealstage\": \"contractsent\", \"pipeline\": \"default\", \"closedate\": \"2026-03-06T00:00:00\", \"createdate\": \"2025-12-10T00:00:00\", \"contact_id\": \"5008\", \"company_id\": \"1003\", \"hubspot_owner_id\": \"104\"}, {\"id\": \"9008\", \"dealname\": \"Hooli - Upsell\", \"amount\": 845.0, \"dealstage\": \"closedwon\", \"pipeline\": \"default\", \"closed...",
+      "output_full_length": 27177
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the HubSpot deals data, here's a quick snapshot of your sales pipeline:\n\n**Total Deals in System:** 184\n\n**Active Pipeline (Open Deals):** At least 26 deals are actively being worked in the first 100 records, spread across these stages:\n\n| Stage | Count (sample) |\n|-------|---------------|\n| Presentation Scheduled | 5 |\n| Appointment Scheduled | 6 |\n| Decision Maker Bought In | 10 |\n| Qualified to Buy | 3 |\n| Contract Sent | 5 |\n\n**Closed Deals (from sample):**\n- **Closed Won:** ~53 deals\n- **Closed Lost:** ~12 deals\n\nThe full pipeline breakdown requires fetching the remaining 84 deals (we retrieved 100 of 184 total). Would you like me to pull the complete dataset for a full breakdown by stage and total pipeline value?"
+    }
+  ]
+}

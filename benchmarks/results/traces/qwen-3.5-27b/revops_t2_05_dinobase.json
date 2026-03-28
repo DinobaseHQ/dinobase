@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t2_05",
+  "question": "Finance needs to know how much revenue we have actually collected from paid invoices, in real dollars.",
+  "model": "qwen-3.5-27b",
+  "approach": "dinobase",
+  "expected_answer": 51580.0,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified $51,580.00 as the total revenue from paid invoices, properly converted from cents to dollars, matching the ground truth answer of 51580.0.",
+    "method": "llm_judge",
+    "judge_tokens": 425
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (8m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (8m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "Finance needs to know how much revenue we have actually collected from paid invoices, in real dollars."
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.invoices"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"invoices\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object. For preview invoices created using the create preview endpoint, this id will be prefixed with `upcoming_in`.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"subscription_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount_due\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Final amount due at this time for this invoice. If the invoice's total is smaller than the minimum charge amount, for example, or if there is account credit that can be applied to the invoice, the `amount_due` may be 0. If there is a positive `starting_balance` for the invoice (the customer owes ...\"\n    },\n    {\n      \"name\": \"amount_paid\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The amount, in cents (or local equivalent), that was paid.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the invoice, one of `draft`, `open`, `paid`, `uncollectible`, or `void`. Learn more\",\n      \"note\": \"Values: draft, open, paid, uncollectible, void Can be null\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"due_date\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"The date on which payment for this invoice is due. This value will be `null` for invoices where `collection_method=charge_automatically`.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert. Can be null\"\n    ...",
+      "output_full_length": 3928
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT \n  SUM(amount_paid) / 100.0 as total_revenue_dollars,\n  COUNT(*) as paid_invoice_count\nFROM stripe.invoices\nWHERE status = 'paid'"
+      },
+      "output": "{\n  \"columns\": [\n    \"total_revenue_dollars\",\n    \"paid_invoice_count\"\n  ],\n  \"rows\": [\n    {\n      \"total_revenue_dollars\": 51580.0,\n      \"paid_invoice_count\": 110\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 240
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the Stripe invoices data, here is the revenue collected from paid invoices:\n\n*   **Total Revenue Collected:** **$51,580.00**\n*   **Number of Paid Invoices:** 110\n\nThis figure represents the sum of the `amount_paid` field (converted from cents to dollars) for all invoices with a status of \"paid\"."
+    }
+  ]
+}

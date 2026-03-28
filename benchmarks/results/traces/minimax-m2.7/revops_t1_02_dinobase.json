@@ -1,0 +1,53 @@
+{
+  "question_id": "revops_t1_02",
+  "question": "What is our active subscriber count right now? I need it for the weekly metrics email.",
+  "model": "minimax-m2.7",
+  "approach": "dinobase",
+  "expected_answer": 88,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent provided the exact correct active subscriber count of 88, with helpful additional context about total subscriptions and data source.",
+    "method": "llm_judge",
+    "judge_tokens": 387
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (40s ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (40s ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "What is our active subscriber count right now? I need it for the weekly metrics email."
+    },
+    {
+      "role": "tool_call",
+      "tool": "list_sources",
+      "input": {},
+      "output": "{\n  \"sources\": [\n    {\n      \"name\": \"hubspot\",\n      \"tables\": [\n        {\n          \"name\": \"companies\",\n          \"rows\": 20\n        },\n        {\n          \"name\": \"contacts\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"deals\",\n          \"rows\": 184\n        }\n      ],\n      \"table_count\": 3,\n      \"total_rows\": 384,\n      \"last_sync\": \"2026-03-25 23:17:52.003653\",\n      \"age\": \"44s\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": false\n    },\n    {\n      \"name\": \"stripe\",\n      \"tables\": [\n        {\n          \"name\": \"charges\",\n          \"rows\": 566\n        },\n        {\n          \"name\": \"customers\",\n          \"rows\": 180\n        },\n        {\n          \"name\": \"invoices\",\n          \"rows\": 127\n        },\n        {\n          \"name\": \"subscriptions\",\n          \"rows\": 127\n        }\n      ],\n      \"table_count\": 4,\n      \"total_rows\": 1000,\n      \"last_sync\": \"2026-03-25 23:17:51.958592\",\n      \"age\": \"44s\",\n      \"freshness_threshold\": \"1h\",\n      \"is_stale\": false\n    }\n  ]\n}",
+      "output_full_length": 1016
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.subscriptions"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"subscriptions\",\n  \"row_count\": 127,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Possible values are `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, or `paused`. \\n\\nFor `collection_method=charge_automatically` a subscription moves into `incomplete` if the initial payment attempt fails. A subscription in this status can only have meta...\",\n      \"note\": \"Values: active, canceled, incomplete, incomplete_expired, past_due, paused, trialing, unpaid\"\n    },\n    {\n      \"name\": \"plan_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"plan_interval\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_start\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"current_period_end\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"canceled_at\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"If the subscription has been canceled, the date of that cancellation. If the subscription was canceled with `cancel_at_period_end`, `canceled_at` will reflect the time of the most recent update request, not the end of the subscription period when the subscription is automatically moved to a cance...\",\n      \"note\": \"Uni...",
+      "output_full_length": 3227
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT COUNT(*) as active_subscribers FROM stripe.subscriptions WHERE status = 'active'"
+      },
+      "output": "{\n  \"columns\": [\n    \"active_subscribers\"\n  ],\n  \"rows\": [\n    {\n      \"active_subscribers\": 88\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 170
+    },
+    {
+      "role": "assistant",
+      "content": "Your current **active subscriber count is 88**.\n\nThis is pulled from your Stripe subscriptions with `status = 'active'`. For context, you have 127 total subscriptions in the system (including trial, past_due, canceled, etc.). Let me know if you need any other metrics for the email!"
+    }
+  ]
+}

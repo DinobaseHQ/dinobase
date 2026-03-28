@@ -1,0 +1,46 @@
+{
+  "question_id": "revops_t1_05",
+  "question": "I think we have a payment processing issue \u2014 how many charges are failing?",
+  "model": "glm-5-turbo",
+  "approach": "dinobase",
+  "expected_answer": 45,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 45 failing charges, which matches the ground truth answer, and provided additional context with proper breakdown and analysis.",
+    "method": "llm_judge",
+    "judge_tokens": 552
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (47m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (47m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "I think we have a payment processing issue \u2014 how many charges are failing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "stripe.charges"
+      },
+      "output": "{\n  \"schema\": \"stripe\",\n  \"table\": \"charges\",\n  \"row_count\": 566,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Unique identifier for the object.\"\n    },\n    {\n      \"name\": \"customer_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Amount intended to be collected by this payment. A positive integer representing how much to charge in the smallest currency unit (e.g., 100 cents to charge $1.00 or 100 to charge \\u00a5100, a zero-decimal currency). The minimum amount is $0.50 US or equivalent in charge currency. The amount value sup...\"\n    },\n    {\n      \"name\": \"currency\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"Three-letter ISO currency code, in lowercase. Must be a supported currency.\"\n    },\n    {\n      \"name\": \"status\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"The status of the payment is either `succeeded`, `pending`, or `failed`.\",\n      \"note\": \"Values: failed, pending, succeeded\"\n    },\n    {\n      \"name\": \"created\",\n      \"type\": \"BIGINT\",\n      \"nullable\": true,\n      \"description\": \"Time at which the object was created. Measured in seconds since the Unix epoch.\",\n      \"note\": \"Unix timestamp (seconds since epoch). Use to_timestamp() to convert.\"\n    },\n    {\n      \"name\": \"payment_method_type\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true,\n      \"description\": \"An arbitrary string attached to the object. Often useful for displaying to users.\",\n      \"note\": \"Can be null\"\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"ch_0VrmI7OsygQE2B\",\n      \"customer_id\": \"cus_aAEAw3CjkGOM5W\",\n      \"amount\": 9900,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\",\n      \"created\": 1766534400,\n      \"payment_method_type\": \"card\",\n      \"des...",
+      "output_full_length": 2648
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  status,\n  COUNT(*) AS charge_count,\n  SUM(amount) / 100.0 AS total_amount_usd\nFROM stripe.charges\nGROUP BY status\nORDER BY charge_count DESC\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"status\",\n    \"charge_count\",\n    \"total_amount_usd\"\n  ],\n  \"rows\": [\n    {\n      \"status\": \"succeeded\",\n      \"charge_count\": 509,\n      \"total_amount_usd\": 157191.0\n    },\n    {\n      \"status\": \"failed\",\n      \"charge_count\": 45,\n      \"total_amount_usd\": 16735.0\n    },\n    {\n      \"status\": \"pending\",\n      \"charge_count\": 12,\n      \"total_amount_usd\": 3158.0\n    }\n  ],\n  \"row_count\": 3,\n  \"total_rows\": 3,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 460
+    },
+    {
+      "role": "assistant",
+      "content": "Here's a breakdown of your charges by status:\n\n| Status | # of Charges | Total Amount |\n|--------|-------------|--------------|\n| \u2705 Succeeded | 509 | $157,191.00 |\n| \u274c Failed | **45** | **$16,735.00** |\n| \u23f3 Pending | 12 | $3,158.00 |\n\n**45 out of 566 charges have failed** \u2014 that's a **~7.9% failure rate**, which is notably high (typical is 1\u20132%). The failed charges represent **$16,735** in potentially lost revenue.\n\nWould you like me to dig deeper? For example, I could:\n- **Identify which customers** have the most failed charges\n- **Check if failures are concentrated** in a specific time period\n- **Look at failure patterns by payment method** (card vs. SEPA, etc.)\n- **Cross-reference with HubSpot** to see if failing customers are associated with specific deals or companies"
+    }
+  ]
+}

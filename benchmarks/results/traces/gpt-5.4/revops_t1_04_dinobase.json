@@ -1,0 +1,57 @@
+{
+  "question_id": "revops_t1_04",
+  "question": "Where are most of our deals sitting in the pipeline right now?",
+  "model": "gpt-5.4",
+  "approach": "dinobase",
+  "expected_answer": "closedwon",
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly identified 'Closed Won' as the deal stage with the most deals (the mode), which matches the ground truth answer, and provided accurate supporting data showing 80 deals in that stage.",
+    "method": "llm_judge",
+    "judge_tokens": 611
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 STALE (last sync: 4h 31m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 STALE (last sync: 4h 31m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n4. Use `refresh` to re-sync a stale source before querying\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email).\n\nSome sources are stale. For bulk queries, use `refresh` to re-sync. For single-record lookups by ID on stale sources, the system will automatically fetch live data from the source API."
+    },
+    {
+      "role": "user",
+      "content": "Where are most of our deals sitting in the pipeline right now?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2068
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT pipeline, dealstage, COUNT(*) AS deal_count, SUM(COALESCE(amount,0)) AS total_amount\nFROM hubspot.deals\nGROUP BY 1,2\nORDER BY deal_count DESC, total_amount DESC;",
+        "max_rows": 200
+      },
+      "output": "{\n  \"columns\": [\n    \"pipeline\",\n    \"dealstage\",\n    \"deal_count\",\n    \"total_amount\"\n  ],\n  \"rows\": [\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"closedwon\",\n      \"deal_count\": 80,\n      \"total_amount\": 2398693.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"closedlost\",\n      \"deal_count\": 27,\n      \"total_amount\": 935089.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"deal_count\": 21,\n      \"total_amount\": 604738.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"appointmentscheduled\",\n      \"deal_count\": 17,\n      \"total_amount\": 678595.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"contractsent\",\n      \"deal_count\": 15,\n      \"total_amount\": 600691.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"presentationscheduled\",\n      \"deal_count\": 12,\n      \"total_amount\": 347900.0\n    },\n    {\n      \"pipeline\": \"default\",\n      \"dealstage\": \"qualifiedtobuy\",\n      \"deal_count\": 12,\n      \"total_amount\": 325204.0\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 1119
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "SELECT dealstage, COUNT(*) AS open_deal_count, SUM(COALESCE(amount,0)) AS open_amount\nFROM hubspot.deals\nWHERE dealstage NOT IN ('closedwon','closedlost')\nGROUP BY 1\nORDER BY open_deal_count DESC, open_amount DESC;",
+        "max_rows": 200
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"open_deal_count\",\n    \"open_amount\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"open_deal_count\": 21,\n      \"open_amount\": 604738.0\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"open_deal_count\": 17,\n      \"open_amount\": 678595.0\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"open_deal_count\": 15,\n      \"open_amount\": 600691.0\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"open_deal_count\": 12,\n      \"open_amount\": 347900.0\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"open_deal_count\": 12,\n      \"open_amount\": 325204.0\n    }\n  ],\n  \"row_count\": 5,\n  \"total_rows\": 5,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 722
+    },
+    {
+      "role": "assistant",
+      "content": "Most of your deals are currently sitting in:\n\n- **Closed Won** \u2014 **80 deals** totaling **$2.40M**\n- **Closed Lost** \u2014 **27 deals** totaling **$935k**\n\nIf you mean the **active pipeline only** excluding closed deals, then most are in:\n\n1. **Decision Maker Bought-In** \u2014 **21 open deals** totaling **$605k**\n2. **Appointment Scheduled** \u2014 **17 open deals** totaling **$679k**\n3. **Contract Sent** \u2014 **15 open deals** totaling **$601k**\n4. **Presentation Scheduled** \u2014 **12 open deals** totaling **$348k**\n5. **Qualified to Buy** \u2014 **12 open deals** totaling **$325k**\n\nSo the short answer is:\n- **Overall:** most deals are in **Closed Won**\n- **Open pipeline:** most deals are in **Decision Maker Bought-In**\n\nThis HubSpot data is a bit stale (~4.5 hours old). If you want, I can also break this down by **deal value**, **owner**, or show **conversion risk by stage**."
+    }
+  ]
+}

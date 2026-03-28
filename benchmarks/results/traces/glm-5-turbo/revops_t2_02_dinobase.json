@@ -1,0 +1,55 @@
+{
+  "question_id": "revops_t2_02",
+  "question": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?",
+  "model": "glm-5-turbo",
+  "approach": "dinobase",
+  "expected_answer": 74.8,
+  "judgment": {
+    "correct": true,
+    "partial": false,
+    "explanation": "The agent correctly calculated the win rate as 74.8% using the proper formula (80 closed won / 107 total closed deals), explicitly excluded open deals from the denominator, and provided accurate supporting metrics.",
+    "method": "llm_judge",
+    "judge_tokens": 605
+  },
+  "trace": [
+    {
+      "role": "system",
+      "content": "You have access to a Dinobase database \u2014 business data synced from multiple sources into a single SQL database (DuckDB dialect).\n\nConnected sources:\n  hubspot: companies, contacts, deals (384 rows total) \u2014 fresh (49m ago)\n  stripe: charges, customers, invoices, subscriptions (1,000 rows total) \u2014 fresh (49m ago)\n\nHow to work with this database:\n1. Use `list_sources` to see what data is available (includes freshness)\n2. Use `describe` on a table to see its columns, types, annotations, and sample data\n3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)\n\nCross-source joins work via shared columns. Use `describe` to find join keys \u2014 columns annotated as join keys or with matching names across sources (e.g., email)."
+    },
+    {
+      "role": "user",
+      "content": "The CEO is asking about our win rate \u2014 what percentage of deals are we actually closing?"
+    },
+    {
+      "role": "tool_call",
+      "tool": "describe",
+      "input": {
+        "table": "hubspot.deals"
+      },
+      "output": "{\n  \"schema\": \"hubspot\",\n  \"table\": \"deals\",\n  \"row_count\": 184,\n  \"columns\": [\n    {\n      \"name\": \"id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealname\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"DOUBLE\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"dealstage\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"pipeline\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"closedate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"createdate\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"contact_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"company_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    },\n    {\n      \"name\": \"hubspot_owner_id\",\n      \"type\": \"VARCHAR\",\n      \"nullable\": true\n    }\n  ],\n  \"sample_rows\": [\n    {\n      \"id\": \"9001\",\n      \"dealname\": \"Oscorp - New Business\",\n      \"amount\": 64786.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-02-13T00:00:00\",\n      \"createdate\": \"2026-01-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"105\"\n    },\n    {\n      \"id\": \"9002\",\n      \"dealname\": \"Oscorp - Upsell\",\n      \"amount\": 10781.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2026-03-07T00:00:00\",\n      \"createdate\": \"2025-12-04T00:00:00\",\n      \"contact_id\": \"5001\",\n      \"company_id\": \"1001\",\n      \"hubspot_owner_id\": \"103\"\n    },\n    {\n      \"id\": \"9003\",\n      \"dealname\": \"Dunder Mifflin - Renewal\",\n      \"amount\": 411.0,\n      \"dealstage\": \"closedwon\",\n      \"pipeline\": \"default\",\n      \"closedate\": \"2025-05-22T00:00:00\",\n      \"createdate\": \"2024-12-14T00:00:00\",\n      \"contact_id\": \"5002\",\n      \"company_id\": \"1002\",\n      \"hubspot_owner_id\": \"105\"\n    }\n  ],\n  \"last_sync\": \"...",
+      "output_full_length": 2066
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  dealstage,\n  COUNT(*) AS count,\n  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS pct\nFROM hubspot.deals\nGROUP BY dealstage\nORDER BY count DESC\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"dealstage\",\n    \"count\",\n    \"pct\"\n  ],\n  \"rows\": [\n    {\n      \"dealstage\": \"closedwon\",\n      \"count\": 80,\n      \"pct\": 43.5\n    },\n    {\n      \"dealstage\": \"closedlost\",\n      \"count\": 27,\n      \"pct\": 14.7\n    },\n    {\n      \"dealstage\": \"decisionmakerboughtin\",\n      \"count\": 21,\n      \"pct\": 11.4\n    },\n    {\n      \"dealstage\": \"appointmentscheduled\",\n      \"count\": 17,\n      \"pct\": 9.2\n    },\n    {\n      \"dealstage\": \"contractsent\",\n      \"count\": 15,\n      \"pct\": 8.2\n    },\n    {\n      \"dealstage\": \"presentationscheduled\",\n      \"count\": 12,\n      \"pct\": 6.5\n    },\n    {\n      \"dealstage\": \"qualifiedtobuy\",\n      \"count\": 12,\n      \"pct\": 6.5\n    }\n  ],\n  \"row_count\": 7,\n  \"total_rows\": 7,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 755
+    },
+    {
+      "role": "tool_call",
+      "tool": "query",
+      "input": {
+        "sql": "\nSELECT \n  COUNT(*) FILTER (WHERE dealstage = 'closedwon') AS won_deals,\n  COUNT(*) FILTER (WHERE dealstage = 'closedlost') AS lost_deals,\n  ROUND(COUNT(*) FILTER (WHERE dealstage = 'closedwon') * 100.0 / \n        NULLIF(COUNT(*) FILTER (WHERE dealstage IN ('closedwon', 'closedlost')), 0), 1) AS win_rate_pct,\n  SUM(amount) FILTER (WHERE dealstage = 'closedwon') AS won_value,\n  SUM(amount) FILTER (WHERE dealstage = 'closedlost') AS lost_value\nFROM hubspot.deals\n"
+      },
+      "output": "{\n  \"columns\": [\n    \"won_deals\",\n    \"lost_deals\",\n    \"win_rate_pct\",\n    \"won_value\",\n    \"lost_value\"\n  ],\n  \"rows\": [\n    {\n      \"won_deals\": 80,\n      \"lost_deals\": 27,\n      \"win_rate_pct\": 74.8,\n      \"won_value\": 2398693.0,\n      \"lost_value\": 935089.0\n    }\n  ],\n  \"row_count\": 1,\n  \"total_rows\": 1,\n  \"_freshness\": \"synced\"\n}",
+      "output_full_length": 337
+    },
+    {
+      "role": "assistant",
+      "content": "Here's the win rate summary for the CEO:\n\n## \ud83d\udcca Deal Win Rate: **74.8%**\n\n| Metric | Value |\n|---|---|\n| **Deals Won** | 80 |\n| **Deals Lost** | 27 |\n| **Win Rate** | **74.8%** (80 of 107 closed deals) |\n| **Won Revenue** | $2,398,693 |\n| **Lost Revenue** | $935,089 |\n\n### Pipeline Snapshot (184 total deals)\n- **80** Closed Won (43.5%)\n- **27** Closed Lost (14.7%)\n- **77** Still Open (41.8%) \u2014 spread across stages from *Qualified to Buy* through *Contract Sent*\n\n**Key takeaway:** We're closing nearly 3 out of every 4 deals that reach a final decision \u2014 a strong win rate. There are also 77 deals still in the pipeline worth watching, including 15 at the *Contract Sent* stage that could convert soon."
+    }
+  ]
+}
