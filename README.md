@@ -12,7 +12,7 @@ Connect your business data. Let AI agents query across all of it.
 [![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Docs](https://dinoplace.ai) · [Getting Started](https://dinoplace.ai/getting-started/) · [Sources](https://dinoplace.ai/sources/overview/)
+[Docs](https://dinobase.ai) · [Getting Started](https://dinobase.ai/getting-started/) · [Sources](https://dinobase.ai/sources/overview/)
 
 </div>
 
@@ -157,7 +157,7 @@ Or via environment variable (ideal for containers):
 export DINOBASE_STORAGE_URL=s3://my-bucket/dinobase/
 ```
 
-Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible services (MinIO, R2). See [Cloud Storage Backend](https://dinoplace.ai/guides/cloud-storage-backend/) for setup.
+Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible services (MinIO, R2). See [Cloud Storage Backend](https://dinobase.ai/guides/cloud-storage-backend/) for setup.
 
 ## Integrations
 
@@ -165,7 +165,7 @@ Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible 
 <tr>
 <td valign="top" width="50%">
 
-**[OpenClaw](https://dinoplace.ai/guides/openclaw/)**
+**[OpenClaw](https://dinobase.ai/guides/openclaw/)**
 
 ```bash
 openclaw skills install dinobase
@@ -176,7 +176,7 @@ Auto-installs Dinobase and teaches your agent to query data via SQL.
 </td>
 <td valign="top" width="50%">
 
-**[Vercel AI SDK](https://dinoplace.ai/guides/vercel-ai/)**
+**[Vercel AI SDK](https://dinobase.ai/guides/vercel-ai/)**
 
 ```typescript
 const dinobase = await createMCPClient({
@@ -193,7 +193,7 @@ Native MCP integration. Zero adapter code.
 <tr>
 <td valign="top" width="50%">
 
-**[CrewAI](https://dinoplace.ai/guides/crewai/)**
+**[CrewAI](https://dinobase.ai/guides/crewai/)**
 
 ```python
 from integrations.crewai.tools import all_tools
@@ -206,7 +206,7 @@ Python tools wrapping Dinobase's query engine.
 </td>
 <td valign="top" width="50%">
 
-**[LangChain / LangGraph](https://dinoplace.ai/guides/langchain/)**
+**[LangChain / LangGraph](https://dinobase.ai/guides/langchain/)**
 
 ```python
 from integrations.langchain.toolkit import DinobaseToolkit
@@ -221,7 +221,7 @@ LangChain toolkit with LangGraph agent support.
 <tr>
 <td valign="top" width="50%">
 
-**[Pydantic AI](https://dinoplace.ai/guides/pydantic-ai/)**
+**[Pydantic AI](https://dinobase.ai/guides/pydantic-ai/)**
 
 ```python
 from integrations.pydantic_ai.tools import dinobase_agent, DinobaseDeps
@@ -234,7 +234,7 @@ Type-safe toolset with dependency injection.
 </td>
 <td valign="top" width="50%">
 
-**[LlamaIndex](https://dinoplace.ai/guides/llamaindex/)**
+**[LlamaIndex](https://dinobase.ai/guides/llamaindex/)**
 
 ```python
 from integrations.llamaindex.tool_spec import DinobaseToolSpec
@@ -249,7 +249,7 @@ BaseToolSpec for ReAct agents.
 <tr>
 <td valign="top" width="50%">
 
-**[Mastra](https://dinoplace.ai/guides/mastra/)**
+**[Mastra](https://dinobase.ai/guides/mastra/)**
 
 ```typescript
 const mcp = new MCPClient({
@@ -269,24 +269,24 @@ Native MCP support. Zero adapter code.
 
 ## Documentation
 
-- **[Getting Started](https://dinoplace.ai/getting-started/)** — Install, connect, query in 5 minutes
-- **[Connecting Sources](https://dinoplace.ai/guides/connecting-sources/)** — Credentials, naming, sync intervals
-- **[Querying Data](https://dinoplace.ai/guides/querying/)** — Cross-source joins, aggregations, DuckDB SQL
-- **[Mutations](https://dinoplace.ai/guides/mutations/)** — Write data back to sources with preview/confirm flow
-- **[MCP Integration](https://dinoplace.ai/guides/mcp/)** — Agent setup for Claude Desktop, Cursor
-- **[OpenClaw](https://dinoplace.ai/integrations/openclaw/)** — OpenClaw skill setup
-- **[Vercel AI SDK](https://dinoplace.ai/integrations/vercel-ai/)** — MCP integration for Next.js apps
-- **[CrewAI](https://dinoplace.ai/integrations/crewai/)** — Python tools for CrewAI agents
-- **[LangChain / LangGraph](https://dinoplace.ai/integrations/langchain/)** — Toolkit with LangGraph agent support
-- **[Pydantic AI](https://dinoplace.ai/integrations/pydantic-ai/)** — Type-safe toolset with dependency injection
-- **[LlamaIndex](https://dinoplace.ai/integrations/llamaindex/)** — BaseToolSpec for ReAct agents
-- **[Mastra](https://dinoplace.ai/integrations/mastra/)** — Native MCP integration for TypeScript agents
-- **[Syncing & Scheduling](https://dinoplace.ai/guides/syncing/)** — Daemon mode, per-source intervals, concurrent sync
-- **[Cloud Storage Backend](https://dinoplace.ai/guides/cloud-storage-backend/)** — Store data in S3, GCS, or Azure
-- **[Schema Annotations](https://dinoplace.ai/guides/annotations/)** — How agents understand the data
-- **[CLI Reference](https://dinoplace.ai/reference/cli/)** — All commands and flags
-- **[MCP Tools Reference](https://dinoplace.ai/reference/mcp-tools/)** — All 7 agent tools
-- **[Architecture](https://dinoplace.ai/project/architecture/)** — DuckDB, dlt, MCP, module structure
+- **[Getting Started](https://dinobase.ai/getting-started/)** — Install, connect, query in 5 minutes
+- **[Connecting Sources](https://dinobase.ai/guides/connecting-sources/)** — Credentials, naming, sync intervals
+- **[Querying Data](https://dinobase.ai/guides/querying/)** — Cross-source joins, aggregations, DuckDB SQL
+- **[Mutations](https://dinobase.ai/guides/mutations/)** — Write data back to sources with preview/confirm flow
+- **[MCP Integration](https://dinobase.ai/guides/mcp/)** — Agent setup for Claude Desktop, Cursor
+- **[OpenClaw](https://dinobase.ai/integrations/openclaw/)** — OpenClaw skill setup
+- **[Vercel AI SDK](https://dinobase.ai/integrations/vercel-ai/)** — MCP integration for Next.js apps
+- **[CrewAI](https://dinobase.ai/integrations/crewai/)** — Python tools for CrewAI agents
+- **[LangChain / LangGraph](https://dinobase.ai/integrations/langchain/)** — Toolkit with LangGraph agent support
+- **[Pydantic AI](https://dinobase.ai/integrations/pydantic-ai/)** — Type-safe toolset with dependency injection
+- **[LlamaIndex](https://dinobase.ai/integrations/llamaindex/)** — BaseToolSpec for ReAct agents
+- **[Mastra](https://dinobase.ai/integrations/mastra/)** — Native MCP integration for TypeScript agents
+- **[Syncing & Scheduling](https://dinobase.ai/guides/syncing/)** — Daemon mode, per-source intervals, concurrent sync
+- **[Cloud Storage Backend](https://dinobase.ai/guides/cloud-storage-backend/)** — Store data in S3, GCS, or Azure
+- **[Schema Annotations](https://dinobase.ai/guides/annotations/)** — How agents understand the data
+- **[CLI Reference](https://dinobase.ai/reference/cli/)** — All commands and flags
+- **[MCP Tools Reference](https://dinobase.ai/reference/mcp-tools/)** — All 7 agent tools
+- **[Architecture](https://dinobase.ai/project/architecture/)** — DuckDB, dlt, MCP, module structure
 
 ## Development
 
