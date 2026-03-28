@@ -2,7 +2,7 @@
 name: dinobase
 description: Set up and query business data across 100+ sources (Stripe, HubSpot, Salesforce, etc.) via SQL. Agent-driven setup, cross-source joins, mutations.
 version: 0.2.0
-metadata: {"openclaw":{"emoji":"🦕","homepage":"https://dinoplace.ai","requires":{"bins":["dinobase"]},"install":[{"id":"uv","kind":"uv","package":"dinobase","bins":["dinobase"],"label":"Install Dinobase (uv)"}]}}
+metadata: {"openclaw":{"emoji":"🦕","homepage":"https://dinobase.ai","requires":{"bins":["dinobase"]},"install":[{"id":"uv","kind":"uv","package":"dinobase","bins":["dinobase"],"label":"Install Dinobase (uv)"}]}}
 ---
 
 # Dinobase
