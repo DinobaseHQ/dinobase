@@ -4,28 +4,13 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import Field
 from mcp.server.fastmcp import FastMCP
 
 from dinobase.db import DinobaseDB
 from dinobase.query.engine import QueryEngine
-
-# ---------------------------------------------------------------------------
-# Database state
-# ---------------------------------------------------------------------------
-
-_db: DinobaseDB | None = None
-_engine: QueryEngine | None = None
-
-
-def _get_engine() -> QueryEngine:
-    global _db, _engine
-    if _engine is None:
-        _db = DinobaseDB()
-        _engine = QueryEngine(_db)
-    return _engine
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +89,11 @@ mcp: FastMCP | None = None
 
 def _create_server() -> FastMCP:
     """Create the FastMCP server with instructions computed from the current DB state."""
-    engine = _get_engine()
-    instructions = _build_instructions(engine)
+    with DinobaseDB() as db:
+        engine = QueryEngine(db)
+        instructions = _build_instructions(engine)
+        sources = engine.list_sources().get("sources", [])
 
-    sources = engine.list_sources().get("sources", [])
     print("Dinobase MCP server ready.", file=sys.stderr)
     for s in sources:
         print(f"  {s['name']}: {s['table_count']} tables, {s['total_rows']:,} rows", file=sys.stderr)
@@ -120,15 +106,17 @@ def _create_server() -> FastMCP:
         max_rows: Annotated[int, Field(description="Maximum rows to return", ge=1, le=10000)] = 200,
     ) -> str:
         """Execute a SQL query against the database. Use `describe` first to understand table columns and data types. Mutations return a preview by default — append --force to the SQL to execute immediately, or call confirm() with the mutation_id."""
-        eng = _get_engine()
-        result = eng.execute(sql, max_rows=max_rows)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = eng.execute(sql, max_rows=max_rows)
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
     def list_sources() -> str:
         """List all connected data sources with their tables, row counts, and last sync time."""
-        eng = _get_engine()
-        result = eng.list_sources()
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = eng.list_sources()
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -136,8 +124,9 @@ def _create_server() -> FastMCP:
         table: Annotated[str, Field(description="Table to describe, e.g. 'salesforce.opportunities' or 'zendesk.tickets'")],
     ) -> str:
         """Describe a table's columns, types, annotations, and sample rows. Annotations include data format notes (e.g. 'amounts in cents') and join key hints."""
-        eng = _get_engine()
-        result = eng.describe_table(table)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = eng.describe_table(table)
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -146,9 +135,9 @@ def _create_server() -> FastMCP:
     ) -> str:
         """Confirm and execute a pending mutation. Mutations (UPDATE/INSERT/DELETE) return a preview first — call this with the mutation_id to actually execute it. Alternatively, use --force in the SQL to skip this step."""
         from dinobase.query.mutations import MutationEngine
-        eng = _get_engine()
-        mutation_engine = MutationEngine(eng.db)
-        result = mutation_engine.confirm(mutation_id)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = MutationEngine(db).confirm(mutation_id)
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -157,9 +146,9 @@ def _create_server() -> FastMCP:
     ) -> str:
         """Confirm and execute multiple pending mutations (for multi-statement SQL that spans sources)."""
         from dinobase.query.mutations import MutationEngine
-        eng = _get_engine()
-        mutation_engine = MutationEngine(eng.db)
-        result = mutation_engine.confirm_batch(mutation_ids)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = MutationEngine(db).confirm_batch(mutation_ids)
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -168,9 +157,9 @@ def _create_server() -> FastMCP:
     ) -> str:
         """Cancel a pending mutation without executing it."""
         from dinobase.query.mutations import MutationEngine
-        eng = _get_engine()
-        mutation_engine = MutationEngine(eng.db)
-        result = mutation_engine.cancel(mutation_id)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            result = MutationEngine(db).cancel(mutation_id)
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -181,9 +170,6 @@ def _create_server() -> FastMCP:
         from dinobase.config import load_config
         from dinobase.sync.engine import SyncEngine
 
-        eng = _get_engine()
-
-        # Look up source config
         config = load_config()
         sources_config = config.get("sources", {})
         if source not in sources_config:
@@ -193,12 +179,10 @@ def _create_server() -> FastMCP:
         if source_config.get("type") in ("parquet", "csv"):
             return json.dumps({"error": f"File source '{source}' reads live data — no sync needed"})
 
-        # Run sync
-        sync_engine = SyncEngine(eng.db)
-        sync_result = sync_engine.sync(source, source_config)
-
-        # Get updated freshness
-        freshness = eng.get_freshness(source)
+        with DinobaseDB() as db:
+            eng = QueryEngine(db)
+            sync_result = SyncEngine(db).sync(source, source_config)
+            freshness = eng.get_freshness(source)
 
         return json.dumps({
             "status": sync_result.status,

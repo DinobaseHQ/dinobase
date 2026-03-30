@@ -444,4 +444,10 @@ class DinobaseDB:
         if self._conn is not None:
             self.save_cloud_metadata()
             self._conn.close()
+
+    def __enter__(self) -> "DinobaseDB":
+        return self
+
+    def __exit__(self, *_) -> None:
+        self.close()
             self._conn = None

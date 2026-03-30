@@ -18,6 +18,7 @@ _AGENT_COMMANDS = frozenset({
 
 def _get_cloud_client():
     """Return an authenticated CloudClient if logged in, else None."""
+    import os
     from dinobase.config import is_cloud_logged_in, load_cloud_credentials, get_cloud_api_url
 
     if not is_cloud_logged_in():
@@ -27,9 +28,12 @@ def _get_cloud_client():
     if not creds:
         return None
 
+    # DINOBASE_CLOUD_URL env var overrides stored api_url for local dev
+    api_url = os.environ.get("DINOBASE_CLOUD_URL") or creds.get("api_url", get_cloud_api_url())
+
     from dinobase.cloud_client import CloudClient
     return CloudClient(
-        api_url=creds.get("api_url", get_cloud_api_url()),
+        api_url=api_url,
         access_token=creds["access_token"],
     )
 

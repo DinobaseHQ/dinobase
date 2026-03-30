@@ -9,9 +9,6 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 
-DEFAULT_API_URL = "https://api.dinobase.ai"
-
-
 class CloudClient:
     """Thin client for the Dinobase Cloud API."""
 
