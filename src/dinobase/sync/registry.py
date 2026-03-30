@@ -669,31 +669,32 @@ _register(SourceEntry(
 # ===================================================================
 
 _db_credential = CredentialParam(
-    "credentials", "--connection-string", "DATABASE_URL", "Database connection string"
+    "credentials", "--connection-string", "DATABASE_URL", "Connection string"
 )
 
-for _name, _desc, _pip in [
-    ("postgres", "PostgreSQL database", None),
-    ("mysql", "MySQL database", None),
-    ("mariadb", "MariaDB (MySQL-compatible)", None),
-    ("mssql", "Microsoft SQL Server", "pyodbc"),
-    ("oracle", "Oracle Database", "cx_Oracle"),
-    ("sqlite", "SQLite database", None),
-    ("snowflake", "Snowflake data warehouse", "snowflake-sqlalchemy"),
-    ("bigquery", "Google BigQuery", "sqlalchemy-bigquery"),
-    ("redshift", "Amazon Redshift", "sqlalchemy-redshift"),
-    ("clickhouse", "ClickHouse", "clickhouse-sqlalchemy"),
-    ("cockroachdb", "CockroachDB (Postgres-compatible)", None),
-    ("databricks", "Databricks SQL warehouse", "databricks-sql-connector"),
-    ("trino", "Trino (distributed SQL)", "trino"),
-    ("presto", "PrestoDB", "pyhive"),
-    ("duckdb_source", "DuckDB database file", None),
+for _name, _desc, _pip, _help in [
+    ("postgres",    "PostgreSQL database",             None,                     "postgresql://user:password@host:5432/dbname"),
+    ("mysql",       "MySQL database",                  None,                     "mysql+pymysql://user:password@host:3306/dbname"),
+    ("mariadb",     "MariaDB (MySQL-compatible)",      None,                     "mysql+pymysql://user:password@host:3306/dbname"),
+    ("mssql",       "Microsoft SQL Server",            "pyodbc",                 "mssql+pyodbc://user:password@host:1433/dbname?driver=ODBC+Driver+17+for+SQL+Server"),
+    ("oracle",      "Oracle Database",                 "oracledb",               "oracle+oracledb://user:password@host:1521/dbname"),
+    ("sqlite",      "SQLite database",                 None,                     "/path/to/database.db"),
+    ("snowflake",   "Snowflake data warehouse",        "snowflake-sqlalchemy",   "snowflake://user:password@account/database/schema?warehouse=WAREHOUSE"),
+    ("bigquery",    "Google BigQuery",                 "sqlalchemy-bigquery",    "bigquery://project/dataset"),
+    ("redshift",    "Amazon Redshift",                 "sqlalchemy-redshift",    "postgresql://user:password@cluster.region.redshift.amazonaws.com:5439/dbname"),
+    ("clickhouse",  "ClickHouse",                      "clickhouse-sqlalchemy",  "clickhouse://user:password@host:8123/dbname — port 8123 is HTTP (default). Port 9000 is the native TCP port; use clickhouse+native://host:9000/dbname for that."),
+    ("cockroachdb", "CockroachDB (Postgres-compatible)", None,                   "cockroachdb://user:password@host:26257/dbname"),
+    ("databricks",  "Databricks SQL warehouse",        "databricks-sql-connector", "databricks+connector://token:ACCESS_TOKEN@HOST/PATH?http_path=/sql/1.0/warehouses/ID"),
+    ("trino",       "Trino (distributed SQL)",         "trino",                  "trino://user@host:8080/catalog/schema"),
+    ("presto",      "PrestoDB",                        "pyhive",                 "presto://user@host:8080/catalog/schema"),
+    ("duckdb_source", "DuckDB database file",          None,                     "/path/to/database.duckdb"),
 ]:
     _register(SourceEntry(
         name=_name,
         import_path="dlt.sources.sql_database.sql_database",
         description=_desc,
         pip_extra=_pip,
+        credential_help=_help,
         credentials=[_db_credential] if _name != "sqlite" else [
             CredentialParam("credentials", "--path", None, "Path to SQLite file", secret=False),
         ],

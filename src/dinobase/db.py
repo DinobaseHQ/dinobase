@@ -450,4 +450,3 @@ class DinobaseDB:
 
     def __exit__(self, *_) -> None:
         self.close()
-            self._conn = None
