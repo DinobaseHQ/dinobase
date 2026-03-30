@@ -52,14 +52,32 @@ def get_source(
         raise ValueError(f"Unknown source type: {source_type}. Available: {available}")
 
     # Check for missing pip dependencies
+    # Some pip package names differ from their importable module names.
+    _PIP_TO_MODULE: dict[str, str] = {
+        "snowflake-sqlalchemy": "snowflake.sqlalchemy",
+        "databricks-sql-connector": "databricks.sql",
+        "google-api-python-client": "googleapiclient",
+        "google-analytics-data": "google.analytics.data",
+        "google-ads": "google.ads.googleads",
+        "facebook_business": "facebook_business",
+        "confluent_kafka": "confluent_kafka",
+        "oracledb": "oracledb",
+    }
     if entry.pip_extra:
+        module_name = _PIP_TO_MODULE.get(
+            entry.pip_extra, entry.pip_extra.replace("-", "_")
+        )
         try:
-            importlib.import_module(entry.pip_extra.replace("-", "_"))
-        except ImportError:
-            raise ImportError(
-                f"Source '{source_type}' requires an extra package. "
-                f"Install it with: pip install {entry.pip_extra}"
-            )
+            importlib.import_module(module_name)
+        except ImportError as _e:
+            # Only surface the friendly error when the package is genuinely absent.
+            # Some installed packages (e.g. sqlalchemy-redshift) have broken
+            # internal imports that would cause a false "not installed" message.
+            if "No module named" in str(_e):
+                raise ImportError(
+                    f"Source '{source_type}' requires an extra package. "
+                    f"Install it with: pip install {entry.pip_extra}"
+                )
 
     # Import the source function
     module_path, func_name = entry.import_path.rsplit(".", 1)
@@ -74,6 +92,54 @@ def get_source(
 
     # Map credentials to the source function's parameter names
     kwargs = dict(entry.extra_params)
+    if entry.import_path == "dlt.sources.sql_database.sql_database":
+        # Build a SQLAlchemy Engine directly and pass it to sql_database.
+        # This bypasses dlt's ConnectionStringCredentials, which only accepts
+        # a narrow set of standard drivers and rejects e.g. clickhouse://.
+        conn_str = credentials.get("credentials", "").strip()
+        # postgres:// was dropped in SQLAlchemy 2.0
+        conn_str = conn_str.replace("postgres://", "postgresql://", 1)
+        # clickhouse:// / clickhouse+http:// use HTTP (port 8123).
+        # Port 9000 is the native TCP port — auto-correct to avoid a confusing
+        # "Port 9000 is for clickhouse-client" error.
+        if conn_str.startswith(("clickhouse://", "clickhouse+http://")):
+            from urllib.parse import urlparse, urlunparse
+            _parsed = urlparse(conn_str)
+            if _parsed.port == 9000:
+                _netloc = _parsed.netloc.replace(":9000", ":8123", 1)
+                conn_str = urlunparse(_parsed._replace(netloc=_netloc))
+                print(
+                    "  Auto-corrected ClickHouse port 9000→8123 (HTTP). "
+                    "Use clickhouse+native:// to keep port 9000.",
+                    file=sys.stderr,
+                )
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import make_url
+
+        _EXAMPLES = {
+            "postgres": "postgresql://user:password@host:5432/dbname",
+            "mysql": "mysql+pymysql://user:password@host:3306/dbname",
+            "mariadb": "mysql+pymysql://user:password@host:3306/dbname",
+            "clickhouse": "clickhouse://user:password@host:8123/dbname",
+            "snowflake": "snowflake://user:password@account/database/schema?warehouse=WH",
+            "bigquery": "bigquery://project/dataset",
+            "redshift": "postgresql://user:password@cluster.region.redshift.amazonaws.com:5439/dbname",
+            "mssql": "mssql+pyodbc://user:password@host:1433/dbname?driver=ODBC+Driver+17+for+SQL+Server",
+            "oracle": "oracle+oracledb://user:password@host:1521/dbname",
+            "trino": "trino://user@host:8080/catalog/schema",
+            "presto": "presto://user@host:8080/catalog/schema",
+            "databricks": "databricks+connector://token:ACCESS_TOKEN@HOST/PATH?http_path=/sql/1.0/warehouses/ID",
+        }
+        try:
+            make_url(conn_str)  # validate before passing to create_engine
+        except Exception:
+            example = _EXAMPLES.get(source_type, "driver://user:password@host:port/database")
+            raise ValueError(
+                f"Invalid connection string for '{source_type}'. "
+                f"Expected format:\n  {example}"
+            )
+        kwargs["credentials"] = create_engine(conn_str)
+        return source_func(**kwargs)
     for param in entry.credentials:
         value = credentials.get(param.name) or credentials.get(param.cli_flag.lstrip("-").replace("-", "_"))
         if not value:
