@@ -9,6 +9,7 @@ from typing import Annotated
 from pydantic import Field
 from mcp.server.fastmcp import FastMCP
 
+from dinobase.annotations import AnnotationInput, RelationshipInput, apply_annotation, apply_relationship
 from dinobase.db import DinobaseDB
 from dinobase.query.engine import QueryEngine
 
@@ -65,9 +66,23 @@ def _build_instructions(engine: QueryEngine) -> str:
         lines.append("4. Use `refresh` to re-sync a stale source before querying")
     lines.append("")
     lines.append(
-        "Cross-source joins work via shared columns. Use `describe` to find join keys — "
-        "columns annotated as join keys or with matching names across sources (e.g., email)."
+        "Call `describe` on any table to see its columns, `related_tables` (join paths), "
+        "and any annotations (description, metadata tags like pii/deprecated/owner)."
     )
+    lines.append(
+        "Use `annotate` to document tables and columns: descriptions, pii flags, "
+        "deprecated status, owners. Use `annotate_relationships` to map join paths. "
+        "Both are stored permanently and returned in every future describe() call."
+    )
+
+    # Remind agent to build the graph for sources that don't have one yet
+    no_graph = engine.db.get_sources_without_relationships()
+    if no_graph:
+        lines.append("")
+        lines.append(
+            f"Semantic layer not built for: {', '.join(no_graph)}. "
+            "Explore with describe(), then call annotate() and annotate_relationships() to document."
+        )
     if has_stale:
         lines.append("")
         lines.append(
@@ -130,6 +145,39 @@ def _create_server() -> FastMCP:
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
+    def annotate(
+        items: Annotated[list[AnnotationInput | RelationshipInput], Field(description="One or more annotation or relationship items to store")],
+    ) -> str:
+        """Annotate tables, columns, or store relationships. Accepts a mixed list of annotations and relationships in a single call.
+
+        Annotation item (use for table/column descriptions and metadata tags):
+          target      — "schema.table" or "schema.table.column"
+          key         — "description", "note" (column-only), "deprecated", "pii", "sensitive", "owner", or any custom key
+          value       — tag value; use "true"/"false" for boolean flags
+
+        Relationship item (use to map join paths between tables):
+          from_table  — "schema.table" (table holding the foreign key)
+          from_column — column name
+          to_table    — "schema.table" (referenced table)
+          to_column   — column name
+          cardinality — "one_to_one" | "one_to_many" | "many_to_many" (default: "one_to_many")
+          description — human-readable explanation
+
+        Examples:
+          annotate([{"target": "github.issues", "key": "description", "value": "All GitHub issues and PRs"}])
+          annotate([{"target": "github.issues.body", "key": "pii", "value": "false"}])
+          annotate([{"from_table": "stripe.subscriptions", "from_column": "customer_id", "to_table": "stripe.customers", "to_column": "id", "cardinality": "one_to_many", "description": "Each subscription belongs to one customer"}])
+        """
+        eng = _get_engine()
+        results = []
+        for item in items:
+            if isinstance(item, AnnotationInput):
+                results.append(apply_annotation(eng.db, item))
+            else:
+                results.append(apply_relationship(eng.db, item))
+        return json.dumps(results if len(results) > 1 else results[0] if results else {}, indent=2)
+
+    @server.tool()
     def confirm(
         mutation_id: Annotated[str, Field(description="The mutation_id from a pending mutation to confirm and execute")],
     ) -> str:
@@ -184,13 +232,22 @@ def _create_server() -> FastMCP:
             sync_result = SyncEngine(db).sync(source, source_config)
             freshness = eng.get_freshness(source)
 
-        return json.dumps({
+        result: dict = {
             "status": sync_result.status,
             "tables_synced": sync_result.tables_synced,
             "rows_synced": sync_result.rows_synced,
             "error": sync_result.error,
             "freshness": freshness,
-        }, indent=2, default=str)
+        }
+
+        if sync_result.status == "success" and not eng.db.has_relationships(source):
+            result["reminder"] = (
+                f"No relationships mapped for '{source}' yet. "
+                "Call describe() on its tables, identify join paths, "
+                "then call annotate_relationships() to build the semantic graph."
+            )
+
+        return json.dumps(result, indent=2, default=str)
 
     return server
 
