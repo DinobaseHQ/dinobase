@@ -1,0 +1,100 @@
+name: github
+description: "GitHub (repositories, issues, pull requests)"
+credential_help: "GitHub → Settings → Developer settings → Personal access tokens → Generate new token (classic). Scopes needed: repo (for private repos) or public_repo (for public only)."
+
+credentials:
+  - name: access_token
+    flag: "--token"
+    env: GITHUB_TOKEN
+    prompt: "GitHub personal access token"
+    secret: true
+
+client:
+  base_url: https://api.github.com/
+  auth:
+    type: bearer
+    token: "{access_token}"
+  headers:
+    Accept: application/vnd.github+json
+    X-GitHub-Api-Version: "2022-11-28"
+  paginator:
+    type: header_link
+
+resource_defaults:
+  primary_key: id
+  write_disposition: merge
+  endpoint:
+    params:
+      per_page: 100
+
+resources:
+  # All repositories the authenticated user has access to (owned, collaborator, org member)
+  - name: repos
+    endpoint:
+      path: user/repos
+      params:
+        sort: updated
+        direction: desc
+        affiliation: owner,collaborator,organization_member
+
+  # All issues across all accessible repos (excludes PRs by default — filter with is:issue)
+  # Uses `since` for incremental: only fetches issues updated after last sync
+  - name: issues
+    endpoint:
+      path: issues
+      params:
+        filter: all
+        state: all
+        sort: updated
+        direction: desc
+        since: "{incremental.start_value}"
+    incremental:
+      cursor_path: updated_at
+      initial_value: "2020-01-01T00:00:00Z"
+
+  # Pull requests per repository — fetched for each repo returned above.
+  # Marked selected: false because it multiplies API calls by number of repos.
+  # Enable with: dinobase sync github --resources pull_requests
+  - name: pull_requests
+    endpoint:
+      path: repos/{full_name}/pulls
+      params:
+        state: all
+        sort: updated
+        direction: desc
+    parent:
+      resource: repos
+      field: full_name
+      param: full_name
+    selected: false
+
+write_endpoints:
+  - name: create_issue
+    description: "Create a new issue in a repository"
+    method: POST
+    path: repos/{owner}/{repo}/issues
+
+  - name: update_issue
+    description: "Update an issue (title, body, state, assignees, labels, milestone)"
+    method: PATCH
+    path: repos/{owner}/{repo}/issues/{issue_number}
+
+  - name: add_issue_comment
+    description: "Add a comment to an issue or pull request"
+    method: POST
+    path: repos/{owner}/{repo}/issues/{issue_number}/comments
+
+  - name: create_pull_request
+    description: "Open a new pull request"
+    method: POST
+    path: repos/{owner}/{repo}/pulls
+
+  - name: update_pull_request
+    description: "Update a pull request (title, body, state, base branch)"
+    method: PATCH
+    path: repos/{owner}/{repo}/pulls/{pull_number}
+
+  - name: merge_pull_request
+    description: "Merge a pull request"
+    method: PUT
+    path: repos/{owner}/{repo}/pulls/{pull_number}/merge

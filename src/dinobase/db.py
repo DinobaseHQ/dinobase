@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS {META_SCHEMA}.tables (
     table_name VARCHAR NOT NULL,
     row_count BIGINT DEFAULT 0,
     last_sync TIMESTAMP,
+    description VARCHAR,
     PRIMARY KEY (source_name, schema_name, table_name)
 );
 
@@ -77,10 +78,34 @@ CREATE TABLE IF NOT EXISTS {META_SCHEMA}.mutations (
     result JSON,
     error_message VARCHAR
 );
+
+CREATE TABLE IF NOT EXISTS {META_SCHEMA}.relationships (
+    from_schema      VARCHAR NOT NULL,
+    from_table       VARCHAR NOT NULL,
+    from_column      VARCHAR NOT NULL,
+    to_schema        VARCHAR NOT NULL,
+    to_table         VARCHAR NOT NULL,
+    to_column        VARCHAR NOT NULL,
+    cardinality      VARCHAR NOT NULL DEFAULT 'one_to_many',
+    confidence       FLOAT   NOT NULL DEFAULT 1.0,
+    description      VARCHAR,
+    detected_at      TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (from_schema, from_table, from_column,
+                 to_schema,   to_table,   to_column)
+);
+
+CREATE TABLE IF NOT EXISTS {META_SCHEMA}.metadata (
+    schema_name  VARCHAR NOT NULL,
+    table_name   VARCHAR NOT NULL,
+    column_name  VARCHAR NOT NULL DEFAULT '',
+    key          VARCHAR NOT NULL,
+    value        VARCHAR,
+    PRIMARY KEY (schema_name, table_name, column_name, key)
+);
 """
 
 
-_META_TABLES = ["sync_log", "tables", "columns", "live_rows", "mutations"]
+_META_TABLES = ["sync_log", "tables", "columns", "live_rows", "mutations", "relationships", "metadata"]
 
 
 class DinobaseDB:
@@ -247,6 +272,10 @@ class DinobaseDB:
             stmt = statement.strip()
             if stmt:
                 self._conn.execute(stmt)
+        # Migrations for existing DBs
+        self._conn.execute(
+            f"ALTER TABLE {META_SCHEMA}.tables ADD COLUMN IF NOT EXISTS description VARCHAR"
+        )
 
     def execute(self, sql: str, params: list | None = None) -> duckdb.DuckDBPyRelation:
         if params:
@@ -389,6 +418,128 @@ class DinobaseDB:
             for r in rows
             if r["description"] or r["note"]
         }
+
+    def upsert_relationship(
+        self,
+        from_schema: str,
+        from_table: str,
+        from_column: str,
+        to_schema: str,
+        to_table: str,
+        to_column: str,
+        cardinality: str = "one_to_many",
+        confidence: float = 1.0,
+        description: str = "",
+    ) -> None:
+        """Store or update a relationship edge between two tables."""
+        self.conn.execute(
+            f"INSERT INTO {META_SCHEMA}.relationships "
+            f"(from_schema, from_table, from_column, to_schema, to_table, to_column, "
+            f"cardinality, confidence, description) "
+            f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            f"ON CONFLICT (from_schema, from_table, from_column, to_schema, to_table, to_column) "
+            f"DO UPDATE SET cardinality = excluded.cardinality, confidence = excluded.confidence, "
+            f"description = excluded.description",
+            [from_schema, from_table, from_column, to_schema, to_table, to_column,
+             cardinality, confidence, description],
+        )
+        if self.is_cloud:
+            self._save_meta_table("relationships")
+
+    def get_relationships(self, schema: str, table: str) -> list[dict[str, Any]]:
+        """Get all relationships where this table appears on either side, ordered by confidence."""
+        result = self.conn.execute(
+            f"SELECT from_schema, from_table, from_column, to_schema, to_table, to_column, "
+            f"cardinality, confidence, description "
+            f"FROM {META_SCHEMA}.relationships "
+            f"WHERE (from_schema = ? AND from_table = ?) OR (to_schema = ? AND to_table = ?) "
+            f"ORDER BY confidence DESC",
+            [schema, table, schema, table],
+        )
+        columns = [desc[0] for desc in result.description]
+        return [dict(zip(columns, row)) for row in result.fetchall()]
+
+    def purge_relationships(self, schema: str) -> int:
+        """Delete edges where either endpoint table no longer exists in the schema."""
+        result = self.conn.execute(
+            f"DELETE FROM {META_SCHEMA}.relationships "
+            f"WHERE (from_schema = ? AND from_table NOT IN ("
+            f"  SELECT table_name FROM information_schema.tables WHERE table_schema = ?)) "
+            f"OR (to_schema = ? AND to_table NOT IN ("
+            f"  SELECT table_name FROM information_schema.tables WHERE table_schema = ?))",
+            [schema, schema, schema, schema],
+        )
+        count = result.fetchone()[0] if result.description else 0
+        if self.is_cloud and count > 0:
+            self._save_meta_table("relationships")
+        return count
+
+    def has_relationships(self, schema: str) -> bool:
+        """Return True if this schema has any relationship edges."""
+        row = self.conn.execute(
+            f"SELECT COUNT(*) FROM {META_SCHEMA}.relationships "
+            f"WHERE from_schema = ? OR to_schema = ?",
+            [schema, schema],
+        ).fetchone()
+        return (row[0] if row else 0) > 0
+
+    def get_sources_without_relationships(self) -> list[str]:
+        """Return schema names that have tables but no relationship edges."""
+        all_sources = self.query(
+            f"SELECT DISTINCT schema_name FROM {META_SCHEMA}.tables "
+            f"WHERE schema_name != '{META_SCHEMA}'"
+        )
+        result = []
+        for row in all_sources:
+            schema = row["schema_name"]
+            if not self.has_relationships(schema):
+                result.append(schema)
+        return result
+
+    def set_table_description(self, schema: str, table: str, description: str) -> None:
+        """Set the human-readable description for a table."""
+        self.conn.execute(
+            f"UPDATE {META_SCHEMA}.tables SET description = ? "
+            f"WHERE schema_name = ? AND table_name = ?",
+            [description, schema, table],
+        )
+        if self.is_cloud:
+            self._save_meta_table("tables")
+
+    def get_table_description(self, schema: str, table: str) -> str | None:
+        """Return the description for a table, or None if not set."""
+        row = self.conn.execute(
+            f"SELECT description FROM {META_SCHEMA}.tables "
+            f"WHERE schema_name = ? AND table_name = ?",
+            [schema, table],
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_metadata(
+        self, schema: str, table: str, key: str, value: str, column: str = ""
+    ) -> None:
+        """Upsert a key-value metadata tag for a table (column='') or column."""
+        self.conn.execute(
+            f"INSERT INTO {META_SCHEMA}.metadata "
+            f"(schema_name, table_name, column_name, key, value) "
+            f"VALUES (?, ?, ?, ?, ?) "
+            f"ON CONFLICT (schema_name, table_name, column_name, key) "
+            f"DO UPDATE SET value = excluded.value",
+            [schema, table, column, key, value],
+        )
+        if self.is_cloud:
+            self._save_meta_table("metadata")
+
+    def get_metadata(
+        self, schema: str, table: str, column: str = ""
+    ) -> dict[str, str]:
+        """Return all KV metadata tags for a table or column as {key: value}."""
+        rows = self.conn.execute(
+            f"SELECT key, value FROM {META_SCHEMA}.metadata "
+            f"WHERE schema_name = ? AND table_name = ? AND column_name = ?",
+            [schema, table, column],
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
 
     def upsert_live_row(
         self,

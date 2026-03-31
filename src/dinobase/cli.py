@@ -8,6 +8,7 @@ import sys
 import click
 
 from dinobase import __version__
+from dinobase.annotations import AnnotateBatchInput, AnnotationInput, RelationshipInput, apply_annotation, apply_relationship
 
 
 _AGENT_COMMANDS = frozenset({
@@ -1137,6 +1138,91 @@ def cancel_mutation(mutation_id: str):
     result = engine.cancel(mutation_id)
     click.echo(json.dumps(result, indent=2, default=str))
     db.close()
+    if "error" in result:
+        sys.exit(1)
+
+
+
+@cli.command("annotate", context_settings={"ignore_unknown_options": True})
+@click.argument("args", nargs=-1)
+@click.option("--cardinality", default="one_to_many", type=click.Choice(["one_to_one", "one_to_many", "many_to_many"]), help="Relationship cardinality (4-arg mode)")
+@click.option("--description", default="", help="Relationship description (4-arg mode)")
+@click.option("--input-schema", is_flag=True, help="Print JSON input schema and exit")
+def annotate(args: tuple, cardinality: str, description: str, input_schema: bool):
+    """Annotate tables, columns, or relationships.
+
+    Human usage:
+
+      dinobase annotate github.issues description "All GitHub issues"
+      dinobase annotate github.issues.body pii true
+      dinobase annotate stripe.subscriptions customer_id stripe.customers id
+      dinobase annotate stripe.subscriptions customer_id stripe.customers id --cardinality one_to_many
+
+    Agent usage (JSON):
+
+      dinobase annotate '{"target": "github.issues", "key": "description", "value": "..."}'
+      dinobase annotate '{"from_table": "stripe.subscriptions", "from_column": "customer_id", "to_table": "stripe.customers", "to_column": "id"}'
+      dinobase annotate '[{"target": "..."}, {"from_table": "...", ...}]'
+      dinobase annotate --input-schema
+    """
+    if input_schema:
+        click.echo(json.dumps(AnnotateBatchInput.model_json_schema(), indent=2))
+        return
+
+    # JSON mode: single arg that parses as JSON object or array
+    if len(args) == 1:
+        try:
+            data = json.loads(args[0])
+        except (json.JSONDecodeError, ValueError):
+            data = None
+        if data is not None:
+            raw_items = data if isinstance(data, list) else [data]
+            _require_init()
+            from dinobase.db import DinobaseDB
+            db = DinobaseDB()
+            results = []
+            for raw in raw_items:
+                if "target" in raw:
+                    item = AnnotationInput.model_validate(raw)
+                    results.append(apply_annotation(db, item))
+                elif "from_table" in raw:
+                    item = RelationshipInput.model_validate(raw)
+                    results.append(apply_relationship(db, item))
+                else:
+                    results.append({"error": f"Cannot determine item type: {raw}"})
+            db.close()
+            click.echo(json.dumps(results if len(results) > 1 else results[0], indent=2))
+            if any("error" in r for r in results):
+                sys.exit(1)
+            return
+
+    # Human positional mode
+    _require_init()
+    from dinobase.db import DinobaseDB
+    db = DinobaseDB()
+
+    if len(args) == 3:
+        target, key, value = args
+        result = apply_annotation(db, AnnotationInput(target=target, key=key, value=value))
+    elif len(args) == 4:
+        from_table, from_column, to_table, to_column = args
+        for t in (from_table, to_table):
+            if len(t.split(".")) != 2:
+                click.echo(json.dumps({"error": f"Invalid table '{t}'. Use 'schema.table'"}))
+                db.close()
+                sys.exit(1)
+        result = apply_relationship(db, RelationshipInput(
+            from_table=from_table, from_column=from_column,
+            to_table=to_table, to_column=to_column,
+            cardinality=cardinality, description=description,
+        ))
+    else:
+        click.echo("Usage: annotate TARGET KEY VALUE  or  annotate FROM_TABLE FROM_COL TO_TABLE TO_COL")
+        db.close()
+        sys.exit(1)
+
+    db.close()
+    click.echo(json.dumps(result))
     if "error" in result:
         sys.exit(1)
 

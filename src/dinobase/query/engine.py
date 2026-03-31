@@ -143,20 +143,6 @@ class QueryEngine:
 
         row_count = self.db.get_row_count(schema, table)
 
-        # Get sample values
-        sample_rows = []
-        try:
-            _, raw_rows = self.db.query_raw(
-                f'SELECT * FROM "{schema}"."{table}" LIMIT 3'
-            )
-            col_names = [c["column_name"] for c in columns]
-            for row in raw_rows:
-                sample_rows.append(
-                    {col: _serialize(val) for col, val in zip(col_names, row)}
-                )
-        except Exception:
-            pass
-
         # Get annotations from _dinobase.columns
         annotations = self.db.get_column_annotations(schema, table)
 
@@ -175,6 +161,12 @@ class QueryEngine:
                 entry["note"] = ann["note"]
             col_info.append(entry)
 
+        # Per-column KV metadata
+        for entry in col_info:
+            col_meta = self.db.get_metadata(schema, table, entry["name"])
+            if col_meta:
+                entry["metadata"] = col_meta
+
         # Include source freshness
         freshness = self.get_freshness(schema)
         result: dict[str, Any] = {
@@ -182,12 +174,38 @@ class QueryEngine:
             "table": table,
             "row_count": row_count,
             "columns": col_info,
-            "sample_rows": sample_rows,
             "last_sync": freshness["last_sync"],
         }
+
+        # Table-level description and KV metadata
+        table_desc = self.db.get_table_description(schema, table)
+        if table_desc:
+            result["description"] = table_desc
+        table_meta = self.db.get_metadata(schema, table)
+        if table_meta:
+            result["metadata"] = table_meta
         if freshness["threshold"] is not None:
             result["age"] = freshness["age_human"]
             result["is_stale"] = freshness["is_stale"]
+
+        # Enrich with pre-built relationship graph
+        related = self.db.get_relationships(schema, table)
+        if related:
+            related_tables = []
+            for r in related:
+                if r["from_schema"] == schema and r["from_table"] == table:
+                    other = f"{r['to_schema']}.{r['to_table']}"
+                    join = f"ON {table}.{r['from_column']} = {r['to_table']}.{r['to_column']}"
+                else:
+                    other = f"{r['from_schema']}.{r['from_table']}"
+                    join = f"ON {r['from_table']}.{r['from_column']} = {table}.{r['to_column']}"
+                related_tables.append({
+                    "table": other,
+                    "join": join,
+                    "cardinality": r["cardinality"],
+                    "description": r["description"],
+                })
+            result["related_tables"] = related_tables
 
         return result
 
