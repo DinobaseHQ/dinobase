@@ -359,27 +359,7 @@ _register(SourceEntry(
 
 # --- Developer Tools ---
 
-_register(SourceEntry(
-    name="github",
-    import_path="sources.github.github_reactions",
-    description="GitHub (repos, issues, PRs, reactions, stargazers)",
-    credentials=[
-        CredentialParam("access_token", "--token", "GITHUB_TOKEN", "GitHub personal access token"),
-    ],
-    supports_oauth=True,
-    credential_help="GitHub > Settings > Developer settings > Personal access tokens > Generate",
-    live_fetch_config={
-        "client": {
-            "base_url": "https://api.github.com",
-            "auth": {"type": "bearer", "token": "{access_token}"},
-        },
-        "resources": [
-            {"name": "issues", "endpoint": {"path": "repos/{owner}/{repo}/issues"}},
-            {"name": "pull_requests", "endpoint": {"path": "repos/{owner}/{repo}/pulls"}},
-            {"name": "stargazers", "endpoint": {"path": "repos/{owner}/{repo}/stargazers"}},
-        ],
-    },
-))
+# github is defined via YAML connector: src/dinobase/sync/sources/configs/github.yaml
 
 _register(SourceEntry(
     name="jira",
