@@ -7,7 +7,7 @@ metadata: {"openclaw":{"emoji":"🦕","homepage":"https://dinobase.ai","requires
 
 # Dinobase
 
-Dinobase is an agent-native database. It syncs data from 100+ SaaS APIs, databases, and files into a SQL database (DuckDB). You query across all sources with standard SQL.
+Dinobase is an agent-first database. It syncs data from 100+ SaaS APIs, databases, and files into a SQL database (DuckDB). You query across all sources with standard SQL.
 
 ## When to use
 
