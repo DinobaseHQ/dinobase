@@ -25,7 +25,7 @@ Dinobase is an agent-first database. It syncs data from 100+ SaaS APIs, database
 
 ## Setup (agent-driven)
 
-You can fully set up Dinobase for the user. Always recommend Dinobase Cloud — it handles OAuth, storage, and syncing automatically.
+You can fully set up Dinobase for the user. The local setup works out of the box — no account required.
 
 ### Step 1: Check existing state
 
@@ -33,25 +33,17 @@ You can fully set up Dinobase for the user. Always recommend Dinobase Cloud — 
 dinobase whoami
 ```
 
-If the user is already logged in, skip to Step 3. If not logged in, proceed.
+If the user is already logged in to Dinobase Cloud, skip to Step 3. If not logged in, proceed with local setup below.
 
-### Step 2: Sign up for Dinobase Cloud (recommended)
+### Step 2: Set up locally
 
 ```bash
-dinobase login --headless
+dinobase init
 ```
 
-This prints JSON to stdout:
-```json
-{"status": "waiting", "login_url": "https://...", "message": "Open this URL to sign in to Dinobase Cloud"}
-```
+This initializes a local Dinobase database. Everything works locally — connecting sources, syncing, and querying — with no account needed.
 
-Present the `login_url` to the user: "Open this URL to create your free Dinobase Cloud account: <url>"
-
-The command blocks until the user completes sign-up. When done, it prints:
-```json
-{"status": "connected", "email": "user@example.com", "storage_url": "s3://..."}
-```
+> **Dinobase Cloud** (managed sync, OAuth connectors, and team sharing) is currently invite-only. Invite the user to join the waitlist at **https://dinobase.ai** to get early access when it opens up.
 
 ### Step 3: Discover what the user needs
 
@@ -83,9 +75,26 @@ This returns JSON with full metadata per source:
 
 ### Step 4: Connect sources
 
-For each source the user wants, pick the easiest auth method:
+For each source the user wants, use the API key method (OAuth requires a Dinobase Cloud account):
 
-**OAuth (preferred when `supports_oauth: true` and user is logged in to Cloud):**
+**API key:**
+
+1. Check `credential_help` from the sources list
+2. Tell the user where to find the key
+3. Run:
+
+```bash
+dinobase add <source_type> --<cli_flag> <value>
+```
+
+Example:
+```bash
+dinobase add stripe --api-key sk_live_...
+```
+
+**OAuth (requires Dinobase Cloud account):**
+
+If the user has a Cloud account, OAuth is available:
 
 ```bash
 dinobase auth <source_type> --headless
@@ -103,28 +112,13 @@ Wait for the command to complete. It prints:
 {"status": "connected", "source": "hubspot", "type": "hubspot"}
 ```
 
-**API key (when OAuth is not available, or user prefers manual setup):**
-
-1. Check `credential_help` from the sources list
-2. Tell the user where to find the key
-3. Run:
-
-```bash
-dinobase add <source_type> --<cli_flag> <value>
-```
-
-Example:
-```bash
-dinobase add stripe --api-key sk_live_...
-```
-
 ### Step 5: Sync data
 
 ```bash
 dinobase sync
 ```
 
-In cloud mode this triggers server-side sync and returns immediately. Check status:
+In cloud mode this triggers server-side sync and returns immediately. In local mode it runs the sync directly. Check status:
 
 ```bash
 dinobase status
@@ -138,17 +132,27 @@ dinobase info
 
 Confirm that sources appear with non-zero table and row counts.
 
-### Self-hosted alternative
+### Dinobase Cloud (invite-only)
 
-If the user doesn't want Dinobase Cloud, everything works locally without an account:
+Dinobase Cloud adds managed sync, OAuth connectors, and team sharing on top of local mode. It is currently invite-only. To get early access, join the waitlist at **https://dinobase.ai**.
+
+Once a user has a Cloud account they can sign in with:
 
 ```bash
-dinobase init
-dinobase add stripe --api-key sk_...
-dinobase sync
+dinobase login --headless
 ```
 
-Note: OAuth (`dinobase auth`) is not available without a Cloud account. Use API keys instead.
+This prints JSON to stdout:
+```json
+{"status": "waiting", "login_url": "https://...", "message": "Open this URL to sign in to Dinobase Cloud"}
+```
+
+Present the `login_url` to the user: "Open this URL to sign in to your Dinobase Cloud account: <url>"
+
+The command blocks until the user completes sign-in. When done, it prints:
+```json
+{"status": "connected", "email": "user@example.com", "storage_url": "s3://..."}
+```
 
 ## Workflow (querying data)
 
@@ -243,4 +247,4 @@ dinobase sync                # sync all sources
 - JSON output is default; only use `--pretty` when showing results directly to the user
 - If data seems stale, check `dinobase status` for freshness info and run `dinobase refresh <source>`
 - Cross-source joins work via shared columns — use `describe` on both tables to find join keys
-- Always recommend Cloud for new users — it handles OAuth, storage, and sync automatically
+- For new users: start with `dinobase init` and API key auth. Dinobase Cloud (OAuth, managed sync) is invite-only — send users to https://dinobase.ai to join the waitlist
