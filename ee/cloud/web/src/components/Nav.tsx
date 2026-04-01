@@ -21,13 +21,20 @@ export function Nav({
 
   return (
     <nav className="border-b border-zinc-800 px-6 py-3 flex items-center justify-between bg-zinc-950">
-      <Link href="/" className="text-xl font-bold flex items-center gap-2">
-        <span className="text-2xl">&#x1F995;</span>
-        <span className="text-white">Dinobase</span>
+      <Link href="/" className="flex items-center gap-2">
+        <img src="/logo.svg" alt="Dinobase" className="h-7 w-auto" />
         <span className="text-sm font-normal text-zinc-500">Cloud</span>
       </Link>
       {showAuth && (
         <div className="flex items-center gap-4">
+          <a
+            href="https://dinobase.ai/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-500 hover:text-zinc-300 text-sm"
+          >
+            Docs
+          </a>
           {email ? (
             <>
               <span className="text-sm text-zinc-400">{email}</span>

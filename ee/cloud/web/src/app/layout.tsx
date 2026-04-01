@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dinobase Cloud",
-  description: "The agent-native database",
+  description: "The agent-first database",
 };
 
 export default function RootLayout({

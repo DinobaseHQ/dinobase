@@ -18,6 +18,30 @@ dependencies = [
     "supabase>=2.0",
     "python-dotenv>=1.0",
     "dinobase",
+    "dlt[sql_database]>=0.5",
+    "psycopg2-binary>=2.9",
+    # All source drivers — available out of the box
+    # API sources
+    "simple-salesforce>=1.12",
+    "pyairtable>=2.3",
+    "google-api-python-client>=2.100",
+    "facebook-business>=20.0",
+    "google-analytics-data>=0.18",
+    "google-ads>=25.0",
+    "asana>=5.0",
+    "pymongo>=4.0",
+    "confluent-kafka>=2.3",
+    # Database drivers
+    "clickhouse-sqlalchemy>=0.3",
+    "snowflake-sqlalchemy>=1.5",
+    "sqlalchemy-bigquery>=1.9",
+    "sqlalchemy-redshift>=0.8",
+    "databricks-sql-connector>=3.0",
+    "trino>=0.321",
+    "pyhive>=0.7",
+    "pyodbc>=4.0",
+    "pymysql>=1.1",
+    "oracledb>=2.0",
 ]
 
 [project.optional-dependencies]

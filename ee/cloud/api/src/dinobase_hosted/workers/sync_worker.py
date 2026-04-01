@@ -10,7 +10,24 @@ import sys
 from typing import Any
 
 from dinobase_hosted.db import get_profile, update_sync_job
+from dinobase_hosted.storage import ensure_user_storage
 from dinobase_hosted.encryption import decrypt_credentials
+
+
+def _classify_error(error: str, source_name: str) -> str:
+    """Return a user-friendly error message based on the raw error string."""
+    e = error.lower()
+    if any(x in e for x in ("401", "403", "unauthorized", "forbidden", "invalid api key", "invalid token", "authentication failed")):
+        return "Credentials invalid or expired. Click 'Edit credentials' to update."
+    if any(x in e for x in ("429", "rate limit", "too many requests", "quota exceeded")):
+        return f"Rate limited by {source_name}. Try again in a few minutes."
+    if any(x in e for x in ("connection refused", "connection error", "cannot connect", "failed to connect", "no route to host", "network unreachable")):
+        return f"Could not connect to {source_name}. Check your credentials and network."
+    if any(x in e for x in ("timeout", "timed out", "read timeout", "connect timeout")):
+        return f"Connection to {source_name} timed out. The service may be temporarily unavailable."
+    if "ssl" in e or "certificate" in e:
+        return f"SSL error connecting to {source_name}. Check your network."
+    return error
 
 
 def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
@@ -29,16 +46,23 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
         # Get user's storage URL
         profile = get_profile(user_id)
         if not profile:
-            update_sync_job(job_id, "error", error_message="No user profile found")
-            return
+            storage_url = ensure_user_storage(user_id)
+        else:
+            storage_url = profile["storage_url"]
 
-        storage_url = profile["storage_url"]
+        # In local dev, use a per-user local DuckDB file instead of S3.
+        # Set DINOBASE_LOCAL_STORAGE_ROOT=/some/path in .env to skip S3.
+        local_root = os.environ.get("DINOBASE_LOCAL_STORAGE_ROOT")
+        if local_root:
+            user_dir = os.path.join(local_root.rstrip("/"), user_id)
+            os.makedirs(user_dir, exist_ok=True)
+            os.environ["DINOBASE_DIR"] = user_dir
+            os.environ.pop("DINOBASE_STORAGE_URL", None)
+        else:
+            os.environ["DINOBASE_STORAGE_URL"] = storage_url
 
         # Decrypt credentials
         credentials = decrypt_credentials(source["credentials_encrypted"])
-
-        # Configure environment for the sync engine
-        os.environ["DINOBASE_STORAGE_URL"] = storage_url
 
         # Build source config matching what SyncEngine expects
         source_config: dict[str, Any] = {
@@ -61,14 +85,19 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
                 tables_synced=result.tables_synced,
                 rows_synced=result.rows_synced,
             )
+            from dinobase.semantic_agent import spawn_semantic_agent
+            spawn_semantic_agent(source_name)
         else:
+            raw_error = result.error or "Unknown error"
+            print(f"Sync job {job_id} error: {raw_error}", file=sys.stderr)
             update_sync_job(
                 job_id, "error",
-                error_message=result.error or "Unknown error",
+                error_message=_classify_error(raw_error, source_name),
             )
 
         db.close()
 
     except Exception as e:
-        print(f"Sync job {job_id} failed: {e}", file=sys.stderr)
-        update_sync_job(job_id, "error", error_message=str(e))
+        raw_error = str(e)
+        print(f"Sync job {job_id} failed: {raw_error}", file=sys.stderr)
+        update_sync_job(job_id, "error", error_message=_classify_error(raw_error, source_name))

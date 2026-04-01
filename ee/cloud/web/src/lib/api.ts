@@ -5,10 +5,22 @@ export interface Source {
   type: string;
   auth_method: string;
   sync_interval: string;
+  updated_at: string | null;
   last_sync: string | null;
   last_sync_status: string | null;
+  last_sync_error: string | null;
   tables_synced: number;
   rows_synced: number;
+}
+
+export function relativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 export interface OAuthProvider {
@@ -25,6 +37,25 @@ export interface SyncStatus {
   tables_synced: number;
   rows_synced: number;
   error: string | null;
+}
+
+export interface CredentialParam {
+  name: string;
+  cli_flag: string;
+  env_var: string | null;
+  prompt: string | null;
+  secret: boolean;
+}
+
+export interface RegistrySource {
+  name: string;
+  description: string;
+  category: "api" | "database" | "file_storage";
+  supports_oauth: boolean;
+  oauth_configured: boolean;
+  credential_help: string | null;
+  credentials: CredentialParam[];
+  pip_extra: string | null;
 }
 
 export interface UserInfo {
@@ -76,6 +107,12 @@ export const api = {
       method: "DELETE",
     }),
 
+  renameSource: (token: string, oldName: string, newName: string) =>
+    apiFetch<{ name: string }>(`/api/v1/sources/${oldName}/rename`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ new_name: newName }),
+    }),
+
   startOAuth: (token: string, sourceName: string, redirectUri: string) =>
     apiFetch<{ auth_url: string; state: string }>(
       `/api/v1/sources/${sourceName}/auth?redirect_uri=${encodeURIComponent(redirectUri)}`,
@@ -109,6 +146,15 @@ export const api = {
   syncStatus: (token: string) =>
     apiFetch<SyncStatus[]>("/api/v1/sync/status", token),
 
+  getJob: (token: string, jobId: string) =>
+    apiFetch<{ job_id: string; source: string; status: string; error: string | null }>(
+      `/api/v1/sync/jobs/${jobId}`,
+      token
+    ),
+
   oauthProviders: (token: string) =>
     apiFetch<OAuthProvider[]>("/oauth/providers", token),
+
+  sourceRegistry: (token: string) =>
+    apiFetch<{ sources: RegistrySource[] }>("/api/v1/sources/registry", token),
 };

@@ -1,0 +1,10 @@
+procs:
+  api:
+    cmd: ["uv", "run", "dinobase-hosted"]
+    cwd: "api"
+    env:
+      DINOBASE_ENV: development
+
+  web:
+    cmd: ["npm", "run", "dev"]
+    cwd: "web"

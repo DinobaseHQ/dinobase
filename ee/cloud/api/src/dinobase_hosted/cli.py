@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 
@@ -17,13 +18,25 @@ def main() -> None:
 
     host = get_host()
     port = get_port()
+    dev = os.environ.get("DINOBASE_ENV", "production") == "development"
 
     print(f"Starting Dinobase Cloud API on {host}:{port}", file=sys.stderr)
+
+    reload_dirs = None
+    if dev:
+        import dinobase
+        from pathlib import Path
+        dinobase_src = str(Path(dinobase.__file__).parent.parent)
+        hosted_src = str(Path(__file__).parent.parent)
+        reload_dirs = [dinobase_src, hosted_src]
+
     uvicorn.run(
         "dinobase_hosted.app:app",
         host=host,
         port=port,
         log_level="info",
+        reload=dev,
+        reload_dirs=reload_dirs,
     )
 
 

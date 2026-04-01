@@ -1,0 +1,36 @@
+---
+title: Introduction
+description: The agent-first database. Connect your business data. Let AI agents query across all of it.
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Dinobase is an agent-first database that connects 100+ business data sources and makes them queryable via SQL — for both humans and AI agents.
+
+Ask an AI agent: *"Which customers that churned last quarter had declining usage AND open support tickets?"*
+
+Without Dinobase, it can't answer — agents calling per-source tools have no way to `JOIN` across APIs, no semantic context to interpret field values, and return paginated JSON that fills context windows. With Dinobase, the agent writes one SQL query and gets it right 91% of the time, 3x faster, 16x cheaper per correct answer.
+
+## Why Dinobase
+
+<CardGrid>
+  <Card title="Connect in minutes" icon="plug">
+    Add Stripe, HubSpot, Postgres, or parquet files with one command. 100+ sources supported.
+  </Card>
+  <Card title="Cross-source queries" icon="magnifier">
+    JOIN Stripe customers with HubSpot deals with product analytics. Questions that required a data team now have instant answers.
+  </Card>
+  <Card title="Semantic layer" icon="information">
+    After every sync, a Claude agent automatically annotates your data: table descriptions, column docs, PII flags, and relationship graphs. Agents know what every field means before writing a query.
+  </Card>
+  <Card title="Accurate answers" icon="approve-check">
+    Semantic context + complete data = 91% query accuracy vs 35% for bare MCP tools, across 11 LLMs.
+  </Card>
+</CardGrid>
+
+## Next steps
+
+- [Getting Started](/docs/getting-started/) — install, connect your first source, run your first query
+- [Semantic Layer](/docs/guides/annotations/) — auto-annotation, relationship graphs, PII detection
+- [Connecting Sources](/docs/guides/connecting-sources/) — all 100+ supported source types
+- [MCP Integration](/docs/integrations/mcp/) — use Dinobase with Claude, Cursor, and other agents

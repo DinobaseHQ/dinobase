@@ -48,6 +48,10 @@ class AddSourceRequest(BaseModel):
     sync_interval: str = "1h"
 
 
+class RenameSourceRequest(BaseModel):
+    new_name: str
+
+
 class SourceOAuthCallbackRequest(BaseModel):
     code: str
     redirect_uri: str

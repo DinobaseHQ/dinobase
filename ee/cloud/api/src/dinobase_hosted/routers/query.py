@@ -19,18 +19,25 @@ router = APIRouter(tags=["query"])
 
 
 def _get_user_engine(user: User):
-    """Create a QueryEngine pointing at the user's cloud storage."""
-    profile = get_profile(user.id)
-    if not profile:
-        raise HTTPException(400, "No user profile found. Run `dinobase login` first.")
-
-    storage_url = profile["storage_url"]
-
-    # Set the storage URL so DinobaseDB picks up cloud mode
-    os.environ["DINOBASE_STORAGE_URL"] = storage_url
-
+    """Create a QueryEngine pointing at the user's storage (local dev or cloud)."""
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
+
+    local_root = os.environ.get("DINOBASE_LOCAL_STORAGE_ROOT")
+    if local_root:
+        # Local dev mode: data lives in a per-user subdirectory on disk
+        import os as _os
+        user_dir = _os.path.join(local_root.rstrip("/"), user.id)
+        _os.makedirs(user_dir, exist_ok=True)
+        os.environ["DINOBASE_DIR"] = user_dir
+        os.environ.pop("DINOBASE_STORAGE_URL", None)
+    else:
+        # Cloud mode: data lives in S3 (or equivalent)
+        profile = get_profile(user.id)
+        if not profile:
+            raise HTTPException(400, "No user profile found. Run `dinobase login` first.")
+        os.environ["DINOBASE_STORAGE_URL"] = profile["storage_url"]
+        os.environ.pop("DINOBASE_DIR", None)
 
     db = DinobaseDB()
     return QueryEngine(db), db

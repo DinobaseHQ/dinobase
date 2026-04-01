@@ -101,9 +101,27 @@ def upsert_user_source(
     return resp.data[0]
 
 
-def delete_user_source(user_id: str, source_name: str) -> bool:
-    """Delete a source for a user. Returns True if deleted."""
+def rename_user_source(user_id: str, old_name: str, new_name: str) -> bool:
+    """Rename a source, updating both user_sources and sync_jobs. Returns True if found."""
     db = get_db()
+    resp = (
+        db.table("user_sources")
+        .update({"source_name": new_name})
+        .eq("user_id", user_id)
+        .eq("source_name", old_name)
+        .execute()
+    )
+    if not resp.data:
+        return False
+    db.table("sync_jobs").update({"source_name": new_name}).eq("user_id", user_id).eq("source_name", old_name).execute()
+    return True
+
+
+def delete_user_source(user_id: str, source_name: str) -> bool:
+    """Delete a source and its sync history for a user. Returns True if deleted."""
+    db = get_db()
+    # Clear sync jobs first so re-adding with the same name starts fresh.
+    db.table("sync_jobs").delete().eq("user_id", user_id).eq("source_name", source_name).execute()
     resp = (
         db.table("user_sources")
         .delete()

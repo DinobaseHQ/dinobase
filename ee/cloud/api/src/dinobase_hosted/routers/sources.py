@@ -17,15 +17,41 @@ from dinobase_hosted.db import (
     list_user_sources,
     get_user_source,
     upsert_user_source,
+    rename_user_source,
     delete_user_source,
     get_latest_sync_jobs,
 )
 from dinobase_hosted.encryption import encrypt_credentials, decrypt_credentials
-from dinobase_hosted.models import AddSourceRequest, SourceOAuthCallbackRequest
+from dinobase_hosted.models import AddSourceRequest, RenameSourceRequest, SourceOAuthCallbackRequest
+from dinobase_hosted.oauth.config import get_provider_credentials
 from dinobase_hosted.oauth.providers import PROVIDERS
 
 
 router = APIRouter(tags=["sources"])
+
+
+@router.get("/registry")
+async def source_registry(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Return all available sources with their credential schemas, categorized."""
+    from dinobase.sync.registry import SOURCES
+
+    def _category(import_path: str) -> str:
+        if "sql_database" in import_path:
+            return "database"
+        if "filesystem" in import_path:
+            return "file_storage"
+        return "api"
+
+    sources = []
+    for entry in sorted(SOURCES.values(), key=lambda e: e.name):
+        data = entry.to_dict()
+        data["category"] = _category(entry.import_path)
+        data["oauth_configured"] = (
+            entry.name in PROVIDERS and get_provider_credentials(entry.name) is not None
+        )
+        sources.append(data)
+
+    return {"sources": sources}
 
 
 @router.get("/")
@@ -42,8 +68,10 @@ async def list_sources(user: User = Depends(get_current_user)) -> list[dict[str,
             "type": src["source_type"],
             "auth_method": src["auth_method"],
             "sync_interval": src.get("sync_interval", "1h"),
+            "updated_at": src.get("updated_at"),
             "last_sync": job["finished_at"] if job else None,
             "last_sync_status": job["status"] if job else None,
+            "last_sync_error": job["error_message"] if job else None,
             "tables_synced": job["tables_synced"] if job else 0,
             "rows_synced": job["rows_synced"] if job else 0,
         })
@@ -56,7 +84,17 @@ async def add_source(
     user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     """Add a source with API key credentials."""
-    encrypted = encrypt_credentials(body.credentials)
+    credentials = body.credentials
+
+    # On update, keep existing values for any blank fields so users don't
+    # have to re-enter credentials they haven't changed.
+    if any(v == "" for v in credentials.values()):
+        existing = get_user_source(user.id, body.name)
+        if existing:
+            existing_creds = decrypt_credentials(existing["credentials_encrypted"])
+            credentials = {**existing_creds, **{k: v for k, v in credentials.items() if v}}
+
+    encrypted = encrypt_credentials(credentials)
     upsert_user_source(
         user_id=user.id,
         source_name=body.name,
@@ -144,6 +182,24 @@ async def complete_oauth(
     )
 
     return {"name": source_name, "type": source_type, "status": "connected"}
+
+
+@router.patch("/{source_name}/rename")
+async def rename_source(
+    source_name: str,
+    body: RenameSourceRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Rename a source, preserving its credentials and sync history."""
+    new_name = body.new_name.strip()
+    if not new_name:
+        raise HTTPException(400, "new_name cannot be empty")
+    if new_name == source_name:
+        return {"name": source_name}
+    found = rename_user_source(user.id, source_name, new_name)
+    if not found:
+        raise HTTPException(404, f"Source '{source_name}' not found")
+    return {"name": new_name}
 
 
 @router.delete("/{source_name}")

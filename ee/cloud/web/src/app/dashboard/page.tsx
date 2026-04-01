@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
-import { api, type Source, type OAuthProvider } from "@/lib/api";
+import { api, type Source, type OAuthProvider, type RegistrySource } from "@/lib/api";
 import { Nav } from "@/components/Nav";
 import { SourceCard } from "@/components/SourceCard";
 import { ConnectGrid } from "@/components/ConnectGrid";
@@ -18,12 +18,13 @@ export default function DashboardPage() {
   const [token, setToken] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
+  const [registrySources, setRegistrySources] = useState<RegistrySource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showToken, setShowToken] = useState(false);
 
   const loadData = useCallback(
     async (accessToken: string) => {
       try {
+        await api.me(accessToken); // ensures user profile exists before any sync
         const [s, p] = await Promise.all([
           api.listSources(accessToken),
           api.oauthProviders(accessToken),
@@ -33,28 +34,34 @@ export default function DashboardPage() {
       } catch (e) {
         console.error("Failed to load data:", e);
       }
+      try {
+        const reg = await api.sourceRegistry(accessToken);
+        setRegistrySources(reg.sources);
+      } catch (e) {
+        console.error("Failed to load source registry:", e);
+      }
     },
     []
   );
 
   useEffect(() => {
-    // Use getUser() first (validates with Supabase server), then getSession() for the token
-    supabase.auth.getUser().then(({ data: { user }, error }) => {
-      if (error || !user) {
-        router.replace("/login");
-        return;
-      }
-      setEmail(user.email || "");
-      // Now get the session for the access token
-      supabase.auth.getSession().then(({ data: { session } }) => {
+    // Subscribe to auth state changes so the token stays fresh across refreshes.
+    // Supabase auto-refreshes the JWT before expiry and fires TOKEN_REFRESHED here.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
         if (!session) {
           router.replace("/login");
           return;
         }
-        setToken(session.access_token);
-        loadData(session.access_token).then(() => setLoading(false));
-      });
-    });
+        const freshToken = session.access_token;
+        setEmail(session.user.email ?? "");
+        setToken(freshToken);
+        if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+          loadData(freshToken).then(() => setLoading(false));
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
   }, []);
 
   async function handleDelete(name: string) {
@@ -96,6 +103,7 @@ export default function DashboardPage() {
                   key={s.name}
                   source={s}
                   token={token}
+                  registrySource={registrySources.find((r) => r.name === s.type)}
                   onSync={() => loadData(token)}
                   onDelete={() => handleDelete(s.name)}
                 />
@@ -110,48 +118,17 @@ export default function DashboardPage() {
 
         {/* Connect New Source */}
         <section className="mb-10">
-          <h2 className="text-lg font-semibold mb-2 text-zinc-300">
+          <h2 className="text-lg font-semibold mb-4 text-zinc-300">
             Connect a source
           </h2>
-          <p className="text-sm text-zinc-500 mb-4">
-            Click to authorize via OAuth. No API keys needed.
-          </p>
-          <ConnectGrid providers={providers} token={token} />
+          <ConnectGrid
+            registrySources={registrySources}
+            providers={providers}
+            token={token}
+            onSourceAdded={() => loadData(token)}
+          />
         </section>
 
-        {/* CLI Setup */}
-        <section className="mb-10">
-          <h2 className="text-lg font-semibold mb-4 text-zinc-300">
-            CLI setup
-          </h2>
-          <pre className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-sm overflow-x-auto">
-            <code className="text-dino-green">
-              {`pip install dinobase\ndinobase login`}
-            </code>
-          </pre>
-
-          <div className="mt-4">
-            <button
-              onClick={() => setShowToken(!showToken)}
-              className="text-sm text-zinc-500 hover:text-zinc-300"
-            >
-              {showToken ? "Hide" : "Show"} access token
-            </button>
-            {showToken && (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 mt-2 flex items-center justify-between">
-                <code className="text-dino-green text-xs break-all">
-                  {token}
-                </code>
-                <button
-                  onClick={() => navigator.clipboard.writeText(token)}
-                  className="text-zinc-500 hover:text-white text-xs ml-4 shrink-0"
-                >
-                  Copy
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
       </main>
     </>
   );

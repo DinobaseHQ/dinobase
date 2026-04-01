@@ -79,4 +79,5 @@ def get_allowed_origins() -> list[str]:
     return [
         "http://localhost:3000",
         "https://cloud.dinobase.dev",
+        "https://app.dinobase.ai",
     ]
