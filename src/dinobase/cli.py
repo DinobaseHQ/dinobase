@@ -20,13 +20,14 @@ _AGENT_COMMANDS = frozenset({
 def _get_cloud_client():
     """Return an authenticated CloudClient if logged in, else None."""
     import os
-    from dinobase.config import is_cloud_logged_in, load_cloud_credentials, get_cloud_api_url
-
-    if not is_cloud_logged_in():
-        return None
+    from dinobase.config import load_cloud_credentials, get_cloud_api_url, ensure_fresh_cloud_token
 
     creds = load_cloud_credentials()
     if not creds:
+        return None
+
+    access_token = ensure_fresh_cloud_token()
+    if not access_token:
         return None
 
     # DINOBASE_CLOUD_URL env var overrides stored api_url for local dev
@@ -35,7 +36,7 @@ def _get_cloud_client():
     from dinobase.cloud_client import CloudClient
     return CloudClient(
         api_url=api_url,
-        access_token=creds["access_token"],
+        access_token=access_token,
     )
 
 
@@ -66,7 +67,7 @@ class CategorizedGroup(click.Group):
 @click.group(cls=CategorizedGroup)
 @click.version_option(version=__version__)
 def cli():
-    """🦕 Dinobase — the agent-native database."""
+    """🦕 Dinobase — the agent-first database."""
     pass
 
 
@@ -117,6 +118,138 @@ def init(storage: str | None):
     else:
         click.echo(f"Database: {get_db_path()}")
     click.echo("Add a source: dinobase add <source> --api-key ...  (run `dinobase sources` to list all)")
+
+
+_QUICKSTART_SOURCES = [
+    ("stripe",    "Stripe — payments, subscriptions, invoices"),
+    ("hubspot",   "HubSpot — CRM, contacts, deals"),
+    ("github",    "GitHub — repos, issues, pull requests"),
+    ("postgres",  "PostgreSQL — any Postgres database"),
+    ("shopify",   "Shopify — orders, products, customers"),
+    ("zendesk",   "Zendesk — support tickets"),
+    ("slack",     "Slack — channels, messages"),
+    ("notion",    "Notion — databases and pages"),
+]
+
+
+@cli.command()
+def quickstart():
+    """Guided setup: connect sources and start querying in minutes.
+
+    Walks you through picking a data source, entering credentials,
+    and prints the MCP config snippet to connect with Claude or Cursor.
+
+    Example:
+
+      dinobase quickstart
+    """
+    import os
+    from dinobase.config import init_dinobase, add_source as save_source, source_exists
+    from dinobase.sync.registry import get_source_entry
+
+    init_dinobase()
+
+    click.echo("\nWelcome to Dinobase — the agent-first database.\n")
+    click.echo("Connect your data sources and query them all with SQL.\n")
+
+    added_sources: list[str] = []
+
+    while True:
+        click.echo("Pick a source to connect:\n")
+        for i, (_, label) in enumerate(_QUICKSTART_SOURCES, 1):
+            click.echo(f"  {i:2}. {label}")
+        click.echo()
+        click.echo("  Or type a source name (e.g. salesforce, jira, linear).")
+        click.echo("  Run `dinobase sources --available` to see all 100+ sources.")
+        if added_sources:
+            click.echo("  Press Enter or type 'done' to finish.\n")
+        else:
+            click.echo()
+
+        choice = click.prompt("Source", default="done" if added_sources else "").strip()
+
+        if choice.lower() in ("done", "d", ""):
+            break
+
+        # Resolve source name from number or string
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(_QUICKSTART_SOURCES):
+                source_type = _QUICKSTART_SOURCES[idx][0]
+            else:
+                click.echo(f"  Invalid number. Enter 1-{len(_QUICKSTART_SOURCES)} or a source name.\n")
+                continue
+        else:
+            source_type = choice.lower()
+
+        entry = get_source_entry(source_type)
+        if entry is None:
+            click.echo(f"  Unknown source '{source_type}'. Run `dinobase sources --available` to see all.\n")
+            continue
+
+        if source_exists(source_type):
+            click.echo(f"  '{source_type}' is already connected.\n")
+            if source_type not in added_sources:
+                added_sources.append(source_type)
+            continue
+
+        # Show where to find credentials
+        if entry.credential_help:
+            click.echo(f"\n  Where to find credentials:\n    {entry.credential_help}\n")
+
+        # Collect credentials
+        credentials: dict[str, str] = {}
+        aborted = False
+        for param in entry.credentials:
+            env_value = os.environ.get(param.env_var or "")
+            if env_value:
+                click.echo(f"  {param.name}: using ${param.env_var}")
+                credentials[param.name] = env_value
+                continue
+            try:
+                value = click.prompt(f"  {param.prompt or param.name}", hide_input=param.secret)
+                credentials[param.name] = value
+            except click.Abort:
+                click.echo("\n  Cancelled.\n")
+                aborted = True
+                break
+
+        if aborted:
+            continue
+
+        save_source(source_type, source_type, credentials)
+        added_sources.append(source_type)
+        click.echo(f"\n  Connected {source_type}.\n")
+
+        if not click.confirm("  Add another source?", default=False):
+            break
+        click.echo()
+
+    if not added_sources:
+        click.echo("\nNo sources connected.")
+        click.echo("Run `dinobase add <source>` to connect one, or `dinobase sources --available` to browse all.")
+        return
+
+    # Summary + next steps
+    click.echo(f"\nConnected: {', '.join(added_sources)}\n")
+    click.echo("Next steps:")
+    click.echo(f"  dinobase sync                         # load data from your sources")
+    click.echo(f"  dinobase info                         # see all synced tables")
+    click.echo(f"  dinobase query 'SELECT ...'           # run SQL across sources")
+    click.echo()
+
+    # MCP config snippet
+    import shutil
+    dinobase_path = shutil.which("dinobase")
+    server_entry = (
+        {"command": dinobase_path, "args": ["serve"]}
+        if dinobase_path
+        else {"command": sys.executable, "args": ["-m", "dinobase.mcp.server"]}
+    )
+    click.echo("To use with Claude or Cursor, add this to your MCP config:\n")
+    click.echo(json.dumps({"mcpServers": {"dinobase": server_entry}}, indent=2))
+    click.echo()
+    click.echo("Run `dinobase mcp-config` for per-client setup instructions.")
 
 
 # ---------------------------------------------------------------------------
@@ -1253,6 +1386,130 @@ def info():
     db.close()
 
 
+@cli.command()
+def doctor():
+    """Check your Dinobase setup and diagnose common problems.
+
+    Verifies that the config directory, database, credentials, and storage
+    are all set up correctly.
+
+    Example:
+
+      dinobase doctor
+    """
+    import stat
+    from dinobase.config import (
+        get_dinobase_dir, get_config_path, get_db_path,
+        load_config, is_cloud_storage, get_storage_url,
+    )
+
+    ok = True
+
+    def _pass(msg: str) -> None:
+        click.echo(f"  [ok]   {msg}")
+
+    def _fail(msg: str, hint: str = "") -> None:
+        nonlocal ok
+        ok = False
+        click.echo(f"  [fail] {msg}", err=True)
+        if hint:
+            click.echo(f"         {hint}", err=True)
+
+    def _warn(msg: str) -> None:
+        click.echo(f"  [warn] {msg}")
+
+    click.echo("Checking Dinobase setup...\n")
+
+    # 1. Config directory
+    ddir = get_dinobase_dir()
+    if ddir.exists():
+        _pass(f"Config directory exists: {ddir}")
+    else:
+        _fail(f"Config directory not found: {ddir}", "Run `dinobase init` to create it.")
+
+    # 2. Config file
+    config_path = get_config_path()
+    if config_path.exists():
+        _pass(f"Config file exists: {config_path}")
+        # Check file permissions
+        mode = config_path.stat().st_mode
+        world_readable = bool(mode & stat.S_IROTH)
+        if world_readable:
+            _warn(f"Config file is world-readable (contains API keys). Run: chmod 600 {config_path}")
+        else:
+            _pass("Config file permissions are restricted (owner-only)")
+        # Try parsing
+        try:
+            config = load_config()
+            _pass(f"Config file is valid YAML")
+        except SystemExit:
+            _fail("Config file has a YAML parse error", f"Fix manually: {config_path}")
+    else:
+        _fail(f"Config file not found", "Run `dinobase init` to create it.")
+
+    # 3. Database / storage
+    if is_cloud_storage():
+        storage_url = get_storage_url()
+        _pass(f"Cloud storage configured: {storage_url}")
+    else:
+        db_path = get_db_path()
+        if isinstance(db_path, str):
+            _pass("In-memory mode (no local database file)")
+        elif db_path.exists():
+            _pass(f"Local database exists: {db_path}")
+        else:
+            _fail(f"Local database not found: {db_path}", "Run `dinobase init` to create it.")
+
+    # 4. Connected sources
+    try:
+        config = load_config()
+        sources = config.get("sources", {})
+        if sources:
+            _pass(f"{len(sources)} source(s) configured: {', '.join(sources.keys())}")
+        else:
+            _warn("No sources configured. Run `dinobase add <source>` or `dinobase quickstart`.")
+    except Exception:
+        pass  # Already reported above
+
+    # 5. Cloud account
+    from dinobase.config import is_cloud_logged_in
+    if is_cloud_logged_in():
+        _pass("Logged in to Dinobase Cloud")
+    else:
+        _warn("Not logged in to Dinobase Cloud (optional). Run `dinobase login` for OAuth sources.")
+
+    # 6. dinobase binary
+    import shutil
+    dinobase_bin = shutil.which("dinobase")
+    if dinobase_bin:
+        _pass(f"dinobase binary found: {dinobase_bin}")
+    else:
+        _warn("dinobase binary not in PATH. Use `python -m dinobase.cli` instead.")
+
+    click.echo()
+    if ok:
+        click.echo("All checks passed. Run `dinobase sync` to load data.")
+    else:
+        click.echo("Some checks failed. Fix the issues above and run `dinobase doctor` again.")
+        sys.exit(1)
+
+
+@cli.command("config")
+def open_config():
+    """Open the config file in your default editor.
+
+    Example:
+
+      dinobase config
+    """
+    from dinobase.config import get_config_path, init_dinobase
+
+    init_dinobase()
+    path = get_config_path()
+    click.echo(f"Opening {path}")
+    click.launch(str(path))
+
+
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option("--sync", "sync_schedule", is_flag=True, help="Enable background sync scheduler")
 @click.option("--sync-interval", default="1h", help="Default sync interval (e.g. 30m, 1h, 6h)")
@@ -1328,6 +1585,60 @@ def mcp_config(client: str | None):
         click.echo(f"# {info['label']}")
         click.echo(f"# Add to {info['path']}\n")
         click.echo(json.dumps(mcp_block, indent=2))
+
+
+@cli.command("install")
+@click.argument("client", type=click.Choice(
+    ["claude-code", "claude-desktop", "cursor"], case_sensitive=False
+))
+def install_mcp(client: str):
+    """Install the Dinobase MCP server into your AI client.
+
+    Examples:
+
+      dinobase install claude-code      # runs: claude mcp add dinobase -- dinobase serve
+      dinobase install claude-desktop   # writes mcpServers entry to Claude Desktop config
+      dinobase install cursor           # writes mcpServers entry to .cursor/mcp.json
+    """
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    # Build server entry (same logic as mcp-config)
+    dinobase_path = shutil.which("dinobase")
+    server_entry = (
+        {"command": dinobase_path, "args": ["serve"]}
+        if dinobase_path
+        else {"command": sys.executable, "args": ["-m", "dinobase.mcp.server"]}
+    )
+
+    if client == "claude-code":
+        try:
+            subprocess.run(
+                ["claude", "mcp", "add", "dinobase", "--", "dinobase", "serve"],
+                check=True,
+            )
+        except FileNotFoundError:
+            raise click.ClickException("'claude' CLI not found — install it from https://claude.ai/code")
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(f"claude mcp add failed: {e}")
+        return
+
+    if client == "claude-desktop":
+        if sys.platform == "darwin":
+            config_path = Path.home() / "Library/Application Support/Claude/claude_desktop_config.json"
+        elif sys.platform == "win32":
+            config_path = Path(os.environ["APPDATA"]) / "Claude/claude_desktop_config.json"
+        else:
+            config_path = Path.home() / ".config/Claude/claude_desktop_config.json"
+    else:  # cursor
+        config_path = Path.cwd() / ".cursor/mcp.json"
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.loads(config_path.read_text()) if config_path.exists() else {}
+    data.setdefault("mcpServers", {})["dinobase"] = server_entry
+    config_path.write_text(json.dumps(data, indent=2) + "\n")
+    click.echo(f"✓ Dinobase MCP added to {config_path}")
 
 
 if __name__ == "__main__":

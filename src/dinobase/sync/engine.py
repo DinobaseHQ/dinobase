@@ -80,6 +80,8 @@ class SyncEngine:
                 tables_synced=result.tables_synced,
                 rows_synced=result.rows_synced,
             )
+            from dinobase.semantic_agent import spawn_semantic_agent
+            spawn_semantic_agent(source_name)
             return result
         except Exception as e:
             error_msg = str(e)
@@ -120,6 +122,10 @@ class SyncEngine:
             pipeline_kwargs["pipelines_dir"] = pipelines_dir
         else:
             destination = dlt.destinations.duckdb(self.db.db_path)
+            import os as _os
+            _pipelines_dir = _os.path.join(_os.path.dirname(self.db.db_path), "_pipelines")
+            _os.makedirs(_pipelines_dir, exist_ok=True)
+            pipeline_kwargs["pipelines_dir"] = _pipelines_dir
 
         pipeline = dlt.pipeline(
             pipeline_name=f"dinobase_{source_name}",
@@ -130,7 +136,102 @@ class SyncEngine:
         )
 
         print(f"Syncing {source_name} ({source_type})...", file=sys.stderr)
-        load_info = pipeline.run(dlt_source)
+        _skip_tables: list[str] = []
+        _max_retries = 5  # guard against infinite loops if every table is broken
+        for _attempt in range(_max_retries):
+            try:
+                _run_kwargs: dict = {}
+                if not self.db.is_cloud:
+                    # Use parquet staging to avoid INSERT VALUES SQL escaping issues
+                    # (e.g. strings with percent signs or special chars cause DuckDB parse errors)
+                    _run_kwargs["loader_file_format"] = "parquet"
+                load_info = pipeline.run(dlt_source, **_run_kwargs)
+                break  # success
+            except Exception as _e:
+                # If the load fails because of an INT64/INT128 schema conflict
+                # (e.g. ClickHouse UInt64 values that overflow DuckDB INT64, or a
+                # previously-cached dlt schema that typed UInt64 as INT64 while
+                # type_adapter_callback now says "text"), recover by:
+                #   1. Dropping the DuckDB schema via the already-open connection
+                #      (pipeline.drop() opens a NEW connection which DuckDB may reject
+                #      when the file already has an open read-write connection, causing
+                #      it to silently skip the dataset drop).
+                #   2. Dropping the local dlt state (pipeline.drop()).
+                #   3. Retrying from scratch so fresh tables are created with the
+                #      correct VARCHAR types.
+                _emsg = str(_e)
+                _is_int64_conflict = (
+                    "INT128" in _emsg
+                    or ("out of range for the destination type" in _emsg and "INT64" in _emsg)
+                    or ("Could not convert" in _emsg and "INT64" in _emsg)
+                )
+                # ClickHouse Code 47: UNKNOWN_IDENTIFIER — typically means an EPHEMERAL
+                # column (or an ALIAS whose expression references one) was included in
+                # the SELECT. Recover by dropping the failing table from the resource
+                # list and retrying so the rest of the source syncs successfully.
+                _is_unknown_identifier = (
+                    "UNKNOWN_IDENTIFIER" in _emsg
+                    or ("Code: 47" in _emsg)
+                )
+                if _is_int64_conflict:
+                    print(
+                        f"  [schema-reset] INT64 schema conflict — dropping stale schema "
+                        f"and retrying {source_name} from scratch.",
+                        file=sys.stderr,
+                    )
+                    # Step 1: drop DuckDB schema using the already-open connection
+                    if not self.db.is_cloud:
+                        try:
+                            self.db.conn.execute(
+                                f'DROP SCHEMA IF EXISTS "{source_name}" CASCADE'
+                            )
+                        except Exception as _drop_err:
+                            print(
+                                f"  [schema-reset] DROP SCHEMA failed: {_drop_err}",
+                                file=sys.stderr,
+                            )
+                    # Step 2: clear local dlt state (schema files, pipeline state)
+                    pipeline.drop()
+                    # Step 3: re-get the source (iterators exhausted after failed run)
+                    dlt_source = get_source(
+                        source_type, credentials, resource_names=resource_names
+                    )
+                elif _is_unknown_identifier and source_type == "clickhouse":
+                    import re as _re
+                    # Parse the failing table name from the error:
+                    #   "In processing pipe `sharded_events`"  OR
+                    #   "extraction of resource `sharded_events`"
+                    _match = (
+                        _re.search(r"processing pipe `([^`]+)`", _emsg)
+                        or _re.search(r"resource `([^`]+)`", _emsg)
+                    )
+                    if _match:
+                        _bad_table = _match.group(1)
+                        if _bad_table in _skip_tables:
+                            # Already tried skipping this table — give up
+                            raise
+                        _skip_tables.append(_bad_table)
+                        print(
+                            f"  [ephemeral-skip] ClickHouse UNKNOWN_IDENTIFIER on "
+                            f"'{_bad_table}' — skipping table and retrying "
+                            f"({len(_skip_tables)} skipped so far).",
+                            file=sys.stderr,
+                        )
+                        pipeline.drop()
+                        dlt_source = get_source(
+                            source_type, credentials,
+                            resource_names=resource_names,
+                            extra_skip_tables=list(_skip_tables),
+                        )
+                    else:
+                        raise
+                else:
+                    raise
+        else:
+            raise RuntimeError(
+                f"Sync of {source_name} failed after {_max_retries} attempts. "
+                f"Last error: {_emsg}"
+            )
 
         if self.db.is_cloud:
             # Save pipeline state to cloud for next incremental sync

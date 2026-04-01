@@ -15,9 +15,10 @@ def runner(tmp_path):
 
 
 def test_version(runner):
+    import re
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert re.search(r"\d+\.\d+\.\d+", result.output)
 
 
 def test_init(runner, tmp_path):

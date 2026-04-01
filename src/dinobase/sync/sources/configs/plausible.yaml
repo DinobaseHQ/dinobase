@@ -33,7 +33,9 @@ client:
 
 resource_defaults:
   primary_key: null
-  write_disposition: append
+  # All Plausible resources are snapshot aggregates (stats for a date window),
+  # not event logs. Replace is idempotent; append would duplicate on every resync.
+  write_disposition: replace
   endpoint:
     method: POST
     # All v2 responses wrap results in a top-level "results" array.

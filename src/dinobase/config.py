@@ -111,6 +111,8 @@ def save_config(config: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    # Restrict config file to owner only (contains API keys)
+    path.chmod(0o600)
 
 
 def init_dinobase(storage_url: str | None = None) -> Path:
@@ -261,19 +263,70 @@ def get_freshness_threshold(source_name: str) -> int | None:
 
 
 def _cloud_credentials_path() -> Path:
-    return get_dinobase_dir() / CLOUD_CREDENTIALS_FILE
+    # Cloud credentials are global to the CLI user, not per-workspace.
+    # Always resolve against the home-based default dir so that setting
+    # DINOBASE_DIR to a per-user cloud workspace (as the hosted service
+    # worker does) doesn't break credential lookup in long-running processes
+    # like the MCP server.
+    base = Path(os.environ.get("DINOBASE_CREDENTIALS_DIR", DEFAULT_DIR))
+    return base / CLOUD_CREDENTIALS_FILE
 
 
 def is_cloud_logged_in() -> bool:
-    """Check if the user has valid cloud credentials."""
+    """Check if the user has cloud credentials (token may be refreshable)."""
     creds = load_cloud_credentials()
-    if not creds:
+    if not creds or not creds.get("access_token"):
         return False
-    # Check if token is expired
+    # Token expired with no refresh token — nothing we can do
     expires_at = creds.get("expires_at", 0)
-    if expires_at and time.time() > expires_at:
+    if expires_at and time.time() > expires_at and not creds.get("refresh_token"):
         return False
     return True
+
+
+def ensure_fresh_cloud_token() -> str | None:
+    """Return a valid cloud access_token, refreshing if expired.
+
+    Returns None if no credentials exist.
+    On refresh failure, returns the existing (stale) token — the API call
+    will fail with 401 rather than silently falling back to local mode.
+    """
+    creds = load_cloud_credentials()
+    if not creds:
+        return None
+
+    access_token = creds.get("access_token")
+    if not access_token:
+        return None
+
+    expires_at = creds.get("expires_at", 0)
+    if not expires_at or time.time() < expires_at - 60:
+        return access_token  # still valid
+
+    refresh_token = creds.get("refresh_token", "")
+    if not refresh_token:
+        return access_token  # no refresh token, return stale
+
+    api_url = (creds.get("api_url") or get_cloud_api_url()).rstrip("/")
+
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(
+            f"{api_url}/api/v1/auth/refresh",
+            data=json.dumps({"refresh_token": refresh_token}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(req, timeout=10) as resp:
+            new_tokens = json.loads(resp.read())
+
+        creds["access_token"] = new_tokens["access_token"]
+        creds["refresh_token"] = new_tokens.get("refresh_token", refresh_token)
+        creds["expires_at"] = new_tokens.get("expires_at", expires_at)
+        save_cloud_credentials(creds)
+        return creds["access_token"]
+    except Exception:
+        return access_token  # refresh failed; caller will get a 401
 
 
 def load_cloud_credentials() -> dict[str, Any] | None:
@@ -308,3 +361,9 @@ def clear_cloud_credentials() -> None:
 def get_cloud_api_url() -> str:
     """Return the cloud API URL."""
     return os.environ.get("DINOBASE_CLOUD_URL", DEFAULT_CLOUD_API_URL)
+
+
+def is_auto_annotate_enabled() -> bool:
+    """Return True unless DINOBASE_AUTO_ANNOTATE=false (case-insensitive)."""
+    val = os.environ.get("DINOBASE_AUTO_ANNOTATE", "true").strip().lower()
+    return val not in ("false", "0", "no", "off")

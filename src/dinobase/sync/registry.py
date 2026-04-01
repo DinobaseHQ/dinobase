@@ -540,6 +540,10 @@ _register(SourceEntry(
     credentials=[
         CredentialParam("connection_url", "--connection-string", "MONGODB_URL", "MongoDB connection URL"),
     ],
+    # The dlt mongodb source defaults write_disposition from dlt.config.value,
+    # which is typically unset (falls back to append = duplicates on resync).
+    # Replace is safe: each sync reloads all documents idempotently.
+    extra_params={"write_disposition": "replace"},
 ))
 
 _register(SourceEntry(

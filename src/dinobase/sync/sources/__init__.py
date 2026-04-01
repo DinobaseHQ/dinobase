@@ -23,6 +23,7 @@ def get_source(
     source_type: str,
     credentials: dict[str, str],
     resource_names: list[str] | None = None,
+    extra_skip_tables: list[str] | None = None,
 ) -> Any:
     """Return a dlt source for the given source type.
 
@@ -30,6 +31,8 @@ def get_source(
         source_type: Source name (e.g., "hubspot", "stripe", "amplitude")
         credentials: Credential values from user config
         resource_names: Optional list of resources to sync (None = all)
+        extra_skip_tables: Additional tables to exclude on top of engine-type filtering.
+            Used during recovery to skip tables that caused extraction errors.
     """
     # File sources don't use dlt
     if source_type in ("parquet", "csv"):
@@ -113,8 +116,122 @@ def get_source(
                     "Use clickhouse+native:// to keep port 9000.",
                     file=sys.stderr,
                 )
-        from sqlalchemy import create_engine
+        from sqlalchemy import create_engine, String
         from sqlalchemy.engine import make_url
+
+        # ClickHouse returns Python types that are not JSON-serialisable or that
+        # overflow DuckDB's INT64:
+        #   IPv4/IPv6  → ipaddress.IPv4Address / IPv6Address
+        #   UUID       → uuid.UUID
+        #   Enum8/16   → Python enum objects (e.g. <QueryFinish: 2>)
+        #   UInt64     → Python int, but values can exceed INT64_MAX → DuckDB cast error
+        #   UInt128/256, Int128/256 → same overflow problem
+        #
+        # Fix: table_adapter_callback patches the reflected column types with a
+        # TypeDecorator that normalises all these to plain strings.
+        # (type_adapter_callback only changes the dlt schema, not SQLAlchemy result
+        #  processing — table_adapter_callback is the right hook for data-level coercion.)
+        if source_type in ("clickhouse",):
+            import enum as _enum_mod
+            from sqlalchemy.types import TypeDecorator
+
+            class _AsString(TypeDecorator):
+                """Normalise non-serialisable ClickHouse driver values to str."""
+                impl = String
+                cache_ok = True
+
+                def process_result_value(self, value, dialect):  # type: ignore[override]
+                    if value is None:
+                        return None
+                    if isinstance(value, _enum_mod.Enum):
+                        return value.name  # e.g. "QueryFinish" not "<QueryFinish: 2>"
+                    if isinstance(value, (list, dict)):
+                        import json as _json
+                        try:
+                            return _json.dumps(value, default=str)
+                        except Exception:
+                            return str(value)
+                    return str(value)
+
+            # Types whose Python driver values are not safely JSON-serialisable or
+            # that overflow DuckDB's INT64.
+            _COERCE_TO_STR = {
+                # Non-serialisable identity types
+                "IPv4", "IPv6",
+                "UUID",
+                # Enums
+                "Enum8", "Enum16",
+                # Large integers that overflow DuckDB INT64
+                "UInt64", "UInt128", "UInt256",
+                "Int128", "Int256",
+                # String variants
+                "FixedString",
+                "LowCardinality",
+                # Nullable wraps any of the above — coerce the whole column to str
+                # so the inner type doesn't matter (None is preserved as NULL).
+                "Nullable",
+                # DateTime64 has sub-second precision and timezone qualifiers that
+                # dlt's standard datetime mapping doesn't preserve correctly.
+                "DateTime64",
+                # Compound / collection types — serialise as JSON strings.
+                "Array", "Map", "Tuple", "Nested",
+                # Aggregate function columns (e.g. SimpleAggregateFunction(sum, Int64))
+                "SimpleAggregateFunction", "AggregateFunction",
+                # Decimal types — precision/scale mismatches cause dlt normalize to fail
+                # with "Rescaling Decimal value would cause data loss"; coerce to str.
+                "Decimal", "Numeric",
+            }
+
+            # Populated after engine creation; closed over by _ch_table_adapter
+            _ephemeral_columns: dict[str, set[str]] = {}
+
+            def _ch_table_adapter(table):  # type: ignore[return]
+                # Remove EPHEMERAL columns — ClickHouse raises UNKNOWN_IDENTIFIER on SELECT
+                for col in list(table._columns):
+                    if col.name in _ephemeral_columns.get(table.name, set()):
+                        table._columns.remove(col)
+                for col in table.columns:
+                    if type(col.type).__name__ in _COERCE_TO_STR:
+                        col.type = _AsString()
+
+            def _ch_type_adapter(t: object) -> object:
+                # Tell dlt to use text in the schema for types we coerce to str.
+                # Without this, dlt keeps INT64 in the schema for UInt64 columns and
+                # DuckDB tries to cast the string values back to INT64 → overflow.
+                if type(t).__name__ in _COERCE_TO_STR:
+                    return String()
+                return None
+
+            def _ch_query_adapter(query, table, incremental, engine):  # type: ignore[return]
+                # Belt-and-suspenders: remove any EPHEMERAL columns that survived to
+                # query-generation time (e.g. via restored pipeline schema).
+                eph = _ephemeral_columns.get(table.name, set())
+                all_cols = list(table.columns)
+                col_names = [c.name for c in all_cols]
+                bad = [n for n in col_names if n in eph]
+                print(
+                    f"  [query_adapter] {table.name}: {len(col_names)} cols, "
+                    f"ephemeral set={eph or 'empty'}, "
+                    f"bad_in_table={bad or 'none'}",
+                    file=sys.stderr,
+                )
+                if not bad:
+                    return query
+                keep = [c for c in all_cols if c.name not in eph]
+                print(
+                    f"  [query_adapter] Dropping {len(bad)} EPHEMERAL col(s) "
+                    f"from SELECT on {table.name}: {bad}",
+                    file=sys.stderr,
+                )
+                try:
+                    return query.with_only_columns(*keep, maintain_column_froms=True)
+                except TypeError:
+                    # SQLAlchemy <2.0 compat
+                    return query.with_only_columns(keep)
+
+            kwargs["table_adapter_callback"] = _ch_table_adapter
+            kwargs["type_adapter_callback"] = _ch_type_adapter
+            kwargs["query_adapter_callback"] = _ch_query_adapter
 
         _EXAMPLES = {
             "postgres": "postgresql://user:password@host:5432/dbname",
@@ -138,8 +255,214 @@ def get_source(
                 f"Invalid connection string for '{source_type}'. "
                 f"Expected format:\n  {example}"
             )
-        kwargs["credentials"] = create_engine(conn_str)
-        return source_func(**kwargs)
+        _url = make_url(conn_str)
+        _pool_kwargs: dict = {}
+        if _url.drivername and not _url.drivername.startswith("sqlite"):
+            # NullPool creates a fresh connection per request so concurrent table
+            # extraction doesn't exhaust a fixed-size pool when many tables are
+            # pulled in parallel.
+            from sqlalchemy.pool import NullPool
+            _pool_kwargs = {"poolclass": NullPool}
+        engine = create_engine(conn_str, **_pool_kwargs)
+        kwargs["credentials"] = engine
+
+        # For ClickHouse: skip tables whose engines don't support direct SELECT
+        # (Kafka, RabbitMQ, NATS, S3Queue — reading would consume the queue).
+        # We discover these via system.tables before building the dlt source so
+        # dlt never even tries to extract them.
+        _effective_resources = resource_names
+        if source_type == "clickhouse" and resource_names is None:
+            try:
+                from sqlalchemy import text as _sql_text
+                _db = make_url(conn_str).database or "default"
+                # Engines that must not be directly SELECTed:
+                #   Kafka / RabbitMQ / NATS / S3Queue  — consuming reads from a queue
+                #   Distributed   — routing layer; querying it may timeout trying to
+                #                   reach remote shards; the underlying sharded tables
+                #                   hold the actual data
+                #   MaterializedView / View — virtual; underlying tables have the data
+                #   Dictionary    — in-memory lookup tables; too large to bulk-export
+                #   Buffer        — write buffer; rows are in-flight, not stable
+                _SKIP_ENGINES = (
+                    "Kafka", "RabbitMQ", "RabbitMQNew", "NATS", "S3Queue",
+                    "Distributed",
+                    "MaterializedView", "View",
+                    "Dictionary",
+                    "Buffer",
+                )
+                _engines_csv = ", ".join(f"'{e}'" for e in _SKIP_ENGINES)
+                with engine.connect() as _conn:
+                    _rows = _conn.execute(_sql_text(
+                        f"SELECT name, engine FROM system.tables "
+                        f"WHERE database = '{_db}' AND engine IN ({_engines_csv})"
+                    )).fetchall()
+                _skip = {r[0] for r in _rows}
+                if _skip:
+                    # Build full table list minus the skipped ones
+                    from sqlalchemy import inspect as _inspect
+                    _all = _inspect(engine).get_table_names()
+                    _effective_resources = [t for t in _all if t not in _skip]
+                    print(
+                        f"  Skipping {len(_skip)} non-data tables "
+                        f"(Kafka/Distributed/View/MaterializedView/Dictionary); "
+                        f"syncing {len(_effective_resources)} data tables.",
+                        file=sys.stderr,
+                    )
+            except Exception as _e:
+                print(f"  Warning: could not query system.tables to filter engine types: {_e}", file=sys.stderr)
+
+        # For ClickHouse: pre-load columns that cannot appear in SELECT:
+        #   EPHEMERAL: only exists at INSERT time, never stored
+        #   ALIAS referencing an EPHEMERAL: re-evaluated at SELECT time using the
+        #     ephemeral expression → ClickHouse raises UNKNOWN_IDENTIFIER
+        if source_type == "clickhouse":
+            try:
+                from sqlalchemy import text as _sql_text
+                _db = make_url(conn_str).database or "default"
+                with engine.connect() as _conn:
+                    # Fetch EPHEMERAL columns and ALIAS columns together
+                    _col_rows = _conn.execute(_sql_text(
+                        f"SELECT table, name, default_kind, default_expression "
+                        f"FROM system.columns "
+                        f"WHERE database = '{_db}' "
+                        f"AND default_kind IN ('EPHEMERAL', 'ALIAS')"
+                    )).fetchall()
+                # First pass: collect all EPHEMERAL column names per table
+                for _tbl, _col, _dtype, _expr in _col_rows:
+                    if _dtype == "EPHEMERAL":
+                        _ephemeral_columns.setdefault(_tbl, set()).add(_col)
+                # Second pass: any ALIAS whose expression references an EPHEMERAL col
+                # is also unsafe to SELECT (ClickHouse re-evaluates it at query time)
+                for _tbl, _col, _dtype, _expr in _col_rows:
+                    if _dtype == "ALIAS":
+                        _eph = _ephemeral_columns.get(_tbl, set())
+                        if any(_eph_col in (_expr or "") for _eph_col in _eph):
+                            _ephemeral_columns.setdefault(_tbl, set()).add(_col)
+                if _ephemeral_columns:
+                    _total = sum(len(v) for v in _ephemeral_columns.values())
+                    print(
+                        f"  Filtering {_total} unsafe columns (EPHEMERAL + dependent ALIAS) "
+                        f"from {len(_ephemeral_columns)} tables.",
+                        file=sys.stderr,
+                    )
+            except Exception as _e:
+                print(
+                    f"  Warning: could not query system.columns for unsafe columns: {_e}",
+                    file=sys.stderr,
+                )
+
+        # Apply extra_skip_tables (used during recovery to exclude tables that
+        # caused UNKNOWN_IDENTIFIER or other extraction errors on a previous attempt).
+        if extra_skip_tables:
+            if _effective_resources is None:
+                # No explicit list yet; build one from all tables minus the skip set
+                from sqlalchemy import inspect as _inspect
+                _all = _inspect(engine).get_table_names()
+                _effective_resources = [t for t in _all if t not in extra_skip_tables]
+            else:
+                _effective_resources = [
+                    t for t in _effective_resources if t not in extra_skip_tables
+                ]
+            print(
+                f"  Skipping {len(extra_skip_tables)} table(s) with prior extraction "
+                f"errors: {extra_skip_tables}",
+                file=sys.stderr,
+            )
+
+        source = source_func(**kwargs)
+        if _effective_resources is not None and hasattr(source, "with_resources"):
+            source = source.with_resources(*_effective_resources)
+
+        # ---------------------------------------------------------------
+        # Auto-configure write disposition + incremental cursor per table.
+        # dlt defaults to append, which duplicates rows on every sync.
+        # We detect cursor columns and merge keys from the schema and apply:
+        #   cursor + merge_key → merge (incremental upsert, deduplicates)
+        #   otherwise          → replace (full reload, idempotent)
+        # ---------------------------------------------------------------
+        import dlt as _dlt
+        from sqlalchemy import inspect as _sa_inspect, text as _sql_text
+
+        _CURSOR_CANDIDATES = (
+            ["_timestamp", "updated_at", "created_at", "version"]
+            if source_type == "clickhouse"
+            else ["updated_at", "created_at"]
+        )
+        _MERGE_KEY_FALLBACKS = ["uuid", "id", "query_id", "session_id", "session_id_v7"]
+
+        # 1. Discover which tables have which cursor column (one DB round-trip per candidate)
+        _cursor_map: dict[str, str] = {}
+        try:
+            with engine.connect() as _cur_conn:
+                _db_name = make_url(conn_str).database or "default"
+                for _cand in _CURSOR_CANDIDATES:
+                    if source_type == "clickhouse":
+                        _crows = _cur_conn.execute(_sql_text(
+                            f"SELECT DISTINCT `table` FROM system.columns "
+                            f"WHERE database='{_db_name}' AND name='{_cand}'"
+                        )).fetchall()
+                    else:
+                        _crows = _cur_conn.execute(_sql_text(
+                            f"SELECT table_name FROM information_schema.columns "
+                            f"WHERE column_name='{_cand}' "
+                            f"AND table_schema=current_schema()"
+                        )).fetchall()
+                    for (_tbl,) in _crows:
+                        if _tbl not in _cursor_map:
+                            _cursor_map[_tbl] = _cand
+        except Exception as _ce:
+            print(f"  Warning: cursor detection failed: {_ce}", file=sys.stderr)
+
+        # 2. Discover merge keys for tables that have a cursor
+        _merge_key_map: dict[str, list[str]] = {}
+        if _cursor_map:
+            try:
+                _insp = _sa_inspect(engine)
+                for _tbl in source.resources:
+                    if _tbl not in _cursor_map:
+                        continue
+                    _pk = _insp.get_pk_constraint(_tbl)
+                    _tbl_cols = {c["name"] for c in _insp.get_columns(_tbl)}
+                    # Filter to real column names only — ClickHouse may return
+                    # expression-based keys (e.g. toStartOfHour(timestamp)) that
+                    # don't correspond to actual columns.
+                    _pk_cols = [
+                        c for c in _pk.get("constrained_columns", [])
+                        if c in _tbl_cols
+                    ]
+                    if not _pk_cols:
+                        # No valid DB-level PK: probe for common unique columns
+                        _pk_cols = [c for c in _MERGE_KEY_FALLBACKS if c in _tbl_cols][:1]
+                    if _pk_cols:
+                        _merge_key_map[_tbl] = _pk_cols
+            except Exception as _ke:
+                print(f"  Warning: merge key detection failed: {_ke}", file=sys.stderr)
+
+        # 3. Apply per-resource hints
+        _n_merge = _n_replace = 0
+        for _rname, _res in source.resources.items():
+            _cursor = _cursor_map.get(_rname)
+            _mkeys  = _merge_key_map.get(_rname, [])
+            if _cursor and _mkeys:
+                _res.apply_hints(
+                    write_disposition={"disposition": "merge", "strategy": "upsert"},
+                    merge_key=_mkeys,
+                    incremental=_dlt.sources.incremental(
+                        _cursor, on_cursor_value_missing="include"
+                    ),
+                )
+                _n_merge += 1
+            else:
+                _res.apply_hints(write_disposition="replace")
+                _n_replace += 1
+
+        print(
+            f"  Write disposition: {_n_merge} tables incremental merge, "
+            f"{_n_replace} tables full replace.",
+            file=sys.stderr,
+        )
+
+        return source
     for param in entry.credentials:
         value = credentials.get(param.name) or credentials.get(param.cli_flag.lstrip("-").replace("-", "_"))
         if not value:

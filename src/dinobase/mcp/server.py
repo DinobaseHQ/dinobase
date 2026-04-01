@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from typing import Annotated
 
 from pydantic import Field
@@ -20,11 +21,7 @@ from dinobase.query.engine import QueryEngine
 
 
 def _build_instructions(engine: QueryEngine) -> str:
-    """Build MCP instructions from the current database state.
-
-    These should be brief — just enough for the agent to know what tools to use
-    and what sources exist. Full schema is available on demand via describe().
-    """
+    """Build MCP instructions from the current database state."""
     sources_info = engine.list_sources()
     sources = sources_info.get("sources", [])
 
@@ -40,7 +37,6 @@ def _build_instructions(engine: QueryEngine) -> str:
         "",
     ]
 
-    # Source overview — names, table counts, row counts, freshness.
     lines.append("Connected sources:")
     has_stale = False
     for source in sources:
@@ -57,7 +53,6 @@ def _build_instructions(engine: QueryEngine) -> str:
         lines.append(line)
     lines.append("")
 
-    # How to use the tools
     lines.append("How to work with this database:")
     lines.append("1. Use `list_sources` to see what data is available (includes freshness)")
     lines.append("2. Use `describe` on a table to see its columns, types, annotations, and sample data")
@@ -95,23 +90,147 @@ def _build_instructions(engine: QueryEngine) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Hosted service client — used when credentials.json contains an api_url
+# ---------------------------------------------------------------------------
+
+
+class _HostedClient:
+    """Proxies MCP tool calls to the hosted Dinobase API.
+
+    Used when `~/.dinobase/credentials.json` has an `api_url`, meaning the
+    user has run `dinobase login` and is connected to the hosted service.
+    """
+
+    def __init__(self, api_url: str, access_token: str):
+        self.api_url = api_url.rstrip("/")
+        self.access_token = access_token
+
+    def _headers(self) -> dict[str, str]:
+        # Always get a fresh token — handles mid-session expiry in long-running MCP servers
+        from dinobase.config import ensure_fresh_cloud_token
+        token = ensure_fresh_cloud_token() or self.access_token
+        return {"Authorization": f"Bearer {token}"}
+
+    def get_instructions(self) -> str:
+        import httpx
+        r = httpx.get(
+            f"{self.api_url}/api/v1/query/info",
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json().get("instructions", "")
+
+    def list_sources(self) -> str:
+        import httpx
+        r = httpx.get(
+            f"{self.api_url}/api/v1/sources/",
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return json.dumps(r.json(), indent=2, default=str)
+
+    def describe(self, table: str) -> str:
+        import httpx
+        r = httpx.get(
+            f"{self.api_url}/api/v1/query/describe/{table}",
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return json.dumps(r.json(), indent=2, default=str)
+
+    def query(self, sql: str, max_rows: int) -> str:
+        import httpx
+        r = httpx.post(
+            f"{self.api_url}/api/v1/query/",
+            json={"sql": sql, "max_rows": max_rows},
+            headers=self._headers(),
+            timeout=120,
+        )
+        r.raise_for_status()
+        return json.dumps(r.json(), indent=2, default=str)
+
+    def refresh(self, source: str) -> str:
+        import httpx
+        # Trigger sync
+        r = httpx.post(
+            f"{self.api_url}/api/v1/sync/",
+            json={"source_name": source},
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        job_ids = r.json().get("job_ids", [])
+        job_id = job_ids[0] if job_ids else None
+
+        if not job_id:
+            return json.dumps({"status": "queued"})
+
+        # Poll until done (max 2 minutes)
+        for _ in range(60):
+            time.sleep(2)
+            jr = httpx.get(
+                f"{self.api_url}/api/v1/sync/jobs/{job_id}",
+                headers=self._headers(),
+                timeout=10,
+            )
+            if jr.status_code == 200:
+                job = jr.json()
+                if job.get("status") not in ("running", "pending"):
+                    return json.dumps(job, indent=2, default=str)
+
+        return json.dumps({"status": "timeout", "job_id": job_id})
+
+
+def _load_hosted_client() -> _HostedClient | None:
+    """Return a _HostedClient if the user is logged in to the hosted service."""
+    from dinobase.config import load_cloud_credentials, get_cloud_api_url, ensure_fresh_cloud_token
+
+    creds = load_cloud_credentials()
+    if not creds:
+        return None
+
+    api_url = creds.get("api_url") or get_cloud_api_url()
+    access_token = ensure_fresh_cloud_token()
+    if not access_token:
+        return None
+
+    return _HostedClient(api_url, access_token)
+
+
+# ---------------------------------------------------------------------------
 # MCP server + tools — created lazily by run_server()
 # ---------------------------------------------------------------------------
 
-# Module-level reference, initialized in run_server()
 mcp: FastMCP | None = None
 
 
 def _create_server() -> FastMCP:
-    """Create the FastMCP server with instructions computed from the current DB state."""
-    with DinobaseDB() as db:
-        engine = QueryEngine(db)
-        instructions = _build_instructions(engine)
-        sources = engine.list_sources().get("sources", [])
+    """Create the FastMCP server, routing to hosted API or local DB as appropriate."""
+    # Try hosted service first
+    client = _load_hosted_client()
+    if client:
+        try:
+            instructions = client.get_instructions()
+            print("Dinobase MCP connected to hosted service.", file=sys.stderr)
+            print(f"  API: {client.api_url}", file=sys.stderr)
+        except Exception as e:
+            print(
+                f"Could not reach hosted service ({e}), falling back to local DB.",
+                file=sys.stderr,
+            )
+            client = None
 
-    print("Dinobase MCP server ready.", file=sys.stderr)
-    for s in sources:
-        print(f"  {s['name']}: {s['table_count']} tables, {s['total_rows']:,} rows", file=sys.stderr)
+    if not client:
+        with DinobaseDB() as db:
+            engine = QueryEngine(db)
+            instructions = _build_instructions(engine)
+            sources = engine.list_sources().get("sources", [])
+        print("Dinobase MCP server ready (local mode).", file=sys.stderr)
+        for s in sources:
+            print(f"  {s['name']}: {s['table_count']} tables, {s['total_rows']:,} rows", file=sys.stderr)
 
     server = FastMCP("dinobase", instructions=instructions)
 
@@ -121,6 +240,8 @@ def _create_server() -> FastMCP:
         max_rows: Annotated[int, Field(description="Maximum rows to return", ge=1, le=10000)] = 200,
     ) -> str:
         """Execute a SQL query against the database. Use `describe` first to understand table columns and data types. Mutations return a preview by default — append --force to the SQL to execute immediately, or call confirm() with the mutation_id."""
+        if client:
+            return client.query(sql, max_rows)
         with DinobaseDB() as db:
             eng = QueryEngine(db)
             result = eng.execute(sql, max_rows=max_rows)
@@ -129,6 +250,8 @@ def _create_server() -> FastMCP:
     @server.tool()
     def list_sources() -> str:
         """List all connected data sources with their tables, row counts, and last sync time."""
+        if client:
+            return client.list_sources()
         with DinobaseDB() as db:
             eng = QueryEngine(db)
             result = eng.list_sources()
@@ -139,6 +262,8 @@ def _create_server() -> FastMCP:
         table: Annotated[str, Field(description="Table to describe, e.g. 'salesforce.opportunities' or 'zendesk.tickets'")],
     ) -> str:
         """Describe a table's columns, types, annotations, and sample rows. Annotations include data format notes (e.g. 'amounts in cents') and join key hints."""
+        if client:
+            return client.describe(table)
         with DinobaseDB() as db:
             eng = QueryEngine(db)
             result = eng.describe_table(table)
@@ -215,6 +340,16 @@ def _create_server() -> FastMCP:
         source: Annotated[str, Field(description="Name of the source to re-sync (e.g. 'stripe', 'hubspot')")],
     ) -> str:
         """Re-sync a source to get fresh data. Use when data is stale or you need up-to-date results before querying. This call blocks until sync completes (typically 10-60 seconds depending on the source size)."""
+        if client:
+            return client.refresh(source)
+
+        # MCP may have started in local mode even though the user is logged in
+        # (e.g. hosted service was briefly unreachable at startup). Try hosted
+        # client dynamically so refresh always routes to the API when possible.
+        _dynamic_client = _load_hosted_client()
+        if _dynamic_client:
+            return _dynamic_client.refresh(source)
+
         from dinobase.config import load_config
         from dinobase.sync.engine import SyncEngine
 
@@ -258,16 +393,10 @@ def _create_server() -> FastMCP:
 
 
 def run_server(sync_schedule: bool = False, sync_interval: str = "1h"):
-    """Start the MCP server on stdio.
-
-    Args:
-        sync_schedule: If True, start background sync scheduler
-        sync_interval: Default sync interval (e.g. '1h', '30m')
-    """
+    """Start the MCP server on stdio."""
     global mcp
     print("Dinobase MCP server starting...", file=sys.stderr)
 
-    # Optionally start background sync scheduler
     scheduler = None
     if sync_schedule:
         from dinobase.sync.scheduler import SyncScheduler
