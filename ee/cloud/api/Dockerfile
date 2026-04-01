@@ -5,4 +5,4 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 EXPOSE 8787
-CMD ["dinobase-hosted"]
+CMD ["dinobase-server"]

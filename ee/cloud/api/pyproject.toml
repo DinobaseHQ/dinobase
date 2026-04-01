@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dinobase-hosted"
+name = "dinobase-server"
 version = "0.1.0"
 description = "Dinobase Cloud — hosted service with OAuth, sync, and query API"
 requires-python = ">=3.10"
@@ -52,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-dinobase-hosted = "dinobase_hosted.cli:main"
+dinobase-server = "dinobase-server.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dinobase_hosted"]

@@ -1,6 +1,6 @@
 procs:
   api:
-    cmd: ["uv", "run", "dinobase-hosted"]
+    cmd: ["uv", "run", "dinobase-server"]
     cwd: "api"
     env:
       DINOBASE_ENV: development
