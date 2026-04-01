@@ -328,4 +328,4 @@ pytest
 
 ## License
 
-MIT
+MIT Expat
