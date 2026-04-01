@@ -205,9 +205,10 @@ def test_agent_writes_heuristic_relationships(fresh_db, monkeypatch):
 def test_agent_calls_claude_when_api_key_set(fresh_db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
 
-    with patch("dinobase.semantic_agent.run_claude_agent") as mock_claude:
-        SemanticAgent(fresh_db, "stripe").run()
-        mock_claude.assert_called_once_with(fresh_db, "stripe", "sk-test-key")
+    with patch.dict("sys.modules", {"anthropic": MagicMock()}):
+        with patch("dinobase.semantic_agent.run_claude_agent") as mock_claude:
+            SemanticAgent(fresh_db, "stripe").run()
+            mock_claude.assert_called_once_with(fresh_db, "stripe", "sk-test-key")
 
 
 def test_agent_skips_claude_when_no_api_key(fresh_db, monkeypatch):

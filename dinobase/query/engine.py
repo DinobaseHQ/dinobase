@@ -215,6 +215,13 @@ class QueryEngine:
             result["age"] = freshness["age_human"]
             result["is_stale"] = freshness["is_stale"]
 
+        # Sample rows
+        try:
+            sample = self.db.query(f"SELECT * FROM {schema}.{table} LIMIT 3")
+            result["sample_rows"] = sample
+        except Exception:
+            result["sample_rows"] = []
+
         # Enrich with pre-built relationship graph
         related = self.db.get_relationships(schema, table)
         if related:
