@@ -194,7 +194,7 @@ Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible 
 <tr>
 <td valign="top" width="50%">
 
-**[OpenClaw](https://dinobase.ai/docs/guides/openclaw/)**
+  **[OpenClaw](https://dinobase.ai/docs/integrations/openclaw/)**
 
 ```bash
 openclaw skills install dinobase
@@ -205,7 +205,7 @@ Auto-installs Dinobase and teaches your agent to query data via SQL.
 </td>
 <td valign="top" width="50%">
 
-**[Vercel AI SDK](https://dinobase.ai/docs/guides/vercel-ai/)**
+  **[Vercel AI SDK](https://dinobase.ai/docs/integrations/vercel-ai/)**
 
 ```typescript
 const dinobase = await createMCPClient({
@@ -222,7 +222,7 @@ Native MCP integration. Zero adapter code.
 <tr>
 <td valign="top" width="50%">
 
-**[CrewAI](https://dinobase.ai/docs/guides/crewai/)**
+  **[CrewAI](https://dinobase.ai/docs/integrations/crewai/)**
 
 ```python
 from integrations.crewai.tools import all_tools
@@ -235,7 +235,7 @@ Python tools wrapping Dinobase's query engine.
 </td>
 <td valign="top" width="50%">
 
-**[LangChain / LangGraph](https://dinobase.ai/docs/guides/langchain/)**
+  **[LangChain / LangGraph](https://dinobase.ai/docs/integrations/langchain/)**
 
 ```python
 from integrations.langchain.toolkit import DinobaseToolkit
@@ -250,7 +250,7 @@ LangChain toolkit with LangGraph agent support.
 <tr>
 <td valign="top" width="50%">
 
-**[Pydantic AI](https://dinobase.ai/docs/guides/pydantic-ai/)**
+  **[Pydantic AI](https://dinobase.ai/docs/integrations/pydantic-ai/)**
 
 ```python
 from integrations.pydantic_ai.tools import dinobase_agent, DinobaseDeps
@@ -263,7 +263,7 @@ Type-safe toolset with dependency injection.
 </td>
 <td valign="top" width="50%">
 
-**[LlamaIndex](https://dinobase.ai/docs/guides/llamaindex/)**
+  **[LlamaIndex](https://dinobase.ai/docs/integrations/llamaindex/)**
 
 ```python
 from integrations.llamaindex.tool_spec import DinobaseToolSpec
@@ -278,7 +278,7 @@ BaseToolSpec for ReAct agents.
 <tr>
 <td valign="top" width="50%">
 
-**[Mastra](https://dinobase.ai/docs/guides/mastra/)**
+  **[Mastra](https://dinobase.ai/docs/integrations/mastra/)**
 
 ```typescript
 const mcp = new MCPClient({
