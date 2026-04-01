@@ -99,7 +99,7 @@ dinobase query "
 
 ```
 dinobase/
-  src/dinobase/          # Main package
+  dinobase/          # Main package
   tests/                 # Test suite
   scripts/               # Data generation scripts
   sample_data/           # Generated test data (parquet)
@@ -109,11 +109,11 @@ dinobase/
 
 ## Adding a new source
 
-The preferred way to add sources is via YAML files in `src/dinobase/sync/sources/configs/`. No Python code needed.
+The preferred way to add sources is via YAML files in `dinobase/sync/sources/configs/`. No Python code needed.
 
 ### YAML REST API source
 
-Create a new file like `src/dinobase/sync/sources/configs/myservice.yaml`:
+Create a new file like `dinobase/sync/sources/configs/myservice.yaml`:
 
 ```yaml
 name: myservice
@@ -167,7 +167,7 @@ resources:
 
 ### Python registry entry
 
-For dlt verified sources, add an entry in `src/dinobase/sync/registry.py`:
+For dlt verified sources, add an entry in `dinobase/sync/registry.py`:
 
 ```python
 _register(SourceEntry(
@@ -202,7 +202,7 @@ The `dinobase` package is published to PyPI via GitHub Actions using [OIDC trust
 - **CI** (`.github/workflows/ci.yml`) runs `pytest` on Python 3.10–3.12 for every push and pull request.
 - **Release** (`.github/workflows/release.yml`) triggers on any `v*` tag, builds an sdist + wheel, and publishes to PyPI.
 
-The version is defined once in `pyproject.toml`. `src/dinobase/__init__.py` reads it at runtime via `importlib.metadata`.
+The version is defined once in `pyproject.toml`. `dinobase/__init__.py` reads it at runtime via `importlib.metadata`.
 
 ### Cutting a release
 

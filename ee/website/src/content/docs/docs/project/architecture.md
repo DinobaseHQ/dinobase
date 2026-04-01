@@ -65,7 +65,7 @@ The CLI uses [Click](https://click.palletsprojects.com/) for command parsing. Al
 ## Module structure
 
 ```
-src/dinobase/
+dinobase/
   __init__.py              # Package init
   __version__.py           # Version
   cli.py                   # CLI commands (Click)

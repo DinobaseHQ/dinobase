@@ -9,7 +9,7 @@ argument-hint: <api_name>
 You are building a YAML connector config for Dinobase — an agent-first database that syncs data from 100+ sources into DuckDB.
 
 **When to write a YAML connector vs use the registry:**
-- If dlt has a verified source for this API (check `sources/` package), just add a registry entry in `src/dinobase/sync/registry.py`. No YAML needed.
+- If dlt has a verified source for this API (check `sources/` package), just add a registry entry in `dinobase/sync/registry.py`. No YAML needed.
 - If dlt does NOT have a verified source, write a YAML config. The YAML is translated to dlt's `rest_api_source` which handles auth, pagination, rate limiting, and incremental loading.
 
 The API name to build a connector for: $ARGUMENTS
@@ -37,11 +37,11 @@ Use WebFetch and WebSearch to read the API documentation. Get the actual field n
 python3 -c "import sources; import pkgutil; [print(n) for _, n, _ in pkgutil.iter_modules(sources.__path__) if '<name>' in n.lower()]"
 ```
 
-If dlt has it, add a registry entry instead (see `src/dinobase/sync/registry.py` for examples) and stop.
+If dlt has it, add a registry entry instead (see `dinobase/sync/registry.py` for examples) and stop.
 
 ## Step 3: Write the YAML config
 
-Save to `src/dinobase/sync/sources/configs/<api_name>.yaml`.
+Save to `dinobase/sync/sources/configs/<api_name>.yaml`.
 
 Follow this structure exactly:
 
@@ -179,7 +179,7 @@ resources:
 
 ## Step 4: Add to the registry
 
-Add an entry in `src/dinobase/sync/registry.py` so the CLI knows about it:
+Add an entry in `dinobase/sync/registry.py` so the CLI knows about it:
 
 ```python
 _register(SourceEntry(
