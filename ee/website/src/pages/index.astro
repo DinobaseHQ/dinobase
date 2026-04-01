@@ -678,6 +678,7 @@ const posthogHost =
             .why-col {
                 background: var(--bg);
                 padding: 2.5rem;
+                min-width: 0;
             }
             .why-col-head {
                 font-size: 0.75rem;
@@ -852,6 +853,7 @@ const posthogHost =
             .sem-pane {
                 background: var(--bg);
                 padding: 2rem;
+                min-width: 0;
             }
             .sem-pane.good {
                 background: rgba(122, 191, 122, 0.02);
@@ -933,6 +935,9 @@ const posthogHost =
                 align-items: start;
                 padding: 2rem 0;
                 border-bottom: 1px solid var(--border);
+            }
+            .install-body {
+                min-width: 0;
             }
             .install-item:first-child {
                 border-top: 1px solid var(--border);
@@ -1022,6 +1027,7 @@ const posthogHost =
                 line-height: 1.9;
                 white-space: pre;
                 overflow-x: auto;
+                min-width: 0;
             }
             .kw {
                 color: #c084fc;
@@ -1038,6 +1044,7 @@ const posthogHost =
             .demo-res {
                 padding: 1.5rem;
                 overflow-x: auto;
+                min-width: 0;
             }
             .demo-res table {
                 width: 100%;
@@ -1550,14 +1557,25 @@ const posthogHost =
                     display: flex;
                     flex-direction: column;
                     position: static;
-                    overflow: visible;
+                    overflow: hidden;
                 }
                 .slider-panel {
                     position: static;
                     clip-path: none !important;
+                    min-width: 0;
                 }
                 .slider-panel.after {
                     border-top: 2px solid rgba(122, 191, 122, 0.3);
+                }
+                .slider-panel.after .slider-panel-body {
+                    max-width: 100%;
+                }
+                .slider-panel-body {
+                    overflow-x: auto;
+                }
+                .api-log-line {
+                    white-space: normal;
+                    flex-wrap: wrap;
                 }
                 .slider-divider,
                 .slider-label,
@@ -1603,6 +1621,43 @@ const posthogHost =
                 }
                 .cta-section {
                     padding: 6rem 1.25rem 5rem;
+                }
+                .why-col {
+                    padding: 1.5rem;
+                }
+                .sem-pane {
+                    padding: 1.25rem;
+                }
+                .install-item {
+                    grid-template-columns: 1fr;
+                    gap: 0.75rem;
+                }
+                .install-num {
+                    display: none;
+                }
+                .demo-card {
+                    font-size: 0.75rem;
+                }
+                .demo-cols {
+                    grid-template-columns: 1fr;
+                }
+                .demo-sql {
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                    font-size: 0.75rem;
+                    padding: 1rem;
+                }
+                .demo-res {
+                    padding: 1rem;
+                }
+                .stat-cell {
+                    padding: 1.5rem 1rem;
+                }
+                .hero-actions {
+                    width: 100%;
+                }
+                h2 {
+                    font-size: clamp(2rem, 8vw, 3.5rem);
                 }
             }
         </style>
