@@ -230,6 +230,7 @@ const posthogHost =
                 max-width: 1200px;
                 width: 100%;
                 margin: 0 auto;
+                min-width: 0;
             }
             .hero-eyebrow {
                 font-family: "DM Mono", monospace;
@@ -353,7 +354,7 @@ const posthogHost =
                 transition: transform 0.4s var(--ease-out);
             }
             .btn-label span:last-child {
-                margin-top: -1.2em;
+                margin-top: 0;
             }
             .btn-primary:hover .btn-label span,
             .btn-primary:focus .btn-label span {
@@ -365,8 +366,7 @@ const posthogHost =
                 position: relative;
                 z-index: 2;
                 margin-bottom: 2rem;
-                width: 640px;
-                max-width: 100%;
+                width: min(640px, 100%);
                 overflow: hidden;
             }
             .terminal-mini {
@@ -1244,6 +1244,10 @@ const posthogHost =
             .btn-cta:hover {
                 filter: brightness(1.1);
             }
+            .btn-cta:hover .btn-label span,
+            .btn-cta:focus .btn-label span {
+                transform: translateY(-100%);
+            }
             .btn-cta-ghost {
                 font-size: 0.8125rem;
                 color: var(--dimmed);
@@ -1542,6 +1546,18 @@ const posthogHost =
                 color: var(--green);
                 border: 1px solid rgba(122, 191, 122, 0.15);
             }
+            .section-sub-scroll {
+                display: none;
+            }
+            @media (hover: none) and (pointer: coarse) {
+                .section-sub-drag {
+                    display: none;
+                }
+                .section-sub-scroll {
+                    display: block;
+                }
+            }
+
             .slider-hint {
                 text-align: center;
                 margin-top: 1rem;
@@ -1572,10 +1588,7 @@ const posthogHost =
                 }
                 .slider-panel-body {
                     overflow-x: auto;
-                }
-                .api-log-line {
-                    white-space: normal;
-                    flex-wrap: wrap;
+                    flex: none;
                 }
                 .slider-divider,
                 .slider-label,
@@ -2076,8 +2089,12 @@ const posthogHost =
                 <h2>
                     Your agents are <span class="h-word">flying blind.</span>
                 </h2>
-                <p class="section-sub">
+                <p class="section-sub section-sub-drag">
                     Drag to see what changes when you give your agent a real
+                    database.
+                </p>
+                <p class="section-sub section-sub-scroll">
+                    Scroll to see what changes when you give your agent a real
                     database.
                 </p>
                 <div class="slider-wrap" id="slider-wrap">
@@ -2436,7 +2453,7 @@ dinobase install cursor</pre>
                             style="font-size:1rem;"
                         />
                         <button type="submit" class="btn-cta"
-                            >Join waitlist →</button
+                            ><span class="btn-label"><span>Join waitlist</span><span>Join waitlist</span></span></button
                         >
                     </form>
                     <div
