@@ -23,6 +23,9 @@ class QueryEngine:
         Single-record lookups by primary key on stale sources are
         transparently resolved via live API calls when a YAML config exists.
         """
+        import time as _time
+        _start = _time.monotonic()
+
         # Route mutations to the mutation engine
         first_word = sql.strip().split()[0].upper() if sql.strip() else ""
         if first_word in ("UPDATE", "INSERT", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT", "REVOKE"):
@@ -32,17 +35,33 @@ class QueryEngine:
 
         # Check for live fetch opportunity before hitting parquet
         id_lookup = _detect_id_lookup(sql)
+        live_fetch_used = False
         if id_lookup:
             schema, table, record_id = id_lookup
             freshness = self.get_freshness(schema)
             if freshness.get("is_stale"):
                 live_result = self._try_live_fetch(schema, table, record_id)
                 if live_result is not None:
+                    live_fetch_used = True
+                    from dinobase import telemetry
+                    telemetry.capture("query_executed", {
+                        "query_type": "SELECT",
+                        "rows_returned": 1,
+                        "truncated": False,
+                        "duration_ms": round((_time.monotonic() - _start) * 1000),
+                        "live_fetch": True,
+                    })
                     return live_result
 
         try:
             columns, rows = self.db.query_raw(sql)
         except Exception as e:
+            from dinobase import telemetry
+            telemetry.capture("query_failed", {
+                "query_type": first_word or "SELECT",
+                "duration_ms": round((_time.monotonic() - _start) * 1000),
+                "error_type": type(e).__name__,
+            })
             return {"error": str(e)}
 
         total_rows = len(rows)
@@ -74,6 +93,14 @@ class QueryEngine:
                 f"or add a WHERE clause to narrow results."
             )
 
+        from dinobase import telemetry
+        telemetry.capture("query_executed", {
+            "query_type": first_word or "SELECT",
+            "rows_returned": len(result_rows),
+            "truncated": truncated,
+            "duration_ms": round((_time.monotonic() - _start) * 1000),
+            "live_fetch": False,
+        })
         return result
 
     def list_sources(self) -> dict[str, Any]:

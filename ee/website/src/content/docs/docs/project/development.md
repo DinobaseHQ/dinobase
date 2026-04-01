@@ -212,11 +212,3 @@ git push origin main v0.2.0
 ```
 
 `make bump V=x.y.z` updates `pyproject.toml`, commits, and creates the tag locally. The `git push` triggers the release workflow.
-
-### One-time PyPI setup (already done)
-
-For reference, trusted publishing was configured by:
-
-1. **pypi.org** → project → Manage → Publishing → Add GitHub Actions publisher:
-   - Owner: `kappa90`, Repo: `dinobase`, Workflow: `release.yml`, Environment: `pypi`
-2. **github.com** → Settings → Environments → `pypi` (required reviewers optional)

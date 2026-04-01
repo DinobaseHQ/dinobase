@@ -43,6 +43,12 @@ def _get_cloud_client():
 class CategorizedGroup(click.Group):
     """Click group that shows commands in agent/admin categories."""
 
+    def invoke(self, ctx):
+        from dinobase import telemetry
+        cmd = ctx.protected_args[0] if ctx.protected_args else (ctx.args[0] if ctx.args else "unknown")
+        telemetry.capture("cli_invoked", {"command": cmd})
+        return super().invoke(ctx)
+
     def format_commands(self, ctx, formatter):
         agent_cmds = []
         admin_cmds = []
@@ -336,6 +342,10 @@ def login(headless: bool):
     }
     save_cloud_credentials(credentials)
 
+    from dinobase import telemetry
+    telemetry.identify(credentials["user_id"], credentials["email"])
+    telemetry.capture("login_completed", {"email": credentials["email"]})
+
     storage_url = result.get("storage_url")
     if storage_url:
         init_dinobase(storage_url=storage_url)
@@ -364,6 +374,8 @@ def logout():
         return
 
     clear_cloud_credentials()
+    from dinobase import telemetry
+    telemetry.capture("logout")
     click.echo("Logged out of Dinobase Cloud.")
 
 
@@ -439,6 +451,8 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
 
         try:
             result = cloud.add_source(source_name, source_type, credentials)
+            from dinobase import telemetry
+            telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": True})
             click.echo(f"Added {source_type} source as '{source_name}' (cloud)")
             click.echo(f"Run `dinobase sync` to load data.")
         except RuntimeError as e:
@@ -471,6 +485,8 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         )
         db.update_table_metadata(source_name, source_name, annotations=annotations)
         save_source(source_name, source_type, {"path": path, "format": source_type})
+        from dinobase import telemetry
+        telemetry.capture("source_added", {"source_type": source_type, "auth_method": "file", "is_cloud_mode": False})
 
         click.echo(f"\nAdded {len(result['tables'])} tables from {path} as '{source_name}'")
         click.echo(f"Total: {result['total_rows']:,} rows. Ready to query — no sync needed.")
@@ -534,6 +550,8 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         sync_interval=sync_interval,
         freshness_threshold=freshness_threshold,
     )
+    from dinobase import telemetry
+    telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": False})
     click.echo(f"Added {source_type} source as '{source_name}'")
     if sync_interval:
         click.echo(f"Sync interval: {sync_interval}")
@@ -1638,6 +1656,8 @@ def install_mcp(client: str):
     data = json.loads(config_path.read_text()) if config_path.exists() else {}
     data.setdefault("mcpServers", {})["dinobase"] = server_entry
     config_path.write_text(json.dumps(data, indent=2) + "\n")
+    from dinobase import telemetry
+    telemetry.capture("mcp_installed", {"client": client})
     click.echo(f"✓ Dinobase MCP added to {config_path}")
 
 

@@ -240,6 +240,8 @@ def _create_server() -> FastMCP:
         max_rows: Annotated[int, Field(description="Maximum rows to return", ge=1, le=10000)] = 200,
     ) -> str:
         """Execute a SQL query against the database. Use `describe` first to understand table columns and data types. Mutations return a preview by default — append --force to the SQL to execute immediately, or call confirm() with the mutation_id."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "query", "server_mode": "hosted" if client else "local"})
         if client:
             return client.query(sql, max_rows)
         with DinobaseDB() as db:
@@ -250,6 +252,8 @@ def _create_server() -> FastMCP:
     @server.tool()
     def list_sources() -> str:
         """List all connected data sources with their tables, row counts, and last sync time."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "list_sources", "server_mode": "hosted" if client else "local"})
         if client:
             return client.list_sources()
         with DinobaseDB() as db:
@@ -262,6 +266,8 @@ def _create_server() -> FastMCP:
         table: Annotated[str, Field(description="Table to describe, e.g. 'salesforce.opportunities' or 'zendesk.tickets'")],
     ) -> str:
         """Describe a table's columns, types, annotations, and sample rows. Annotations include data format notes (e.g. 'amounts in cents') and join key hints."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "describe", "server_mode": "hosted" if client else "local"})
         if client:
             return client.describe(table)
         with DinobaseDB() as db:
@@ -293,6 +299,8 @@ def _create_server() -> FastMCP:
           annotate([{"target": "github.issues.body", "key": "pii", "value": "false"}])
           annotate([{"from_table": "stripe.subscriptions", "from_column": "customer_id", "to_table": "stripe.customers", "to_column": "id", "cardinality": "one_to_many", "description": "Each subscription belongs to one customer"}])
         """
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "annotate", "server_mode": "hosted" if client else "local"})
         eng = _get_engine()
         results = []
         for item in items:
@@ -307,6 +315,8 @@ def _create_server() -> FastMCP:
         mutation_id: Annotated[str, Field(description="The mutation_id from a pending mutation to confirm and execute")],
     ) -> str:
         """Confirm and execute a pending mutation. Mutations (UPDATE/INSERT/DELETE) return a preview first — call this with the mutation_id to actually execute it. Alternatively, use --force in the SQL to skip this step."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "confirm", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
             eng = QueryEngine(db)
@@ -318,6 +328,8 @@ def _create_server() -> FastMCP:
         mutation_ids: Annotated[list[str], Field(description="List of mutation_ids to confirm and execute together")],
     ) -> str:
         """Confirm and execute multiple pending mutations (for multi-statement SQL that spans sources)."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "confirm_batch", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
             eng = QueryEngine(db)
@@ -329,6 +341,8 @@ def _create_server() -> FastMCP:
         mutation_id: Annotated[str, Field(description="The mutation_id of a pending mutation to cancel")],
     ) -> str:
         """Cancel a pending mutation without executing it."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "cancel", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
             eng = QueryEngine(db)
@@ -340,6 +354,8 @@ def _create_server() -> FastMCP:
         source: Annotated[str, Field(description="Name of the source to re-sync (e.g. 'stripe', 'hubspot')")],
     ) -> str:
         """Re-sync a source to get fresh data. Use when data is stale or you need up-to-date results before querying. This call blocks until sync completes (typically 10-60 seconds depending on the source size)."""
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "refresh", "source": source, "server_mode": "hosted" if client else "local"})
         if client:
             return client.refresh(source)
 

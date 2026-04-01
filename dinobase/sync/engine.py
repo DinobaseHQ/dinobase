@@ -50,6 +50,7 @@ class SyncEngine:
                 )
 
         sync_id = self.db.log_sync_start(source_name, source_type)
+        _sync_start = __import__("time").monotonic()
 
         try:
             result = self._run_pipeline(source_name, source_type, credentials)
@@ -80,12 +81,29 @@ class SyncEngine:
                 tables_synced=result.tables_synced,
                 rows_synced=result.rows_synced,
             )
+            from dinobase import telemetry
+            telemetry.capture("sync_completed", {
+                "source_name": source_name,
+                "source_type": source_type,
+                "tables_synced": result.tables_synced,
+                "rows_synced": result.rows_synced,
+                "duration_seconds": round(__import__("time").monotonic() - _sync_start, 2),
+                "storage_mode": "cloud" if self.db.is_cloud else "local",
+            })
             from dinobase.semantic_agent import spawn_semantic_agent
             spawn_semantic_agent(source_name)
             return result
         except Exception as e:
             error_msg = str(e)
             self.db.log_sync_end(sync_id, status="error", error_message=error_msg)
+            from dinobase import telemetry
+            telemetry.capture("sync_failed", {
+                "source_name": source_name,
+                "source_type": source_type,
+                "duration_seconds": round(__import__("time").monotonic() - _sync_start, 2),
+                "storage_mode": "cloud" if self.db.is_cloud else "local",
+                "error_type": type(e).__name__,
+            })
             return SyncResult(
                 source_name=source_name,
                 source_type=source_type,

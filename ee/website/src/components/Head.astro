@@ -1,0 +1,26 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY;
+const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST;
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+{posthogKey && (
+  <script is:inline define:vars={{ posthogKey, posthogHost }}>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.people.toString(20)+" (stub)"},o="capture identify alias on off once debug reset register register_once unregister register_for_session unregister_for_session get_distinct_id set_config people.set people.set_once set_person_properties group resetgroups".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init(posthogKey, {
+      api_host: posthogHost || 'https://us.i.posthog.com',
+      person_profiles: 'identified_only',
+      capture_pageview: false,
+    });
+
+    // Capture pageview on initial load and on Astro View Transitions navigation
+    posthog.capture('$pageview');
+    document.addEventListener('astro:page-load', function() {
+      posthog.capture('$pageview');
+    });
+  </script>
+)}

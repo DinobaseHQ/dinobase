@@ -5,6 +5,9 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
 	integrations: [
 		starlight({
+			components: {
+				Head: './src/components/Head.astro',
+			},
 			title: '🦕 Dinobase',
 			description: 'The agent-first database. Connect your business data. Let AI agents query across all of it.',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/DinobaseHQ/dinobase' }],
