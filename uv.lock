@@ -332,7 +332,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
-    { name = "dlt", extra = ["duckdb"] },
+    { name = "dlt", extra = ["duckdb", "sql-database"] },
     { name = "duckdb" },
     { name = "mcp" },
     { name = "pyyaml" },
@@ -343,22 +343,18 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-postgres = [
-    { name = "dlt", extra = ["sql-database"] },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.0" },
-    { name = "dlt", extras = ["duckdb"], specifier = ">=1.0" },
-    { name = "dlt", extras = ["sql-database"], marker = "extra == 'postgres'" },
+    { name = "dlt", extras = ["duckdb", "sql-database"], specifier = ">=1.0" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
-provides-extras = ["postgres", "dev"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "dlt"

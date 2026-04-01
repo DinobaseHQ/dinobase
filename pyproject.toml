@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "dinobase"
 version = "0.1.0"
-description = "🦕 The agent-native database"
+description = "🦕 The agent-first database"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
