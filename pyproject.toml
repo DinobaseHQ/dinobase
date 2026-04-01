@@ -19,6 +19,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pydantic-ai = [
+    "pydantic-ai>=0.0.20",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -30,7 +33,7 @@ dev = [
 dinobase = "dinobase.cli:cli"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dinobase"]
+packages = ["dinobase"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

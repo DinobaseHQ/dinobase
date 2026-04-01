@@ -8,7 +8,7 @@ Dinobase provides a [Pydantic AI](https://ai.pydantic.dev) toolset that lets you
 ## Install
 
 ```bash
-pip install pydantic-ai dinobase
+pip install "dinobase[pydantic-ai]"
 ```
 
 Set up your data sources:
@@ -27,7 +27,7 @@ See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 
 Use the pre-configured agent:
 
 ```python
-from integrations.pydantic_ai.tools import DinobaseDeps, dinobase_agent
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_agent
 
 result = dinobase_agent.run_sync(
     "Which customers have overdue invoices?",
@@ -42,7 +42,7 @@ Attach the `dinobase_tools` toolset to any Pydantic AI agent:
 
 ```python
 from pydantic_ai import Agent
-from integrations.pydantic_ai.tools import DinobaseDeps, dinobase_tools
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_tools
 
 agent = Agent(
     "anthropic:claude-sonnet-4-6",

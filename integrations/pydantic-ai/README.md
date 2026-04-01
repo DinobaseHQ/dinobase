@@ -5,7 +5,7 @@ Type-safe Pydantic AI toolset that gives your agents access to business data fro
 ## Install
 
 ```bash
-pip install pydantic-ai dinobase
+pip install "dinobase[pydantic-ai]"
 ```
 
 ## Setup
@@ -22,7 +22,7 @@ dinobase sync
 ### Pre-configured agent
 
 ```python
-from integrations.pydantic_ai.tools import DinobaseDeps, dinobase_agent
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_agent
 
 result = dinobase_agent.run_sync(
     "Which customers churned last quarter?",
@@ -35,7 +35,7 @@ print(result.output)
 
 ```python
 from pydantic_ai import Agent
-from integrations.pydantic_ai.tools import DinobaseDeps, dinobase_tools
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_tools
 
 agent = Agent(
     "anthropic:claude-sonnet-4-6",
@@ -52,7 +52,7 @@ print(result.output)
 
 ```python
 from pydantic_ai import Agent, RunContext
-from integrations.pydantic_ai.tools import DinobaseDeps
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps
 
 agent = Agent("anthropic:claude-sonnet-4-6", deps_type=DinobaseDeps)
 

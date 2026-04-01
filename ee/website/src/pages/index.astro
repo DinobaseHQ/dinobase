@@ -58,6 +58,7 @@ const posthogHost =
 
             html {
                 scroll-behavior: smooth;
+                overflow-x: hidden;
             }
 
             body {
@@ -1441,6 +1442,7 @@ const posthogHost =
                 line-height: 1.7;
                 font-family: "DM Mono", monospace;
                 font-size: 0.78rem;
+                overflow-x: auto;
             }
             .slider-result {
                 margin-top: 1rem;
@@ -1574,10 +1576,33 @@ const posthogHost =
                 nav {
                     padding: 1rem 1.25rem;
                 }
+                .nav-right {
+                    gap: 1rem;
+                }
+                .nav-right li:not(:last-child) {
+                    display: none;
+                }
                 footer {
                     padding: 1.5rem 1.25rem;
                     flex-direction: column;
                     align-items: flex-start;
+                }
+                .waitlist-form {
+                    width: 100%;
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+                .waitlist-input {
+                    min-width: 0;
+                    width: 100%;
+                }
+                .btn-primary,
+                .btn-cta {
+                    width: 100%;
+                    justify-content: center;
+                }
+                .cta-section {
+                    padding: 6rem 1.25rem 5rem;
                 }
             }
         </style>
@@ -2353,7 +2378,7 @@ dinobase install cursor</pre>
                             required
                             autocomplete="email"
                             class="waitlist-input"
-                            style="min-width:260px; font-size:1rem;"
+                            style="font-size:1rem;"
                         />
                         <button type="submit" class="btn-cta"
                             >Join waitlist →</button

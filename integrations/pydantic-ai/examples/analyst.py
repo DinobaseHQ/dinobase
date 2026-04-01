@@ -1,7 +1,7 @@
 """Example: Pydantic AI data analyst agent powered by Dinobase.
 
 Run:
-    pip install pydantic-ai dinobase
+    pip install "dinobase[pydantic-ai]"
     export ANTHROPIC_API_KEY=sk-ant-...
     dinobase init && dinobase add stripe --api-key sk_test_... && dinobase sync
     python analyst.py "Which customers have overdue invoices?"
@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import sys
 
-sys.path.insert(0, "..")
-from tools import DinobaseDeps, dinobase_agent
+from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_agent
 
 
 def main():

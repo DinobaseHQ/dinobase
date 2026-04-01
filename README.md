@@ -253,12 +253,12 @@ LangChain toolkit with LangGraph agent support.
   **[Pydantic AI](https://dinobase.ai/docs/integrations/pydantic-ai/)**
 
 ```python
-from integrations.pydantic_ai.tools import dinobase_agent, DinobaseDeps
+from dinobase.integrations.pydantic_ai.tools import dinobase_agent, DinobaseDeps
 
 result = dinobase_agent.run_sync(question, deps=DinobaseDeps())
 ```
 
-Type-safe toolset with dependency injection.
+Type-safe toolset with dependency injection. Install: `pip install "dinobase[pydantic-ai]"`
 
 </td>
 <td valign="top" width="50%">
