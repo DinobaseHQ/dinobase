@@ -64,7 +64,7 @@ def capture(event: str, properties: dict | None = None) -> None:
     if not client:
         return
     try:
-        client.capture(_get_id(), event, properties or {})
+        client.capture(event, distinct_id=_get_id(), properties=properties or {})
     except Exception:
         pass
 
@@ -76,7 +76,7 @@ def identify(user_id: str, email: str | None = None) -> None:
         return
     try:
         props = {"email": email} if email else {}
-        client.identify(user_id, props)
+        client.set(distinct_id=user_id, properties=props)
         global _distinct_id
         _distinct_id = user_id
     except Exception:
