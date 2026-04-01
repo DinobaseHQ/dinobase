@@ -4,13 +4,12 @@
 
 # 🦕 Dinobase
 
-<strong>The agent-native database.</strong>
+<strong>The agent-first database.</strong>
 
 Connect your business data. Let AI agents query across all of it.
 
 [![PyPI - Version](https://img.shields.io/pypi/v/dinobase.svg)](https://pypi.org/project/dinobase)
-[![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT%20Expat-blue.svg)](LICENSE)
 
 [Docs](https://dinobase.ai) · [Getting Started](https://dinobase.ai/getting-started/) · [Sources](https://dinobase.ai/sources/overview/)
 
@@ -20,7 +19,9 @@ Connect your business data. Let AI agents query across all of it.
 
 Ask an AI agent: *"Which customers that churned last quarter had declining usage AND open support tickets?"*
 
-It can't answer. The data lives across your CRM, billing, and support tools — each behind a separate API. You can't `JOIN` across REST endpoints. You can't `GROUP BY` across two SaaS tools. With Dinobase, the agent writes one SQL query and gets the answer.
+It can't answer — or it gets it wrong. Agents calling per-source tools have no way to `JOIN` across APIs, no semantic context to interpret field values, and return paginated JSON that fills context windows before producing an answer.
+
+Dinobase gives agents a unified SQL interface with semantic context across all your sources. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
 
 ## Quick start
 
@@ -52,19 +53,11 @@ dinobase add postgres --connection-string postgresql://...
 **MCP server** — for Claude Desktop, Cursor, any MCP client
 
 ```bash
-dinobase serve
+dinobase install claude-desktop   # Claude Desktop
+dinobase install cursor           # Cursor
 ```
 
-```json
-{
-  "mcpServers": {
-    "dinobase": {
-      "command": "dinobase",
-      "args": ["serve"]
-    }
-  }
-}
-```
+Writes the correct config file for your platform automatically.
 
 </td>
 <td valign="top" width="50%">
@@ -83,7 +76,29 @@ All commands output JSON by default.
 </tr>
 </table>
 
-### 3. Ask your agent a cross-source question
+### 3. (Optional) Enable the semantic layer
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+After every sync, Dinobase automatically runs a Claude agent in the background to annotate your data — table descriptions, column docs, PII flags, and relationship graphs. Agents can then `describe` any table and get full semantic context: what each column means, which fields are PII, and how to join across tables.
+
+```bash
+dinobase describe stripe.subscriptions --pretty
+# stripe.subscriptions (1,420 rows)
+# Description: Active and historical customer subscriptions
+#
+#   customer_id  VARCHAR  -- References customers.id
+#   status       VARCHAR  -- Values: active, past_due, canceled, trialing
+#   ...
+# Related tables:
+#   stripe.customers  (customer_id → id, many_to_one)
+```
+
+Set `DINOBASE_AUTO_ANNOTATE=false` to disable. See [Semantic Layer docs](https://dinobase.ai/guides/annotations/).
+
+### 4. Ask your agent a cross-source question
 
 > "Which companies have closed-won deals over $100K but their subscription is past due?"
 
@@ -114,6 +129,20 @@ The agent writes the SQL, Dinobase executes it across your sources, and the answ
 | **Design** | Figma |
 | **Video** | Mux |
 | **Files** | Parquet, CSV (local or S3 — read at query time, no sync needed) |
+
+## Benchmark
+
+We tested Dinobase SQL against per-source MCP tools across 11 LLMs on 15 RevOps questions (same models, same data, same questions):
+
+| Metric | Dinobase (SQL) | Per-Source MCP |
+|--------|---------------|---------------|
+| **Accuracy** | **91%** | 35% |
+| **Avg latency** | **34s** | 106s |
+| **Cost per correct answer** | **$0.027** | $0.445 |
+
+**56pp more accurate, 3x faster, 16x cheaper per correct answer — across every model tested.**
+
+See [`benchmarks/`](benchmarks/) for full results, per-model breakdown, and methodology.
 
 ## How it works
 
