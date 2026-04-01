@@ -22,21 +22,3 @@ Total cost: $0.59
 | DeepSeek V3.2 | SQL | 4/5 | 5/5 | 3/5 | 615,755 |
 | DeepSeek V3.2 | MCP | 2/5 | 0/5 | 1/5 | 1,616,207 |
 
-## Semantic Trap Analysis
-
-| Trap | Question | Model | Approach | Result |
-|------|----------|-------|----------|--------|
-| amounts_in_cents | I need our MRR number for the investor u | DeepSeek V3.2 | SQL | PASS |
-| amounts_in_cents | I need our MRR number for the investor u | DeepSeek V3.2 | MCP | FAIL |
-| win_rate_formula | The CEO is asking about our win rate — w | DeepSeek V3.2 | SQL | PASS |
-| win_rate_formula | The CEO is asking about our win rate — w | DeepSeek V3.2 | MCP | FAIL |
-| amounts_in_cents | Finance needs to know how much revenue w | DeepSeek V3.2 | SQL | PASS |
-| amounts_in_cents | Finance needs to know how much revenue w | DeepSeek V3.2 | MCP | FAIL |
-| amounts_in_cents | How much MRR are we getting from contact | DeepSeek V3.2 | SQL | PASS |
-| amounts_in_cents | How much MRR are we getting from contact | DeepSeek V3.2 | MCP | FAIL |
-| amounts_in_cents | I am prepping for the QBR — can you show | DeepSeek V3.2 | SQL | PASS |
-| amounts_in_cents | I am prepping for the QBR — can you show | DeepSeek V3.2 | MCP | FAIL |
-| amounts_in_cents | Which industry vertical is bringing in t | DeepSeek V3.2 | SQL | FAIL |
-| amounts_in_cents | Which industry vertical is bringing in t | DeepSeek V3.2 | MCP | FAIL |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | DeepSeek V3.2 | SQL | PASS |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | DeepSeek V3.2 | MCP | PASS |

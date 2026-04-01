@@ -22,21 +22,3 @@ Total cost: $0.75
 | Kimi K2.5 | SQL | 2/5 | 5/5 | 4/5 | 271,846 |
 | Kimi K2.5 | MCP | 3/5 | 2/5 | 2/5 | 1,131,538 |
 
-## Semantic Trap Analysis
-
-| Trap | Question | Model | Approach | Result |
-|------|----------|-------|----------|--------|
-| amounts_in_cents | I need our MRR number for the investor u | Kimi K2.5 | SQL | PASS |
-| amounts_in_cents | I need our MRR number for the investor u | Kimi K2.5 | MCP | FAIL |
-| win_rate_formula | The CEO is asking about our win rate — w | Kimi K2.5 | SQL | PASS |
-| win_rate_formula | The CEO is asking about our win rate — w | Kimi K2.5 | MCP | FAIL |
-| amounts_in_cents | Finance needs to know how much revenue w | Kimi K2.5 | SQL | PASS |
-| amounts_in_cents | Finance needs to know how much revenue w | Kimi K2.5 | MCP | FAIL |
-| amounts_in_cents | How much MRR are we getting from contact | Kimi K2.5 | SQL | PASS |
-| amounts_in_cents | How much MRR are we getting from contact | Kimi K2.5 | MCP | FAIL |
-| amounts_in_cents | I am prepping for the QBR — can you show | Kimi K2.5 | SQL | PASS |
-| amounts_in_cents | I am prepping for the QBR — can you show | Kimi K2.5 | MCP | PASS |
-| amounts_in_cents | Which industry vertical is bringing in t | Kimi K2.5 | SQL | PASS |
-| amounts_in_cents | Which industry vertical is bringing in t | Kimi K2.5 | MCP | FAIL |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | Kimi K2.5 | SQL | FAIL |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | Kimi K2.5 | MCP | PASS |

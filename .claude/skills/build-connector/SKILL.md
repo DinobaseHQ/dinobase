@@ -6,7 +6,7 @@ argument-hint: <api_name>
 
 # Build a Dinobase Connector
 
-You are building a YAML connector config for Dinobase — an agent-native database that syncs data from 100+ sources into DuckDB.
+You are building a YAML connector config for Dinobase — an agent-first database that syncs data from 100+ sources into DuckDB.
 
 **When to write a YAML connector vs use the registry:**
 - If dlt has a verified source for this API (check `sources/` package), just add a registry entry in `src/dinobase/sync/registry.py`. No YAML needed.

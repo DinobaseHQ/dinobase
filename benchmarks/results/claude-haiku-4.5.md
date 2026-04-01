@@ -22,21 +22,3 @@ Total cost: $1.03
 | Claude Haiku 4.5 | SQL | 4/5 | 4/5 | 4/5 | 241,282 |
 | Claude Haiku 4.5 | MCP | 2/5 | 1/5 | 2/5 | 700,674 |
 
-## Semantic Trap Analysis
-
-| Trap | Question | Model | Approach | Result |
-|------|----------|-------|----------|--------|
-| amounts_in_cents | I need our MRR number for the investor u | Claude Haiku 4.5 | SQL | PASS |
-| amounts_in_cents | I need our MRR number for the investor u | Claude Haiku 4.5 | MCP | FAIL |
-| win_rate_formula | The CEO is asking about our win rate — w | Claude Haiku 4.5 | SQL | FAIL |
-| win_rate_formula | The CEO is asking about our win rate — w | Claude Haiku 4.5 | MCP | FAIL |
-| amounts_in_cents | Finance needs to know how much revenue w | Claude Haiku 4.5 | SQL | PASS |
-| amounts_in_cents | Finance needs to know how much revenue w | Claude Haiku 4.5 | MCP | FAIL |
-| amounts_in_cents | How much MRR are we getting from contact | Claude Haiku 4.5 | SQL | PASS |
-| amounts_in_cents | How much MRR are we getting from contact | Claude Haiku 4.5 | MCP | FAIL |
-| amounts_in_cents | I am prepping for the QBR — can you show | Claude Haiku 4.5 | SQL | PASS |
-| amounts_in_cents | I am prepping for the QBR — can you show | Claude Haiku 4.5 | MCP | PASS |
-| amounts_in_cents | Which industry vertical is bringing in t | Claude Haiku 4.5 | SQL | FAIL |
-| amounts_in_cents | Which industry vertical is bringing in t | Claude Haiku 4.5 | MCP | PASS |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | Claude Haiku 4.5 | SQL | PASS |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | Claude Haiku 4.5 | MCP | FAIL |

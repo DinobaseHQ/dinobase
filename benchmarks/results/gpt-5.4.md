@@ -22,21 +22,3 @@ Total cost: $2.14
 | GPT-5.4 | SQL | 5/5 | 4/5 | 4/5 | 137,283 |
 | GPT-5.4 | MCP | 2/5 | 1/5 | 3/5 | 634,511 |
 
-## Semantic Trap Analysis
-
-| Trap | Question | Model | Approach | Result |
-|------|----------|-------|----------|--------|
-| amounts_in_cents | I need our MRR number for the investor u | GPT-5.4 | SQL | FAIL |
-| amounts_in_cents | I need our MRR number for the investor u | GPT-5.4 | MCP | FAIL |
-| win_rate_formula | The CEO is asking about our win rate — w | GPT-5.4 | SQL | PASS |
-| win_rate_formula | The CEO is asking about our win rate — w | GPT-5.4 | MCP | FAIL |
-| amounts_in_cents | Finance needs to know how much revenue w | GPT-5.4 | SQL | PASS |
-| amounts_in_cents | Finance needs to know how much revenue w | GPT-5.4 | MCP | FAIL |
-| amounts_in_cents | How much MRR are we getting from contact | GPT-5.4 | SQL | FAIL |
-| amounts_in_cents | How much MRR are we getting from contact | GPT-5.4 | MCP | FAIL |
-| amounts_in_cents | I am prepping for the QBR — can you show | GPT-5.4 | SQL | PASS |
-| amounts_in_cents | I am prepping for the QBR — can you show | GPT-5.4 | MCP | PASS |
-| amounts_in_cents | Which industry vertical is bringing in t | GPT-5.4 | SQL | PASS |
-| amounts_in_cents | Which industry vertical is bringing in t | GPT-5.4 | MCP | PASS |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | GPT-5.4 | SQL | PASS |
-| amounts_in_cents | Pull me a report of our top 5 highest-sp | GPT-5.4 | MCP | PASS |
