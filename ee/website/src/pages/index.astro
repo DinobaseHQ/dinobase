@@ -1,7 +1,5 @@
 ---
 const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
-const posthogHost =
-    import.meta.env.PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 ---
 
 <!doctype html>
@@ -1750,7 +1748,7 @@ const posthogHost =
                 }
             }
         </style>
-        <script define:vars={{ posthogKey, posthogHost }}>
+        <script define:vars={{ posthogKey }}>
             !(function (t, e) {
                 var o, n, p, r;
                 e.__SV ||
@@ -1810,7 +1808,9 @@ const posthogHost =
             })(document, window.posthog || []);
             if (posthogKey) {
                 posthog.init(posthogKey, {
-                    api_host: posthogHost,
+                    api_host: "https://f.dinobase.ai",
+                    ui_host: "https://us.posthog.com",
+                    defaults: "2026-01-30",
                     person_profiles: "identified_only",
                     loaded: function (ph) {
                         ph.onFeatureFlags(function () {
