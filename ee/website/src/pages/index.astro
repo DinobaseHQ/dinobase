@@ -1235,14 +1235,17 @@ const posthogHost =
                 flex-direction: column;
                 align-items: stretch;
             }
+            .cta-dino-wrap {
+                display: block;
+                line-height: 0;
+                text-align: center;
+            }
             .cta-dino {
                 height: 300px;
                 width: auto;
-                order: 1;
-                align-self: center;
                 pointer-events: none;
                 user-select: none;
-                display: block;
+                display: inline-block;
             }
             .cta-content {
                 order: 0;
@@ -2533,11 +2536,6 @@ dinobase install cursor</pre>
         <div class="cta-section reveal" id="cta">
             <h2>ok. you've read enough.</h2>
             <div class="cta-box">
-                <picture>
-                    <source type="image/avif" srcset="/footer.avif" />
-                    <source type="image/webp" srcset="/footer.webp" />
-                    <img src="/footer.png" alt="" class="cta-dino" width="677" height="369" loading="lazy" decoding="async" />
-                </picture>
                 <div class="container cta-content">
                     <p class="cta-sub">
                         Stop giving your agents a blindfold. Give them a
@@ -2589,6 +2587,11 @@ dinobase install cursor</pre>
                     </p>
                 </div>
             </div>
+            <picture class="cta-dino-wrap">
+                <source type="image/avif" srcset="/footer.avif" />
+                <source type="image/webp" srcset="/footer.webp" />
+                <img src="/footer.png" alt="" class="cta-dino" width="677" height="369" loading="lazy" decoding="async" />
+            </picture>
         </div>
 
         <!-- FOOTER -->
