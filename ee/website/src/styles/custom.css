@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap');
+
 :root {
 	--sl-color-accent-low: #1a3a1a;
 	--sl-color-accent: #2d8a2d;
@@ -24,6 +26,13 @@
 	--sl-color-gray-5: #c0c2c7;
 	--sl-color-gray-6: #eceef2;
 	--sl-color-black: #ffffff;
+}
+
+/* Docs site title — match website nav logo font */
+.site-title {
+	font-family: 'Atkinson Hyperlegible', sans-serif;
+	font-weight: 700;
+	letter-spacing: -0.01em;
 }
 
 /* Hero section polish */

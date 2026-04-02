@@ -8,7 +8,8 @@ export default defineConfig({
 			components: {
 				Head: './src/components/Head.astro',
 			},
-			title: '🦕 Dinobase',
+			title: 'dinobase',
+			logo: { src: './src/assets/logo.svg', alt: '' },
 			description: 'The agent-first database. Connect your business data. Let AI agents query across all of it.',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/DinobaseHQ/dinobase' }],
 			customCss: ['./src/styles/custom.css'],

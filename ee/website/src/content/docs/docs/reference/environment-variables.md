@@ -11,6 +11,7 @@ description: All environment variables recognized by Dinobase.
 | `DINOBASE_STORAGE_URL` | *(none)* | Cloud storage URL for data (e.g., `s3://bucket/dinobase/`). Enables cloud mode. |
 | `ANTHROPIC_API_KEY` | *(none)* | Anthropic API key. When set, Dinobase runs a Claude agent after each sync to build the semantic layer (table descriptions, PII flags, relationship docs). |
 | `DINOBASE_AUTO_ANNOTATE` | `true` | Set to `false` to disable automatic semantic layer building after sync. |
+| `DINOBASE_TELEMETRY` | `true` | Set to `false` to disable anonymous usage telemetry. |
 
 ## Cloud storage credentials
 

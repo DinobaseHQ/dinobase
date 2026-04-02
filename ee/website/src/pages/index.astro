@@ -201,10 +201,17 @@ const posthogHost =
                 position: absolute;
                 inset: 0;
                 z-index: 0;
-                background-image: image-set(url("/hero.webp") type("image/webp"), url("/hero.png") type("image/png"));
-                background-size: cover;
-                background-position: center;
-                opacity: 0.35;
+                overflow: hidden;
+            }
+            .hero-bg picture {
+                position: absolute;
+                inset: 0;
+            }
+            .hero-bg img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                object-position: center;
             }
             .hero-bg::after {
                 content: "";
@@ -212,8 +219,8 @@ const posthogHost =
                 inset: 0;
                 background: linear-gradient(
                     to bottom,
-                    rgba(11, 15, 9, 0.3) 0%,
-                    rgba(11, 15, 9, 0.6) 60%,
+                    rgba(11, 15, 9, 0.2) 0%,
+                    rgba(11, 15, 9, 0.3) 80%,
                     rgba(11, 15, 9, 1) 100%
                 );
             }
@@ -1100,8 +1107,16 @@ const posthogHost =
                 pointer-events: none;
                 z-index: 0;
                 background:
-                    radial-gradient(ellipse 55% 45% at 88% 12%, rgba(122,191,122,0.055), transparent 70%),
-                    radial-gradient(ellipse 42% 55% at 8% 88%, rgba(122,191,122,0.035), transparent 70%);
+                    radial-gradient(
+                        ellipse 55% 45% at 88% 12%,
+                        rgba(122, 191, 122, 0.055),
+                        transparent 70%
+                    ),
+                    radial-gradient(
+                        ellipse 42% 55% at 8% 88%,
+                        rgba(122, 191, 122, 0.035),
+                        transparent 70%
+                    );
             }
             #semantic::before {
                 content: "";
@@ -1110,8 +1125,16 @@ const posthogHost =
                 pointer-events: none;
                 z-index: 0;
                 background:
-                    radial-gradient(ellipse 60% 42% at 5% 50%, rgba(122,191,122,0.045), transparent 70%),
-                    radial-gradient(ellipse 48% 35% at 92% 78%, rgba(196,146,90,0.03), transparent 70%);
+                    radial-gradient(
+                        ellipse 60% 42% at 5% 50%,
+                        rgba(122, 191, 122, 0.045),
+                        transparent 70%
+                    ),
+                    radial-gradient(
+                        ellipse 48% 35% at 92% 78%,
+                        rgba(196, 146, 90, 0.03),
+                        transparent 70%
+                    );
             }
             #numbers::before {
                 content: "";
@@ -1120,8 +1143,16 @@ const posthogHost =
                 pointer-events: none;
                 z-index: 0;
                 background:
-                    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(122,191,122,0.05), transparent 70%),
-                    radial-gradient(ellipse 42% 45% at 90% 8%, rgba(122,191,122,0.03), transparent 70%);
+                    radial-gradient(
+                        ellipse 50% 60% at 50% 100%,
+                        rgba(122, 191, 122, 0.05),
+                        transparent 70%
+                    ),
+                    radial-gradient(
+                        ellipse 42% 45% at 90% 8%,
+                        rgba(122, 191, 122, 0.03),
+                        transparent 70%
+                    );
             }
             #install::before {
                 content: "";
@@ -1130,8 +1161,16 @@ const posthogHost =
                 pointer-events: none;
                 z-index: 0;
                 background:
-                    radial-gradient(ellipse 52% 45% at 12% 15%, rgba(122,191,122,0.05), transparent 70%),
-                    radial-gradient(ellipse 40% 52% at 85% 85%, rgba(196,146,90,0.025), transparent 70%);
+                    radial-gradient(
+                        ellipse 52% 45% at 12% 15%,
+                        rgba(122, 191, 122, 0.05),
+                        transparent 70%
+                    ),
+                    radial-gradient(
+                        ellipse 40% 52% at 85% 85%,
+                        rgba(196, 146, 90, 0.025),
+                        transparent 70%
+                    );
             }
 
             /* Turbulence noise layer - organic green-tinted shapes, unique seed per section */
@@ -1178,10 +1217,37 @@ const posthogHost =
 
             /* ── CTA ── */
             .cta-section {
-                text-align: center;
-                padding: 10rem 2.5rem 7rem;
+                padding: 0;
                 position: relative;
-                overflow: hidden;
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .cta-section h2 {
+                font-size: clamp(2.5rem, 6vw, 5.5rem);
+                text-align: center;
+                padding: 6rem 2.5rem 0rem;
+                margin-bottom: 0;
+            }
+            .cta-box {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .cta-dino {
+                height: 300px;
+                width: auto;
+                order: 1;
+                align-self: center;
+                pointer-events: none;
+                user-select: none;
+                display: block;
+            }
+            .cta-content {
+                order: 0;
+                text-align: center;
+                padding: 0 2.5rem 3rem;
             }
             .cta-section::before {
                 content: "";
@@ -1208,10 +1274,7 @@ const posthogHost =
                 position: relative;
                 z-index: 1;
             }
-            .cta-section h2 {
-                font-size: clamp(2.5rem, 6vw, 5.5rem);
-                margin-bottom: 1.25rem;
-            }
+
             .cta-section .cta-sub {
                 color: var(--muted);
                 font-size: 1.125rem;
@@ -1268,19 +1331,21 @@ const posthogHost =
                 justify-content: center;
             }
             .waitlist-input {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid var(--border-light);
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.25);
                 border-radius: 999px;
                 padding: 0.875rem 1.5rem;
                 font-size: 1rem;
                 color: var(--text);
                 min-width: 240px;
                 outline: none;
-                transition: border-color 0.2s;
+                transition:
+                    border-color 0.2s,
+                    background 0.2s;
                 font-family: "Atkinson Hyperlegible", sans-serif;
             }
             .waitlist-input::placeholder {
-                color: var(--dimmed);
+                color: var(--muted);
             }
             .waitlist-input:focus {
                 border-color: var(--green);
@@ -1349,7 +1414,6 @@ const posthogHost =
                 font-size: 0.6rem;
                 color: rgba(82, 82, 91, 0.3);
             }
-
             /* ── BEFORE/AFTER SLIDER ── */
             .slider-wrap {
                 position: relative;
@@ -1598,6 +1662,18 @@ const posthogHost =
             }
 
             @media (max-width: 640px) {
+                .cta-section h2 {
+                    padding: 4rem 1.25rem 2rem;
+                }
+                .cta-dino {
+                    height: 220px;
+                }
+                .cta-content {
+                    padding: 0 1.25rem 3rem;
+                }
+            }
+
+            @media (max-width: 640px) {
                 .section-wrap {
                     padding: 5rem 1.25rem;
                 }
@@ -1631,9 +1707,6 @@ const posthogHost =
                 .btn-cta {
                     width: 100%;
                     justify-content: center;
-                }
-                .cta-section {
-                    padding: 6rem 1.25rem 5rem;
                 }
                 .why-col {
                     padding: 1.5rem;
@@ -1770,7 +1843,28 @@ const posthogHost =
 
         <!-- HERO -->
         <section class="hero" id="hero">
-            <div class="hero-bg"></div>
+            <div class="hero-bg">
+                <picture>
+                    <source
+                        type="image/avif"
+                        srcset="/hero-640w.avif 640w, /hero-1280w.avif 1280w, /hero-1920w.avif 1920w, /hero-2560w.avif 2560w"
+                        sizes="100vw"
+                    />
+                    <source
+                        type="image/webp"
+                        srcset="/hero-640w.webp 640w, /hero-1280w.webp 1280w, /hero-1920w.webp 1920w, /hero-2560w.webp 2560w"
+                        sizes="100vw"
+                    />
+                    <img
+                        src="/hero-1920w.webp"
+                        alt=""
+                        width="1920"
+                        height="1048"
+                        fetchpriority="high"
+                        decoding="async"
+                    />
+                </picture>
+            </div>
             <div class="hero-content">
                 <p class="hero-eyebrow">The agent-first database</p>
                 <h1>
@@ -1827,7 +1921,9 @@ const posthogHost =
                     <p class="self-hosted-note" style="width:100%">
                         <a href="/docs">Read the docs</a>
                         &nbsp;·&nbsp;
-                        <a href="https://github.com/DinobaseHQ/dinobase">Self-host on GitHub</a>
+                        <a href="https://github.com/DinobaseHQ/dinobase"
+                            >Self-host on GitHub</a
+                        >
                     </p>
                 </div>
                 <!-- Terminal strip -->
@@ -2435,48 +2531,63 @@ dinobase install cursor</pre>
 
         <!-- FINAL CTA -->
         <div class="cta-section reveal" id="cta">
-            <div class="container">
-                <h2>ok. you've read enough.</h2>
-                <p class="cta-sub">
-                    Stop giving your agents a blindfold. Give them a database.
-                </p>
-                <div class="cta-actions">
-                    <form id="footer-waitlist-form" class="waitlist-form">
-                        <input
-                            type="email"
-                            id="footer-email"
-                            name="email"
-                            placeholder="your@email.com"
-                            required
-                            autocomplete="email"
-                            class="waitlist-input"
-                            style="font-size:1rem;"
-                        />
-                        <button type="submit" class="btn-cta"
-                            ><span class="btn-label"><span>Join waitlist</span><span>Join waitlist</span></span></button
+            <h2>ok. you've read enough.</h2>
+            <div class="cta-box">
+                <picture>
+                    <source type="image/avif" srcset="/footer.avif" />
+                    <source type="image/webp" srcset="/footer.webp" />
+                    <img src="/footer.png" alt="" class="cta-dino" width="677" height="369" loading="lazy" decoding="async" />
+                </picture>
+                <div class="container cta-content">
+                    <p class="cta-sub">
+                        Stop giving your agents a blindfold. Give them a
+                        database.
+                    </p>
+                    <div class="cta-actions">
+                        <form id="footer-waitlist-form" class="waitlist-form">
+                            <input
+                                type="email"
+                                id="footer-email"
+                                name="email"
+                                placeholder="your@email.com"
+                                required
+                                autocomplete="email"
+                                class="waitlist-input"
+                                style="font-size:1rem;"
+                            />
+                            <button type="submit" class="btn-cta"
+                                ><span class="btn-label"
+                                    ><span>Join waitlist</span><span
+                                        >Join waitlist</span
+                                    ></span
+                                ></button
+                            >
+                        </form>
+                        <div
+                            id="footer-success"
+                            class="waitlist-success"
+                            style="display:none; font-size:1.125rem;"
                         >
-                    </form>
-                    <div
-                        id="footer-success"
-                        class="waitlist-success"
-                        style="display:none; font-size:1.125rem;"
-                    >
-                        ✓ You're on the list.
-                    </div>
-                    <div
-                        id="footer-early-access"
-                        style="display:none; flex-direction:column; align-items:center; gap:1rem;"
-                    >
-                        <a href="https://app.dinobase.ai/login" class="btn-cta"
-                            >Start building →</a
+                            ✓ You're on the list.
+                        </div>
+                        <div
+                            id="footer-early-access"
+                            style="display:none; flex-direction:column; align-items:center; gap:1rem;"
                         >
+                            <a
+                                href="https://app.dinobase.ai/login"
+                                class="btn-cta">Start building →</a
+                            >
+                        </div>
                     </div>
+                    <p class="self-hosted-note" style="margin-top:2rem">
+                        <a href="/docs">Read the docs</a>
+                        &nbsp;·&nbsp;
+                        <a href="https://github.com/DinobaseHQ/dinobase"
+                            >Self-host on GitHub</a
+                        >
+                    </p>
                 </div>
-                <p class="self-hosted-note" style="margin-top:2rem">
-                    <a href="/docs">Read the docs</a>
-                    &nbsp;·&nbsp;
-                    <a href="https://github.com/DinobaseHQ/dinobase">Self-host on GitHub</a>
-                </p>
             </div>
         </div>
 
@@ -2689,12 +2800,18 @@ dinobase install cursor</pre>
 
                 function runStep(idx) {
                     if (idx >= SEQUENCE.length) {
+                        cursorLine.style.display = "none";
                         setTimeout(() => {
                             termBody
                                 .querySelectorAll(".tline,.tout")
                                 .forEach((n) => n !== cursorLine && n.remove());
+                            cursorLine.style.display = "";
                             termDisplay.innerHTML =
                                 '<span class="tcursor"></span>';
+                            const termPrompt =
+                                document.getElementById("terminal-prompt");
+                            termPrompt.textContent = "$";
+                            termPrompt.className = "tprompt";
                             runStep(0);
                         }, 3500);
                         return;
@@ -2884,13 +3001,11 @@ dinobase install cursor</pre>
                     const hf = document.getElementById("hero-waitlist-form");
                     if (hf && hf.style.display !== "none") {
                         e.preventDefault();
+                        const inp = document.getElementById("hero-email");
+                        if (inp) inp.focus();
                         document
                             .getElementById("hero")
                             .scrollIntoView({ behavior: "smooth" });
-                        setTimeout(() => {
-                            const inp = document.getElementById("hero-email");
-                            if (inp) inp.focus();
-                        }, 500);
                     }
                 }
                 const nc = document.getElementById("nav-cta");
@@ -2973,21 +3088,26 @@ dinobase install cursor</pre>
 
                     // Scroll-triggered intro animation: 60% → 35%
                     let sliderAnimated = false;
-                    const sliderObs = new IntersectionObserver((entries) => {
-                        if (sliderAnimated || !entries[0].isIntersecting) return;
-                        sliderAnimated = true;
-                        sliderObs.disconnect();
-                        setTimeout(() => {
-                            afterPanel.style.transition = "clip-path 1.3s ease, left 1.3s ease";
-                            divider.style.transition = "left 1.3s ease";
-                            afterPanel.style.clipPath = "inset(0 0 0 35%)";
-                            divider.style.left = "35%";
+                    const sliderObs = new IntersectionObserver(
+                        (entries) => {
+                            if (sliderAnimated || !entries[0].isIntersecting)
+                                return;
+                            sliderAnimated = true;
+                            sliderObs.disconnect();
                             setTimeout(() => {
-                                afterPanel.style.transition = "";
-                                divider.style.transition = "";
-                            }, 1400);
-                        }, 500);
-                    }, { threshold: 0.4 });
+                                afterPanel.style.transition =
+                                    "clip-path 1.3s ease, left 1.3s ease";
+                                divider.style.transition = "left 1.3s ease";
+                                afterPanel.style.clipPath = "inset(0 0 0 35%)";
+                                divider.style.left = "35%";
+                                setTimeout(() => {
+                                    afterPanel.style.transition = "";
+                                    divider.style.transition = "";
+                                }, 1400);
+                            }, 500);
+                        },
+                        { threshold: 0.4 },
+                    );
                     sliderObs.observe(sliderWrap);
                 }
                 window.addEventListener("posthog:ready", applyEarlyAccess);
