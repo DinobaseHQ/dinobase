@@ -124,3 +124,25 @@ def test_query_returns_dicts(db):
     assert len(rows) == 2
     assert rows[0] == {"x": 1, "y": "a"}
     assert rows[1] == {"x": 2, "y": "b"}
+
+
+def test_log_sync_start_uses_sequence(db):
+    """log_sync_start must use the sequence, not MAX(id)+1."""
+    id1 = db.log_sync_start("source_a", "stripe")
+    id2 = db.log_sync_start("source_b", "stripe")
+    id3 = db.log_sync_start("source_a", "stripe")
+
+    # IDs should be unique and monotonically increasing
+    assert id1 != id2 != id3
+    assert id2 > id1
+    assert id3 > id2
+
+
+def test_log_sync_start_no_collision_after_delete(db):
+    """Sequence must not reset to 1 if rows are deleted (avoids PK collision)."""
+    id1 = db.log_sync_start("source_a", "stripe")
+    db.meta_conn.execute(f"DELETE FROM {META_SCHEMA}.sync_log WHERE id = {id1}")
+
+    id2 = db.log_sync_start("source_b", "stripe")
+    # If MAX(id)+1 were used, id2 would be 1 (collision). With sequence it's 2.
+    assert id2 > id1

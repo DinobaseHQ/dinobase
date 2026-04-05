@@ -666,7 +666,7 @@ for _name, _desc, _pip, _help in [
     ("sqlite",      "SQLite database",                 None,                     "/path/to/database.db"),
     ("snowflake",   "Snowflake data warehouse",        "snowflake-sqlalchemy",   "snowflake://user:password@account/database/schema?warehouse=WAREHOUSE"),
     ("bigquery",    "Google BigQuery",                 "sqlalchemy-bigquery",    "bigquery://project/dataset"),
-    ("redshift",    "Amazon Redshift",                 "sqlalchemy-redshift",    "postgresql://user:password@cluster.region.redshift.amazonaws.com:5439/dbname"),
+    ("redshift",    "Amazon Redshift",                 None,                     "postgresql://user:password@cluster.region.redshift.amazonaws.com:5439/dbname"),
     ("clickhouse",  "ClickHouse",                      "clickhouse-sqlalchemy",  "clickhouse://user:password@host:8123/dbname — port 8123 is HTTP (default). Port 9000 is the native TCP port; use clickhouse+native://host:9000/dbname for that."),
     ("cockroachdb", "CockroachDB (Postgres-compatible)", None,                   "cockroachdb://user:password@host:26257/dbname"),
     ("databricks",  "Databricks SQL warehouse",        "databricks-sql-connector", "databricks+connector://token:ACCESS_TOKEN@HOST/PATH?http_path=/sql/1.0/warehouses/ID"),

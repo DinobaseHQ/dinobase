@@ -182,5 +182,5 @@ class CloudStorage:
         )
         try:
             self.fs.rm(lock_path)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [lock] failed to release lock for {source_name}: {e}", file=sys.stderr)

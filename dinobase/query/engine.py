@@ -53,16 +53,37 @@ class QueryEngine:
                     })
                     return live_result
 
-        try:
-            columns, rows = self.db.query_raw(sql)
-        except Exception as e:
+        _exec_error: Exception | None = None
+        for _attempt in range(2):
+            try:
+                conn_result = self.db.conn.execute(sql)
+                columns = [desc[0] for desc in conn_result.description]
+                data_types = {desc[0]: str(desc[1]) for desc in conn_result.description}
+                rows = conn_result.fetchall()
+                _exec_error = None
+                break
+            except Exception as e:
+                _exec_error = e
+                # On first attempt, try on-demand view registration for cloud mode
+                if _attempt == 0 and self.db.is_cloud:
+                    _err_lower = str(e).lower()
+                    if "does not exist" in _err_lower or "catalog error" in _err_lower:
+                        _m = re.search(
+                            r'\bFROM\b\s+"?(\w+)"?\s*\.\s*"?(\w+)"?',
+                            sql, re.IGNORECASE,
+                        )
+                        if _m and self.db.register_view_on_demand(_m.group(1), _m.group(2)):
+                            continue  # retry with view now registered
+                break  # non-retryable or retry exhausted
+
+        if _exec_error is not None:
             from dinobase import telemetry
             telemetry.capture("query_failed", {
                 "query_type": first_word or "SELECT",
                 "duration_ms": round((_time.monotonic() - _start) * 1000),
-                "error_type": type(e).__name__,
+                "error_type": type(_exec_error).__name__,
             })
-            return {"error": str(e)}
+            return {"error": str(_exec_error)}
 
         total_rows = len(rows)
         truncated = total_rows > max_rows
@@ -79,6 +100,7 @@ class QueryEngine:
         result: dict[str, Any] = {
             "columns": columns,
             "rows": result_rows,
+            "data_types": data_types,
             "row_count": len(result_rows),
             "total_rows": total_rows,
             "_freshness": "synced",
@@ -105,6 +127,9 @@ class QueryEngine:
 
     def list_sources(self) -> dict[str, Any]:
         """List all connected data sources with their tables and stats."""
+        if self.db.is_cloud:
+            return self._list_sources_cloud()
+
         schemas = self.db.get_schemas()
         sources: list[dict[str, Any]] = []
 
@@ -124,7 +149,6 @@ class QueryEngine:
                 total_rows += count
                 table_info.append({"name": table, "rows": count})
 
-            # Get freshness info
             freshness = self.get_freshness(schema)
 
             source_entry: dict[str, Any] = {
@@ -135,12 +159,66 @@ class QueryEngine:
                 "last_sync": freshness["last_sync"],
             }
 
-            # Include freshness fields when threshold is set
             if freshness["threshold"] is not None:
                 source_entry["age"] = freshness["age_human"]
                 source_entry["freshness_threshold"] = freshness["threshold_human"]
                 source_entry["is_stale"] = freshness["is_stale"]
 
+            sources.append(source_entry)
+
+        return {"sources": sources}
+
+    def _list_sources_cloud(self) -> dict[str, Any]:
+        """List sources in cloud mode using the parquet_paths index + metadata cache.
+
+        Avoids registering all views upfront (which triggers S3 per-table on
+        CREATE VIEW). Row counts come from the _dinobase.tables metadata cache
+        written during the last sync.
+        """
+        self.db._ensure_parquet_paths_loaded()
+        parquet_paths = self.db._parquet_paths or {}
+
+        if not parquet_paths:
+            return {"sources": []}
+
+        sources: list[dict[str, Any]] = []
+        for source_name, table_paths in parquet_paths.items():
+            user_tables = sorted(
+                t for t in table_paths
+                if not t.startswith("_dlt_") and not t.startswith("_live_")
+            )
+            if not user_tables:
+                continue
+
+            table_info = []
+            total_rows = 0
+            for table in user_tables:
+                count = 0
+                try:
+                    row = self.db.meta_conn.execute(
+                        f"SELECT row_count FROM {META_SCHEMA}.tables "
+                        "WHERE schema_name = ? AND table_name = ?",
+                        [source_name, table],
+                    ).fetchone()
+                    if row:
+                        count = row[0] or 0
+                except Exception:
+                    pass
+                total_rows += count
+                table_info.append({"name": table, "rows": count})
+
+            freshness = self.get_freshness(source_name)
+            source_entry: dict[str, Any] = {
+                "name": source_name,
+                "tables": table_info,
+                "table_count": len(user_tables),
+                "total_rows": total_rows,
+                "last_sync": freshness["last_sync"],
+            }
+            if freshness["threshold"] is not None:
+                source_entry["age"] = freshness["age_human"]
+                source_entry["freshness_threshold"] = freshness["threshold_human"]
+                source_entry["is_stale"] = freshness["is_stale"]
             sources.append(source_entry)
 
         return {"sources": sources}
@@ -158,6 +236,10 @@ class QueryEngine:
                 return {"error": f"Table '{table}' not found in any schema"}
         else:
             return {"error": f"Invalid table reference: '{table_ref}'. Use 'schema.table' format."}
+
+        # In cloud mode, register the view on demand before querying information_schema
+        if self.db.is_cloud:
+            self.db.register_view_on_demand(schema, table)
 
         columns = self.db.get_columns(schema, table)
         if not columns:
@@ -250,7 +332,7 @@ class QueryEngine:
         """
         from dinobase.config import get_freshness_threshold
 
-        result = self.db.conn.execute(
+        result = self.db.meta_conn.execute(
             f"SELECT MAX(finished_at) as last_sync FROM {META_SCHEMA}.sync_log "
             "WHERE source_name = ? AND status = 'success'",
             [source_name],
@@ -333,10 +415,12 @@ class QueryEngine:
 
         columns = list(data.keys())
         row = {col: _serialize(val) for col, val in data.items()}
+        live_data_types = {col: _infer_type(data[col]) for col in columns}
 
         return {
             "columns": columns,
             "rows": [row],
+            "data_types": live_data_types,
             "row_count": 1,
             "total_rows": 1,
             "_freshness": "live",
@@ -447,6 +531,17 @@ def _human_duration(seconds: int) -> str:
     if m:
         return f"{h}h {m}m"
     return f"{h}h"
+
+
+def _infer_type(val: Any) -> str:
+    """Infer a DuckDB-style type string from a Python value."""
+    if isinstance(val, bool):
+        return "BOOLEAN"
+    if isinstance(val, int):
+        return "BIGINT"
+    if isinstance(val, float):
+        return "DOUBLE"
+    return "VARCHAR"
 
 
 def _serialize(val: Any) -> Any:

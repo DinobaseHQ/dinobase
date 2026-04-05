@@ -116,49 +116,46 @@ def extract_postgres_metadata(
         return {}
 
     annotations: dict[str, dict[str, dict[str, str]]] = {}
+    for table in tables:
+        annotations[table] = {}
     try:
         with engine.connect() as conn:
-            for table in tables:
-                annotations[table] = {}
+            # Bulk query for all column comments (one query instead of one per table)
+            result = conn.execute(sqlalchemy.text(
+                "SELECT c.table_name, c.column_name, pgd.description AS comment "
+                "FROM information_schema.columns c "
+                "LEFT JOIN pg_catalog.pg_statio_all_tables st "
+                "  ON c.table_schema = st.schemaname AND c.table_name = st.relname "
+                "LEFT JOIN pg_catalog.pg_description pgd "
+                "  ON pgd.objoid = st.relid AND pgd.objsubid = c.ordinal_position "
+                "WHERE c.table_schema = :schema AND c.table_name = ANY(:tables)"
+            ), {"schema": schema, "tables": tables})
+            for row in result:
+                if row.comment:
+                    annotations.setdefault(row.table_name, {})[row.column_name] = {
+                        "description": row.comment
+                    }
 
-                # Get column comments
-                result = conn.execute(sqlalchemy.text(
-                    "SELECT c.column_name, pgd.description AS comment "
-                    "FROM information_schema.columns c "
-                    "LEFT JOIN pg_catalog.pg_statio_all_tables st "
-                    "  ON c.table_schema = st.schemaname AND c.table_name = st.relname "
-                    "LEFT JOIN pg_catalog.pg_description pgd "
-                    "  ON pgd.objoid = st.relid AND pgd.objsubid = c.ordinal_position "
-                    "WHERE c.table_schema = :schema AND c.table_name = :table"
-                ), {"schema": schema, "table": table})
-
-                for row in result:
-                    if row.comment:
-                        annotations[table][row.column_name] = {
-                            "description": row.comment
-                        }
-
-                # Get foreign key info
-                result = conn.execute(sqlalchemy.text(
-                    "SELECT kcu.column_name, "
-                    "  ccu.table_name AS foreign_table, "
-                    "  ccu.column_name AS foreign_column "
-                    "FROM information_schema.table_constraints tc "
-                    "JOIN information_schema.key_column_usage kcu "
-                    "  ON tc.constraint_name = kcu.constraint_name "
-                    "JOIN information_schema.constraint_column_usage ccu "
-                    "  ON tc.constraint_name = ccu.constraint_name "
-                    "WHERE tc.constraint_type = 'FOREIGN KEY' "
-                    "  AND tc.table_schema = :schema AND tc.table_name = :table"
-                ), {"schema": schema, "table": table})
-
-                for row in result:
-                    col = row.column_name
-                    if col not in annotations[table]:
-                        annotations[table][col] = {}
-                    annotations[table][col]["note"] = (
-                        f"Foreign key → {row.foreign_table}.{row.foreign_column}"
-                    )
+            # Bulk query for all foreign keys (one query instead of one per table)
+            result = conn.execute(sqlalchemy.text(
+                "SELECT tc.table_name, kcu.column_name, "
+                "  ccu.table_name AS foreign_table, "
+                "  ccu.column_name AS foreign_column "
+                "FROM information_schema.table_constraints tc "
+                "JOIN information_schema.key_column_usage kcu "
+                "  ON tc.constraint_name = kcu.constraint_name "
+                "JOIN information_schema.constraint_column_usage ccu "
+                "  ON tc.constraint_name = ccu.constraint_name "
+                "WHERE tc.constraint_type = 'FOREIGN KEY' "
+                "  AND tc.table_schema = :schema AND tc.table_name = ANY(:tables)"
+            ), {"schema": schema, "tables": tables})
+            for row in result:
+                tbl = annotations.setdefault(row.table_name, {})
+                if row.column_name not in tbl:
+                    tbl[row.column_name] = {}
+                tbl[row.column_name]["note"] = (
+                    f"Foreign key → {row.foreign_table}.{row.foreign_column}"
+                )
     except Exception as e:
         print(f"  Warning: Could not extract Postgres metadata: {e}", file=sys.stderr)
 

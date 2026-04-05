@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
     "duckdb>=1.0",
-    "dlt[duckdb,sql_database]>=1.0",
+    "dlt[duckdb,sql_database,filesystem]>=1.0",
     "mcp>=1.0",
     "click>=8.0",
     "pyyaml>=6.0",

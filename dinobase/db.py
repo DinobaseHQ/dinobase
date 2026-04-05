@@ -12,6 +12,7 @@ from dinobase.config import get_db_path
 # Internal schema for dinobase metadata
 META_SCHEMA = "_dinobase"
 
+
 INIT_SQL = f"""
 CREATE SCHEMA IF NOT EXISTS {META_SCHEMA};
 
@@ -121,6 +122,8 @@ class DinobaseDB:
         self.is_cloud = storage_url is not None
         self.db_path = str(db_path or (":memory:" if self.is_cloud else get_db_path()))
         self._conn: duckdb.DuckDBPyConnection | None = None
+        self._metadata_loaded = False  # cloud metadata loaded lazily
+        self._parquet_paths: dict[str, dict[str, str]] | None = None  # lazy path index
 
     @property
     def conn(self) -> duckdb.DuckDBPyConnection:
@@ -132,10 +135,26 @@ class DinobaseDB:
                 Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
                 self._conn = duckdb.connect(self.db_path)
             self._init_metadata()
-            if self.is_cloud:
-                self._load_cloud_metadata()
-                self._register_cloud_views()
+            # Cloud views and parquet paths are registered lazily on first query
+            # to avoid S3 round trips on every DB init.
         return self._conn
+
+    def _ensure_metadata_loaded(self) -> None:
+        """Load cloud metadata tables from S3 if not yet done (lazy, one-time)."""
+        if self.is_cloud and not self._metadata_loaded:
+            self._load_cloud_metadata()
+            self._metadata_loaded = True
+
+    @property
+    def meta_conn(self) -> duckdb.DuckDBPyConnection:
+        """Like conn but guarantees cloud metadata tables are loaded.
+
+        Use this in any method that reads or writes _dinobase.* tables.
+        Plain SQL queries should use conn directly to avoid the S3 round trips.
+        """
+        c = self.conn
+        self._ensure_metadata_loaded()
+        return c
 
     def _setup_cloud(self) -> None:
         """Install DuckDB extensions and configure cloud credentials."""
@@ -206,48 +225,131 @@ class DinobaseDB:
             try:
                 self._conn.execute(
                     f"INSERT INTO {META_SCHEMA}.{table} "
-                    f"SELECT * FROM read_parquet('{url}')"
+                    f"SELECT * FROM read_parquet('{url}') "
+                    f"ON CONFLICT DO NOTHING"
                 )
             except Exception as e:
                 if "does not exist" not in str(e).lower() and "no such file" not in str(e).lower():
                     import sys
                     print(f"[dinobase] Warning: could not load metadata table '{table}': {e}", file=sys.stderr)
 
+    def _discover_table_parquet_paths(self, source_name: str) -> dict[str, str]:
+        """Scan cloud storage to find parquet paths for all tables in a source.
+
+        Returns {table_name: parquet_glob_url}.  Handles the dlt filesystem
+        layout where tables live one level deeper under a schema subdirectory
+        (e.g. data/{source}/{dlt_schema}/{table}/*.parquet).
+        """
+        from dinobase.cloud import CloudStorage
+
+        cloud = CloudStorage(self.storage_url)
+        data_fs_path = cloud._to_fs_path(f"{self.storage_url}data/{source_name}")
+        result: dict[str, str] = {}
+        _SKIP = {"init"}
+        try:
+            level1 = cloud.fs.ls(data_fs_path, detail=False)
+            for entry in level1:
+                entry_name = entry.rstrip("/").split("/")[-1]
+                if entry_name.startswith("_dlt_") or entry_name in _SKIP:
+                    continue
+                try:
+                    children = cloud.fs.ls(entry, detail=False)
+                except Exception:
+                    continue
+                has_parquet = any(c.endswith(".parquet") for c in children)
+                if has_parquet:
+                    # entry is a table directory directly
+                    result[entry_name] = (
+                        f"{self.storage_url}data/{source_name}/{entry_name}/*.parquet"
+                    )
+                else:
+                    # entry is a dlt schema subdirectory containing table dirs
+                    schema_dir = entry_name
+                    for child in children:
+                        table_name = child.rstrip("/").split("/")[-1]
+                        if table_name.startswith("_dlt_") or table_name.startswith("_live_"):
+                            continue
+                        result[table_name] = (
+                            f"{self.storage_url}data/{source_name}"
+                            f"/{schema_dir}/{table_name}/*.parquet"
+                        )
+        except (FileNotFoundError, OSError):
+            pass
+        return result
+
+    def _ensure_parquet_paths_loaded(self) -> None:
+        """Load parquet path index from cloud into memory (one S3 call, cached).
+
+        Also creates DuckDB schemas for all known sources so queries can
+        reference them even before the individual views are registered.
+        """
+        if self._parquet_paths is not None:
+            return
+        from dinobase.cloud import CloudStorage
+        cloud = CloudStorage(self.storage_url)
+        self._parquet_paths = (
+            cloud.read_json(f"{self.storage_url}_meta/parquet_paths.json") or {}
+        )
+        # Create schemas so schema-qualified queries don't get "Schema does not exist"
+        for source_name in self._parquet_paths:
+            self.conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{source_name}"')
+
+    def register_view_on_demand(self, source_name: str, table_name: str) -> bool:
+        """Create a DuckDB view for source_name.table_name on first access.
+
+        Called transparently by QueryEngine when a query references a table
+        whose view hasn't been created yet.  Returns True on success.
+        """
+        self._ensure_parquet_paths_loaded()
+        parquet_glob = self._parquet_paths.get(source_name, {}).get(table_name)
+        if not parquet_glob:
+            # Table not in saved index — try a live S3 scan as fallback
+            discovered = self._discover_table_parquet_paths(source_name)
+            parquet_glob = discovered.get(table_name)
+            if parquet_glob:
+                self._parquet_paths.setdefault(source_name, {})[table_name] = parquet_glob
+        if not parquet_glob:
+            return False
+        try:
+            self.conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{source_name}"')
+            self.conn.execute(
+                f'CREATE OR REPLACE VIEW "{source_name}"."{table_name}" AS '
+                f"SELECT * FROM read_parquet('{parquet_glob}')"
+            )
+            return True
+        except Exception as e:
+            import sys
+            print(
+                f"[dinobase] register_view_on_demand failed for "
+                f"{source_name}.{table_name}: {e}",
+                file=sys.stderr,
+            )
+            return False
+
     def _register_cloud_views(self) -> None:
-        """Create DuckDB views over cloud parquet data for all known sources."""
-        rows = self._conn.execute(
-            f"SELECT DISTINCT source_name, table_name FROM {META_SCHEMA}.tables"
-        ).fetchall()
+        """Eagerly register all views (e.g. after a sync or explicit refresh).
 
-        schemas_created: set[str] = set()
-        for source_name, table_name in rows:
-            if source_name not in schemas_created:
-                self._conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{source_name}"')
-                schemas_created.add(source_name)
+        For normal query serving, views are created lazily via
+        register_view_on_demand() instead.
+        """
+        self._ensure_parquet_paths_loaded()
+        for source_name, table_globs in (self._parquet_paths or {}).items():
+            for table_name in table_globs:
+                self.register_view_on_demand(source_name, table_name)
 
-            parquet_glob = f"{self.storage_url}data/{source_name}/{table_name}/*.parquet"
-            staging_table = f"_live_{table_name}"
-
-            try:
-                # Create empty staging table with same schema as parquet
-                self._conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{source_name}"."{staging_table}" '
-                    f"AS SELECT * FROM read_parquet('{parquet_glob}') WHERE false"
-                )
-                # Create view merging parquet + staging
-                self._conn.execute(
-                    f'CREATE OR REPLACE VIEW "{source_name}"."{table_name}" AS '
-                    f'SELECT * FROM "{source_name}"."{staging_table}" '
-                    f"UNION ALL "
-                    f"SELECT * FROM read_parquet('{parquet_glob}') "
-                    f"WHERE CAST(id AS VARCHAR) NOT IN ("
-                    f'  SELECT CAST(id AS VARCHAR) FROM "{source_name}"."{staging_table}"'
-                    f")"
-                )
-            except Exception as e:
-                if "does not exist" not in str(e).lower() and "no such file" not in str(e).lower():
-                    import sys
-                    print(f"[dinobase] Warning: could not register view for '{source_name}.{table_name}': {e}", file=sys.stderr)
+    def save_parquet_paths(self, source_name: str, paths: dict[str, str]) -> None:
+        """Persist discovered parquet paths and update the in-memory index."""
+        from dinobase.cloud import CloudStorage
+        cloud = CloudStorage(self.storage_url)
+        url = f"{self.storage_url}_meta/parquet_paths.json"
+        all_paths: dict[str, dict[str, str]] = cloud.read_json(url) or {}
+        all_paths[source_name] = paths
+        cloud.write_json(url, all_paths)
+        # Keep the in-memory cache consistent so subsequent requests see new tables
+        if self._parquet_paths is None:
+            self._parquet_paths = all_paths
+        else:
+            self._parquet_paths[source_name] = paths
 
     def save_cloud_metadata(self) -> None:
         """Persist metadata tables to cloud storage as parquet files."""
@@ -333,9 +435,10 @@ class DinobaseDB:
 
     def log_sync_start(self, source_name: str, source_type: str) -> int:
         """Record the start of a sync. Returns the sync log ID."""
-        result = self.conn.execute(
+        result = self.meta_conn.execute(
             f"INSERT INTO {META_SCHEMA}.sync_log (source_name, source_type) "
-            f"VALUES (?, ?) RETURNING id",
+            f"VALUES (?, ?) "
+            f"RETURNING id",
             [source_name, source_type],
         )
         return result.fetchone()[0]
@@ -349,7 +452,7 @@ class DinobaseDB:
         error_message: str | None = None,
     ) -> None:
         """Record the end of a sync."""
-        self.conn.execute(
+        self.meta_conn.execute(
             f"UPDATE {META_SCHEMA}.sync_log "
             f"SET finished_at = current_timestamp, status = ?, "
             f"tables_synced = ?, rows_synced = ?, error_message = ? "
@@ -364,32 +467,82 @@ class DinobaseDB:
         source_name: str,
         schema_name: str,
         annotations: dict[str, dict[str, dict[str, str]]] | None = None,
+        row_counts: dict[str, int] | None = None,
+        override_tables: list[str] | None = None,
     ) -> None:
         """Refresh _dinobase.tables and _dinobase.columns from actual DuckDB schema.
 
         annotations: optional dict of {table_name: {column_name: {"description": ..., "note": ...}}}
+        row_counts: optional pre-computed row counts; when provided, skips SELECT COUNT(*) per table
+        override_tables: explicit table list; when provided, skips information_schema.tables query
+                         (which requires DuckDB views to exist).
         """
+        from collections import defaultdict
         annotations = annotations or {}
-        tables = self.get_tables(schema_name)
-        for table in tables:
-            if table.startswith("_dlt_"):
-                continue  # skip dlt internal tables
-            row_count = self.get_row_count(schema_name, table)
+        if override_tables is not None:
+            tables_to_update = [t for t in override_tables if not t.startswith("_dlt_")]
+        else:
+            tables = self.get_tables(schema_name)
+            tables_to_update = [t for t in tables if not t.startswith("_dlt_")]
+
+        # Use stored column schemas from _dinobase.columns as the primary source.
+        # information_schema.columns for DuckDB views backed by read_parquet() causes
+        # DuckDB to resolve each view's schema against S3 — one footer read per table.
+        # The stored schemas come from the previous sync and avoid all S3 access.
+        # For tables that have no stored schema yet (first sync), fall back to
+        # information_schema.columns which will read S3 (unavoidable on first sync).
+        stored_cols = self.get_stored_column_schemas(source_name, schema_name)
+        columns_by_table: dict[str, list[dict]] = defaultdict(list)
+        for tbl, col_list in stored_cols.items():
+            for col_name, col_type in col_list:
+                columns_by_table[tbl].append({
+                    "column_name": col_name,
+                    "data_type": col_type,
+                    "is_nullable": "YES",  # conservative default for stored schema
+                })
+
+        # For tables missing from stored schemas (new tables this sync), read from
+        # information_schema.columns — triggers S3 reads for those tables only.
+        new_tables = [t for t in tables_to_update if not columns_by_table.get(t)]
+        if new_tables:
+            try:
+                res = self.conn.execute(
+                    "SELECT table_name, column_name, data_type, is_nullable "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = ? AND table_name = ANY(?) "
+                    "ORDER BY table_name, ordinal_position",
+                    [schema_name, new_tables],
+                )
+                for row in res.fetchall():
+                    columns_by_table[row[0]].append({
+                        "column_name": row[1],
+                        "data_type": row[2],
+                        "is_nullable": row[3],
+                    })
+            except Exception:
+                pass
+
+        for table in tables_to_update:
+            # Use pre-computed row count when available to avoid SELECT COUNT(*) over S3
+            if row_counts is not None:
+                row_count = row_counts.get(table, 0)
+            else:
+                row_count = self.get_row_count(schema_name, table)
             # Upsert into _dinobase.tables
-            self.conn.execute(
+            self.meta_conn.execute(
                 f"INSERT INTO {META_SCHEMA}.tables (source_name, schema_name, table_name, row_count, last_sync) "
                 f"VALUES (?, ?, ?, ?, current_timestamp) "
                 f"ON CONFLICT (source_name, schema_name, table_name) DO UPDATE SET "
                 f"row_count = excluded.row_count, last_sync = excluded.last_sync",
                 [source_name, schema_name, table, row_count],
             )
-            # Update columns
+            # Update columns (stored schemas first, fall back to per-table query)
             table_annotations = annotations.get(table, {})
-            columns = self.get_columns(schema_name, table)
+            columns = columns_by_table.get(table) or self.get_columns(schema_name, table)
             for col in columns:
                 col_name = col["column_name"]
                 col_ann = table_annotations.get(col_name, {})
-                self.conn.execute(
+                self.meta_conn.execute(
                     f"INSERT INTO {META_SCHEMA}.columns "
                     f"(source_name, schema_name, table_name, column_name, column_type, is_nullable, description, note) "
                     f"VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
@@ -412,9 +565,34 @@ class DinobaseDB:
             self._save_meta_table("tables")
             self._save_meta_table("columns")
 
+    def get_stored_column_schemas(
+        self, source_name: str, schema_name: str
+    ) -> dict[str, list[tuple[str, str]]]:
+        """Return stored column (name, type) pairs per table from _dinobase.columns.
+
+        Used by register_cloud_source to recreate staging tables from stored schema
+        without reading S3 parquet files — avoids one S3 footer read per table.
+        Returns {table_name: [(col_name, col_type), ...]} for all known tables.
+        """
+        try:
+            rows = self.meta_conn.execute(
+                f"SELECT table_name, column_name, column_type "
+                f"FROM {META_SCHEMA}.columns "
+                "WHERE source_name = ? AND schema_name = ? "
+                "AND column_type IS NOT NULL "
+                "ORDER BY table_name, column_name",
+                [source_name, schema_name],
+            ).fetchall()
+        except Exception:
+            return {}
+        result: dict[str, list[tuple[str, str]]] = {}
+        for table_name, col_name, col_type in rows:
+            result.setdefault(table_name, []).append((col_name, col_type))
+        return result
+
     def get_column_annotations(self, schema_name: str, table_name: str) -> dict[str, dict[str, str | None]]:
         """Get annotations for all columns in a table. Returns {col_name: {description, note}}."""
-        result = self.conn.execute(
+        result = self.meta_conn.execute(
             f"SELECT column_name, description, note FROM {META_SCHEMA}.columns "
             "WHERE schema_name = ? AND table_name = ?",
             [schema_name, table_name],
@@ -438,7 +616,7 @@ class DinobaseDB:
         description: str = "",
     ) -> None:
         """Store or update a relationship edge between two tables."""
-        self.conn.execute(
+        self.meta_conn.execute(
             f"INSERT INTO {META_SCHEMA}.relationships "
             f"(from_schema, from_table, from_column, to_schema, to_table, to_column, "
             f"cardinality, confidence, description) "
@@ -454,7 +632,7 @@ class DinobaseDB:
 
     def get_relationships(self, schema: str, table: str) -> list[dict[str, Any]]:
         """Get all relationships where this table appears on either side, ordered by confidence."""
-        result = self.conn.execute(
+        result = self.meta_conn.execute(
             f"SELECT from_schema, from_table, from_column, to_schema, to_table, to_column, "
             f"cardinality, confidence, description "
             f"FROM {META_SCHEMA}.relationships "
@@ -467,7 +645,7 @@ class DinobaseDB:
 
     def purge_relationships(self, schema: str) -> int:
         """Delete edges where either endpoint table no longer exists in the schema."""
-        result = self.conn.execute(
+        result = self.meta_conn.execute(
             f"DELETE FROM {META_SCHEMA}.relationships "
             f"WHERE (from_schema = ? AND from_table NOT IN ("
             f"  SELECT table_name FROM information_schema.tables WHERE table_schema = ?)) "
@@ -482,7 +660,7 @@ class DinobaseDB:
 
     def has_relationships(self, schema: str) -> bool:
         """Return True if this schema has any relationship edges."""
-        row = self.conn.execute(
+        row = self.meta_conn.execute(
             f"SELECT COUNT(*) FROM {META_SCHEMA}.relationships "
             f"WHERE from_schema = ? OR to_schema = ?",
             [schema, schema],
@@ -491,6 +669,7 @@ class DinobaseDB:
 
     def get_sources_without_relationships(self) -> list[str]:
         """Return schema names that have tables but no relationship edges."""
+        self._ensure_metadata_loaded()
         all_sources = self.query(
             f"SELECT DISTINCT schema_name FROM {META_SCHEMA}.tables "
             f"WHERE schema_name != '{META_SCHEMA}'"
@@ -504,7 +683,7 @@ class DinobaseDB:
 
     def set_table_description(self, schema: str, table: str, description: str) -> None:
         """Set the human-readable description for a table."""
-        self.conn.execute(
+        self.meta_conn.execute(
             f"UPDATE {META_SCHEMA}.tables SET description = ? "
             f"WHERE schema_name = ? AND table_name = ?",
             [description, schema, table],
@@ -514,7 +693,7 @@ class DinobaseDB:
 
     def get_table_description(self, schema: str, table: str) -> str | None:
         """Return the description for a table, or None if not set."""
-        row = self.conn.execute(
+        row = self.meta_conn.execute(
             f"SELECT description FROM {META_SCHEMA}.tables "
             f"WHERE schema_name = ? AND table_name = ?",
             [schema, table],
@@ -525,7 +704,7 @@ class DinobaseDB:
         self, schema: str, table: str, key: str, value: str, column: str = ""
     ) -> None:
         """Upsert a key-value metadata tag for a table (column='') or column."""
-        self.conn.execute(
+        self.meta_conn.execute(
             f"INSERT INTO {META_SCHEMA}.metadata "
             f"(schema_name, table_name, column_name, key, value) "
             f"VALUES (?, ?, ?, ?, ?) "
@@ -540,7 +719,7 @@ class DinobaseDB:
         self, schema: str, table: str, column: str = ""
     ) -> dict[str, str]:
         """Return all KV metadata tags for a table or column as {key: value}."""
-        rows = self.conn.execute(
+        rows = self.meta_conn.execute(
             f"SELECT key, value FROM {META_SCHEMA}.metadata "
             f"WHERE schema_name = ? AND table_name = ? AND column_name = ?",
             [schema, table, column],
@@ -561,7 +740,7 @@ class DinobaseDB:
         and get cleared on the next full sync.
         """
         import json
-        self.conn.execute(
+        self.meta_conn.execute(
             f"INSERT INTO {META_SCHEMA}.live_rows "
             f"(source_name, table_name, record_id, row_data, mutation_id) "
             f"VALUES (?, ?, ?, ?, ?) "
@@ -575,7 +754,7 @@ class DinobaseDB:
 
     def get_live_row_ids(self, source_name: str, table_name: str) -> list[str]:
         """Get IDs of all live rows for a source.table."""
-        result = self.conn.execute(
+        result = self.meta_conn.execute(
             f"SELECT record_id FROM {META_SCHEMA}.live_rows "
             "WHERE source_name = ? AND table_name = ?",
             [source_name, table_name],
@@ -589,10 +768,10 @@ class DinobaseDB:
                 f"DELETE FROM {META_SCHEMA}.live_rows "
                 f"WHERE source_name = ? AND table_name = ?"
             )
-            result = self.conn.execute(sql, [source_name, table_name])
+            result = self.meta_conn.execute(sql, [source_name, table_name])
         else:
             sql = f"DELETE FROM {META_SCHEMA}.live_rows WHERE source_name = ?"
-            result = self.conn.execute(sql, [source_name])
+            result = self.meta_conn.execute(sql, [source_name])
         count = result.fetchone()[0] if result.description else 0
         if self.is_cloud:
             self._save_meta_table("live_rows")

@@ -413,28 +413,72 @@ def get_source(
         except Exception as _ce:
             print(f"  Warning: cursor detection failed: {_ce}", file=sys.stderr)
 
-        # 2. Discover merge keys for tables that have a cursor
+        # 2. Discover merge keys using two bulk queries — avoids one NullPool
+        #    connection per table (which was the main source of START latency).
         _merge_key_map: dict[str, list[str]] = {}
-        if _cursor_map:
+        _tables_with_cursors = list(_cursor_map.keys())
+        if _tables_with_cursors:
             try:
-                _insp = _sa_inspect(engine)
-                for _tbl in source.resources:
-                    if _tbl not in _cursor_map:
-                        continue
-                    _pk = _insp.get_pk_constraint(_tbl)
-                    _tbl_cols = {c["name"] for c in _insp.get_columns(_tbl)}
-                    # Filter to real column names only — ClickHouse may return
-                    # expression-based keys (e.g. toStartOfHour(timestamp)) that
-                    # don't correspond to actual columns.
-                    _pk_cols = [
-                        c for c in _pk.get("constrained_columns", [])
-                        if c in _tbl_cols
-                    ]
-                    if not _pk_cols:
-                        # No valid DB-level PK: probe for common unique columns
-                        _pk_cols = [c for c in _MERGE_KEY_FALLBACKS if c in _tbl_cols][:1]
-                    if _pk_cols:
-                        _merge_key_map[_tbl] = _pk_cols
+                _db_name = make_url(conn_str).database or "default"
+                with engine.connect() as _mk_conn:
+                    if source_type == "clickhouse":
+                        # ClickHouse: sort key from system.tables + columns from system.columns
+                        _sk_rows = _mk_conn.execute(_sql_text(
+                            "SELECT name, sorting_key FROM system.tables "
+                            "WHERE database = :db"
+                        ), {"db": _db_name}).fetchall()
+                        _tables_csv = ", ".join(f"'{t}'" for t in _tables_with_cursors)
+                        _col_rows = _mk_conn.execute(_sql_text(
+                            f"SELECT table, name FROM system.columns "
+                            f"WHERE database = :db AND table IN ({_tables_csv})"
+                        ), {"db": _db_name}).fetchall()
+                        _tbl_cols_bulk: dict[str, set[str]] = {}
+                        for _ct, _cc in _col_rows:
+                            _tbl_cols_bulk.setdefault(_ct, set()).add(_cc)
+                        for _tbl_name, _sk in _sk_rows:
+                            if _tbl_name not in _cursor_map:
+                                continue
+                            _cols = _tbl_cols_bulk.get(_tbl_name, set())
+                            _sk_cols = [c.strip() for c in _sk.split(",")] if _sk else []
+                            _pk_cols = [c for c in _sk_cols if c in _cols]
+                            if not _pk_cols:
+                                _pk_cols = [c for c in _MERGE_KEY_FALLBACKS if c in _cols][:1]
+                            if _pk_cols:
+                                _merge_key_map[_tbl_name] = _pk_cols
+                    else:
+                        # PostgreSQL / MySQL: one query for all PKs + one for all column names
+                        _pk_rows = _mk_conn.execute(_sql_text(
+                            "SELECT kcu.table_name, kcu.column_name "
+                            "FROM information_schema.table_constraints tc "
+                            "JOIN information_schema.key_column_usage kcu "
+                            "  ON tc.constraint_name = kcu.constraint_name "
+                            "  AND tc.table_schema = kcu.table_schema "
+                            "WHERE tc.constraint_type = 'PRIMARY KEY' "
+                            "  AND tc.table_schema = current_schema()"
+                        )).fetchall()
+                        _pk_bulk: dict[str, list[str]] = {}
+                        for _pt, _pc in _pk_rows:
+                            _pk_bulk.setdefault(_pt, []).append(_pc)
+
+                        _col_rows = _mk_conn.execute(_sql_text(
+                            "SELECT table_name, column_name "
+                            "FROM information_schema.columns "
+                            "WHERE table_schema = current_schema() "
+                            "  AND table_name = ANY(:tables)"
+                        ), {"tables": _tables_with_cursors}).fetchall()
+                        _tbl_cols_bulk: dict[str, set[str]] = {}
+                        for _ct, _cc in _col_rows:
+                            _tbl_cols_bulk.setdefault(_ct, set()).add(_cc)
+
+                        for _tbl in _tables_with_cursors:
+                            _cols = _tbl_cols_bulk.get(_tbl, set())
+                            # Filter PK cols to real column names (ClickHouse-style expression
+                            # keys don't apply here, but filter anyway for correctness)
+                            _pk_cols = [c for c in _pk_bulk.get(_tbl, []) if c in _cols]
+                            if not _pk_cols:
+                                _pk_cols = [c for c in _MERGE_KEY_FALLBACKS if c in _cols][:1]
+                            if _pk_cols:
+                                _merge_key_map[_tbl] = _pk_cols
             except Exception as _ke:
                 print(f"  Warning: merge key detection failed: {_ke}", file=sys.stderr)
 
@@ -455,12 +499,6 @@ def get_source(
             else:
                 _res.apply_hints(write_disposition="replace")
                 _n_replace += 1
-
-        print(
-            f"  Write disposition: {_n_merge} tables incremental merge, "
-            f"{_n_replace} tables full replace.",
-            file=sys.stderr,
-        )
 
         return source
     for param in entry.credentials:
