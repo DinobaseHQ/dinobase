@@ -1,11 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export default function ConnectCallbackPage() {
+function ConnectCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -99,5 +100,19 @@ export default function ConnectCallbackPage() {
         <p className="text-zinc-400">Connecting your account...</p>
       </div>
     </div>
+  );
+}
+
+export default function ConnectCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-4xl animate-pulse">&#x1F995;</div>
+        </div>
+      }
+    >
+      <ConnectCallbackInner />
+    </Suspense>
   );
 }

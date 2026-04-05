@@ -154,18 +154,38 @@ def update_sync_job(
     error_message: str | None = None,
 ) -> dict[str, Any]:
     """Update a sync job's status."""
+    from datetime import datetime, timezone
     db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
     update: dict[str, Any] = {"status": status}
     if status == "running":
-        update["started_at"] = "now()"
+        update["started_at"] = now
+    if status in ("success", "error", "cancelled"):
+        update["finished_at"] = now
     if status in ("success", "error"):
-        update["finished_at"] = "now()"
         update["tables_synced"] = tables_synced
         update["rows_synced"] = rows_synced
     if error_message:
         update["error_message"] = error_message
-    resp = db.table("sync_jobs").update(update).eq("id", job_id).execute()
-    return resp.data[0]
+    query = db.table("sync_jobs").update(update).eq("id", job_id)
+    # Don't overwrite a terminal state (e.g. worker finishing after a cancel)
+    if status in ("success", "error"):
+        query = query.eq("status", "running")
+    resp = query.execute()
+    return resp.data[0] if resp.data else {}
+
+
+def update_sync_progress(job_id: str, tables_synced: int, tables_total: int = 0) -> None:
+    """Update tables_synced (and optionally tables_total) mid-sync.
+
+    Uses .eq("status", "running") to avoid clobbering a job already marked
+    success/error by a concurrent update.
+    """
+    db = get_db()
+    update: dict[str, Any] = {"tables_synced": tables_synced}
+    if tables_total > 0:
+        update["tables_total"] = tables_total
+    db.table("sync_jobs").update(update).eq("id", job_id).eq("status", "running").execute()
 
 
 def get_sync_job(job_id: str) -> dict[str, Any] | None:
@@ -173,6 +193,22 @@ def get_sync_job(job_id: str) -> dict[str, Any] | None:
     db = get_db()
     resp = db.table("sync_jobs").select("*").eq("id", job_id).execute()
     return resp.data[0] if resp.data else None
+
+
+def get_pending_sync_jobs() -> list[dict[str, Any]]:
+    """Get all pending sync jobs across all users, oldest first.
+
+    Used by the sync worker to poll for work.
+    """
+    db = get_db()
+    resp = (
+        db.table("sync_jobs")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at")
+        .execute()
+    )
+    return resp.data
 
 
 def get_latest_sync_jobs(user_id: str) -> list[dict[str, Any]]:

@@ -2,7 +2,9 @@
 
 ## Environment Variables
 
-Whenever you add, remove, or rename an environment variable in any service (API, proxy, web frontend), update `ee/cloud/.env.example` to reflect the change.
+Whenever you add, remove, or rename an environment variable in a service, update the relevant example file:
+- API (`ee/cloud/api/`): update `ee/cloud/api/.env.example`
+- Web frontend (`ee/cloud/web/`): update `ee/cloud/web/.env.local.example`
 
 ## Documentation
 

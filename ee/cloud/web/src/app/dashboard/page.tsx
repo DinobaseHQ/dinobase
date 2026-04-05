@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase";
 import { api, type Source, type OAuthProvider, type RegistrySource } from "@/lib/api";
 import { Nav } from "@/components/Nav";
@@ -8,7 +9,7 @@ import { ConnectGrid } from "@/components/ConnectGrid";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 
-export default function DashboardPage() {
+function DashboardInner() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -131,5 +132,19 @@ export default function DashboardPage() {
 
       </main>
     </>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-4xl animate-pulse">&#x1F995;</div>
+        </div>
+      }
+    >
+      <DashboardInner />
+    </Suspense>
   );
 }

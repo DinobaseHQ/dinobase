@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import os
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from dinobase_hosted.auth import User, get_current_user
@@ -16,9 +18,10 @@ from dinobase_hosted.db import (
     create_sync_job,
     get_sync_job,
     get_latest_sync_jobs,
+    update_sync_job,
 )
 from dinobase_hosted.models import SyncRequest
-from dinobase_hosted.workers.sync_worker import run_sync_job
+from dinobase_hosted.workers.sync_worker import run_sync_job, request_cancel
 
 
 router = APIRouter(tags=["sync"])
@@ -43,10 +46,13 @@ async def trigger_sync(
         raise HTTPException(400, "No sources to sync")
 
     job_ids = []
+    run_inline = os.environ.get("DINOBASE_MODE", "all") == "all"
     for source in sources_to_sync:
         job = create_sync_job(user.id, source["source_name"])
         job_ids.append(job["id"])
-        background_tasks.add_task(run_sync_job, job["id"], user.id, source)
+        if run_inline:
+            # all mode: run sync in-process via BackgroundTasks (no worker needed)
+            background_tasks.add_task(run_sync_job, job["id"], user.id, source)
 
     return {
         "job_ids": job_ids,
@@ -76,6 +82,22 @@ async def sync_status(user: User = Depends(get_current_user)) -> list[dict[str, 
     return result
 
 
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Cancel a running sync job. Stops at the next table boundary."""
+    job = get_sync_job(job_id)
+    if not job or job["user_id"] != user.id:
+        raise HTTPException(404, "Job not found")
+    if job["status"] not in ("running", "pending"):
+        raise HTTPException(400, f"Job is not running (status: {job['status']})")
+    request_cancel(job_id)
+    update_sync_job(job_id, "cancelled")
+    return {"cancelled": True}
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(
     job_id: str,
@@ -92,6 +114,7 @@ async def get_job(
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
         "tables_synced": job["tables_synced"],
+        "tables_total": job.get("tables_total", 0),
         "rows_synced": job["rows_synced"],
         "error": job.get("error_message"),
     }

@@ -4,6 +4,24 @@ procs:
     cwd: "api"
     env:
       DINOBASE_ENV: development
+      DINOBASE_MODE: web
+      DINOBASE_PORT: "8787"
+      DINOBASE_QUERY_URL: "http://localhost:8789"
+
+  sync:
+    cmd: ["uv", "run", "dinobase-server"]
+    cwd: "api"
+    env:
+      DINOBASE_ENV: development
+      DINOBASE_MODE: worker
+
+  query:
+    cmd: ["uv", "run", "dinobase-server"]
+    cwd: "api"
+    env:
+      DINOBASE_ENV: development
+      DINOBASE_MODE: query
+      DINOBASE_PORT: "8789"
 
   web:
     cmd: ["npm", "run", "dev"]

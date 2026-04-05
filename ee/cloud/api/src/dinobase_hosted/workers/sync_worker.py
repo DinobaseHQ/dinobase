@@ -7,11 +7,31 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from typing import Any
 
-from dinobase_hosted.db import get_profile, update_sync_job
+from dinobase_hosted.db import (
+    get_profile,
+    get_pending_sync_jobs,
+    get_sync_job,
+    get_user_source,
+    update_sync_job,
+    update_sync_progress,
+)
 from dinobase_hosted.storage import ensure_user_storage
 from dinobase_hosted.encryption import decrypt_credentials
+
+
+class _SyncCancelled(Exception):
+    pass
+
+
+def request_cancel(job_id: str) -> None:
+    """No-op — the cancel endpoint writes 'cancelled' to Supabase directly.
+
+    The worker checks Supabase at each table boundary via _on_progress, so
+    cancellation propagates across processes without in-memory state.
+    """
 
 
 def _classify_error(error: str, source_name: str) -> str:
@@ -31,10 +51,10 @@ def _classify_error(error: str, source_name: str) -> str:
 
 
 def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
-    """Run a sync job in the background.
+    """Run a sync job.
 
-    This wraps the existing dinobase SyncEngine so we reuse all the
-    dlt pipeline logic, pagination, auth, incremental loading, etc.
+    Called directly via BackgroundTasks in 'all' mode, or by the worker loop
+    in 'worker' mode after the job has been claimed (status set to 'running').
     """
     source_name = source["source_name"]
     source_type = source["source_type"]
@@ -53,13 +73,6 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
         # In local dev, use a per-user local DuckDB file instead of S3.
         # Set DINOBASE_LOCAL_STORAGE_ROOT=/some/path in .env to skip S3.
         local_root = os.environ.get("DINOBASE_LOCAL_STORAGE_ROOT")
-        if local_root:
-            user_dir = os.path.join(local_root.rstrip("/"), user_id)
-            os.makedirs(user_dir, exist_ok=True)
-            os.environ["DINOBASE_DIR"] = user_dir
-            os.environ.pop("DINOBASE_STORAGE_URL", None)
-        else:
-            os.environ["DINOBASE_STORAGE_URL"] = storage_url
 
         # Decrypt credentials
         credentials = decrypt_credentials(source["credentials_encrypted"])
@@ -74,10 +87,32 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
         from dinobase.db import DinobaseDB
         from dinobase.sync.engine import SyncEngine
 
-        db = DinobaseDB()
+        if local_root:
+            user_dir = os.path.join(local_root.rstrip("/"), user_id)
+            os.makedirs(user_dir, exist_ok=True)
+            db = DinobaseDB(db_path=os.path.join(user_dir, "dinobase.duckdb"))
+        else:
+            db = DinobaseDB(storage_url=storage_url)
         engine = SyncEngine(db)
 
-        result = engine.sync(source_name, source_config)
+        def _on_progress(tables_synced: int, tables_total: int) -> None:
+            # Check Supabase for cancellation — works across processes since the
+            # cancel endpoint writes directly to the DB rather than a local flag.
+            try:
+                job = get_sync_job(job_id)
+                if job and job["status"] == "cancelled":
+                    raise _SyncCancelled()
+            except _SyncCancelled:
+                raise
+            except Exception:
+                pass  # DB errors don't interrupt the sync
+
+            try:
+                update_sync_progress(job_id, tables_synced, tables_total)
+            except Exception:
+                pass  # progress updates are best-effort; never fail the sync
+
+        result = engine.sync(source_name, source_config, on_progress=_on_progress)
 
         if result.status == "success":
             update_sync_job(
@@ -85,8 +120,16 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
                 tables_synced=result.tables_synced,
                 rows_synced=result.rows_synced,
             )
-            from dinobase.semantic_agent import spawn_semantic_agent
-            spawn_semantic_agent(source_name)
+            # Invalidate the cached query DB so the next query re-initialises
+            # with the fresh parquet data.
+            if not local_root:
+                from dinobase_hosted.routers.query import invalidate_db_cache
+                invalidate_db_cache(storage_url)
+            try:
+                from dinobase.semantic_agent import spawn_semantic_agent
+                spawn_semantic_agent(source_name)
+            except Exception:
+                pass  # semantic annotations are best-effort; don't fail the sync
         else:
             raw_error = result.error or "Unknown error"
             print(f"Sync job {job_id} error: {raw_error}", file=sys.stderr)
@@ -97,7 +140,44 @@ def run_sync_job(job_id: str, user_id: str, source: dict[str, Any]) -> None:
 
         db.close()
 
+    except _SyncCancelled:
+        print(f"Sync job {job_id} cancelled by user", file=sys.stderr)
+        # DB status was already set to "cancelled" by the API endpoint.
     except Exception as e:
         raw_error = str(e)
         print(f"Sync job {job_id} failed: {raw_error}", file=sys.stderr)
         update_sync_job(job_id, "error", error_message=_classify_error(raw_error, source_name))
+
+
+def run_worker_loop() -> None:
+    """Poll Supabase for pending sync jobs and execute them.
+
+    Runs forever. Each iteration claims all pending jobs (oldest first) and
+    runs them sequentially. Jobs that are already 'running' (claimed by another
+    worker or a previous crashed run) are skipped.
+
+    Set DINOBASE_SYNC_POLL_INTERVAL (seconds, default 5) to tune latency vs
+    Supabase query frequency.
+    """
+    interval = int(os.environ.get("DINOBASE_SYNC_POLL_INTERVAL", "5"))
+    print(f"Sync worker starting (poll interval: {interval}s)", file=sys.stderr)
+
+    while True:
+        try:
+            for job in get_pending_sync_jobs():
+                job_id = job["id"]
+                user_id = job["user_id"]
+                source_name = job["source_name"]
+
+                source = get_user_source(user_id, source_name)
+                if not source:
+                    update_sync_job(job_id, "error", error_message=f"Source '{source_name}' not found")
+                    continue
+
+                print(f"[worker] running sync job {job_id} ({source_name})", file=sys.stderr)
+                run_sync_job(job_id, user_id, source)
+
+        except Exception as e:
+            print(f"[worker] error in poll loop: {e}", file=sys.stderr)
+
+        time.sleep(interval)

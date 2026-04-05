@@ -21,10 +21,34 @@ export function Nav({
 
   return (
     <nav className="border-b border-zinc-800 px-6 py-3 flex items-center justify-between bg-zinc-950">
-      <Link href="/" className="flex items-center gap-2">
-        <img src="/logo.svg" alt="Dinobase" className="h-7 w-auto" />
-        <span className="text-sm font-normal text-zinc-500">Cloud</span>
-      </Link>
+      <div className="flex items-center gap-6">
+        <Link href="/" className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Dinobase" className="h-7 w-auto" />
+          <span className="text-sm font-normal text-zinc-500">Cloud</span>
+        </Link>
+        {showAuth && email && (
+          <div className="flex items-center gap-1">
+            <Link
+              href="/dashboard"
+              className="text-zinc-400 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-zinc-800 transition-colors"
+            >
+              Sources
+            </Link>
+            <Link
+              href="/dashboard/query"
+              className="text-zinc-400 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-zinc-800 transition-colors"
+            >
+              Query
+            </Link>
+            <Link
+              href="/sandbox"
+              className="text-zinc-400 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-zinc-800 transition-colors"
+            >
+              Sandbox
+            </Link>
+          </div>
+        )}
+      </div>
       {showAuth && (
         <div className="flex items-center gap-4">
           <a

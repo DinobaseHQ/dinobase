@@ -20,7 +20,15 @@ def main() -> None:
     port = get_port()
     dev = os.environ.get("DINOBASE_ENV", "production") == "development"
 
-    print(f"Starting Dinobase Cloud API on {host}:{port}", file=sys.stderr)
+    mode = os.environ.get("DINOBASE_MODE", "all")
+
+    if mode == "worker":
+        print("Starting Dinobase sync worker", file=sys.stderr)
+        from dinobase_hosted.workers.sync_worker import run_worker_loop
+        run_worker_loop()
+        return
+
+    print(f"Starting Dinobase Cloud API on {host}:{port} [mode={mode}]", file=sys.stderr)
 
     reload_dirs = None
     if dev:

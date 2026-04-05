@@ -1,14 +1,18 @@
 "use client";
 
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase";
 import { Nav } from "@/components/Nav";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
 
-export default function CLILoginPage() {
+const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+const WEBSITE_URL = process.env.NEXT_PUBLIC_WEBSITE_URL ?? "https://dinobase.ai";
+
+function CLILoginInner() {
   const supabase = createClient();
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const callback = searchParams.get("callback");
   const state = searchParams.get("state");
@@ -17,6 +21,19 @@ export default function CLILoginPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [waitlisted, setWaitlisted] = useState(false);
+  const posthogReady = useRef(false);
+
+  // Initialize PostHog once on mount (client-only)
+  useEffect(() => {
+    if (POSTHOG_KEY && !posthogReady.current) {
+      posthog.init(POSTHOG_KEY, {
+        api_host: "https://f.dinobase.ai",
+        person_profiles: "identified_only",
+      });
+      posthogReady.current = true;
+    }
+  }, []);
 
   // Check if already logged in — redirect to CLI immediately
   useEffect(() => {
@@ -39,6 +56,32 @@ export default function CLILoginPage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  function checkEarlyAccess(userEmail: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!POSTHOG_KEY) {
+        resolve(false);
+        return;
+      }
+
+      let settled = false;
+      const settle = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+
+      // Fail closed after 3 seconds if PostHog doesn't respond
+      const timer = setTimeout(() => settle(false), 3000);
+
+      posthog.identify(userEmail, { email: userEmail });
+      posthog.reloadFeatureFlags();
+      posthog.onFeatureFlags(() => {
+        settle(posthog.isFeatureEnabled("early_access") === true);
+      });
+    });
+  }
+
   async function redirectToCLI() {
     if (!callback) return;
     setRedirecting(true);
@@ -48,13 +91,22 @@ export default function CLILoginPage() {
     } = await supabase.auth.getSession();
     if (!session) return;
 
+    const userEmail = session.user.email || "";
+    const hasAccess = await checkEarlyAccess(userEmail);
+
+    if (!hasAccess) {
+      setWaitlisted(true);
+      setRedirecting(false);
+      return;
+    }
+
     // Send tokens back to the CLI's local callback server
     const params = new URLSearchParams({
       access_token: session.access_token,
       refresh_token: session.refresh_token || "",
       expires_at: String(session.expires_at || 0),
       user_id: session.user.id,
-      email: session.user.email || "",
+      email: userEmail,
       state: state || "",
     });
 
@@ -94,6 +146,27 @@ export default function CLILoginPage() {
         redirectTo: `${window.location.origin}/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`,
       },
     });
+  }
+
+  if (waitlisted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="text-center max-w-sm px-6">
+          <div className="text-4xl mb-4">&#x1F995;</div>
+          <h1 className="text-2xl font-bold mb-3">You&apos;re on the waitlist</h1>
+          <p className="text-zinc-400 text-sm mb-6">
+            We&apos;ll email you when your early access is ready.
+          </p>
+          <a
+            href={`${WEBSITE_URL}/waitlist`}
+            className="inline-block bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
+          >
+            Join the waitlist &rarr;
+          </a>
+          <p className="text-zinc-600 text-xs mt-6">You can close this tab.</p>
+        </div>
+      </div>
+    );
   }
 
   if (redirecting) {
@@ -216,5 +289,19 @@ export default function CLILoginPage() {
         )}
       </main>
     </>
+  );
+}
+
+export default function CLILoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-4xl animate-pulse">&#x1F995;</div>
+        </div>
+      }
+    >
+      <CLILoginInner />
+    </Suspense>
   );
 }

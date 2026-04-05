@@ -9,6 +9,7 @@ export interface Source {
   last_sync: string | null;
   last_sync_status: string | null;
   last_sync_error: string | null;
+  last_job_id: string | null;
   tables_synced: number;
   rows_synced: number;
 }
@@ -64,6 +65,77 @@ export interface UserInfo {
   plan: string;
   storage_url: string;
   sources_count: number;
+}
+
+export interface SandboxInfo {
+  sources: Array<{
+    name: string;
+    tables: Array<{ name: string; rows: number }>;
+    table_count: number;
+    total_rows: number;
+  }>;
+  suggested_questions: string[];
+  models: string[];
+  default_model: string;
+}
+
+export interface SandboxRunRequest {
+  question: string;
+  model: string;
+  expected_answer?: string;
+}
+
+export type SandboxEvent =
+  | {
+      type: "turn";
+      approach: "dinobase" | "mcp";
+      role: "assistant" | "tool" | "tool_result";
+      text?: string;
+      tool?: string;
+      input?: Record<string, unknown>;
+      output?: string;
+    }
+  | {
+      type: "metric";
+      approach: "dinobase" | "mcp";
+      tokens_in: number;
+      tokens_out: number;
+      latency_ms: number;
+      tool_calls: number;
+      turns: number;
+    }
+  | {
+      type: "score";
+      approach: "dinobase" | "mcp";
+      correct: boolean;
+      partial: boolean;
+      explanation: string;
+    }
+  | { type: "done" }
+  | { type: "error"; approach?: string; message: string };
+
+export interface QueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  data_types?: Record<string, string>;
+  row_count: number;
+}
+
+export interface SourceTable {
+  name: string;
+  rows: number;
+}
+
+export interface SchemaSource {
+  name: string;
+  tables: SourceTable[];
+  table_count: number;
+  total_rows: number;
+  last_sync: string | null;
+}
+
+export interface SchemaTree {
+  sources: SchemaSource[];
 }
 
 async function apiFetch<T>(
@@ -146,15 +218,80 @@ export const api = {
   syncStatus: (token: string) =>
     apiFetch<SyncStatus[]>("/api/v1/sync/status", token),
 
+  cancelJob: (token: string, jobId: string) =>
+    apiFetch<{ cancelled: boolean }>(`/api/v1/sync/jobs/${jobId}/cancel`, token, {
+      method: "POST",
+    }),
+
   getJob: (token: string, jobId: string) =>
-    apiFetch<{ job_id: string; source: string; status: string; error: string | null }>(
-      `/api/v1/sync/jobs/${jobId}`,
-      token
-    ),
+    apiFetch<{
+      job_id: string;
+      source: string;
+      status: string;
+      tables_synced: number;
+      tables_total: number;
+      rows_synced: number;
+      error: string | null;
+    }>(`/api/v1/sync/jobs/${jobId}`, token),
 
   oauthProviders: (token: string) =>
     apiFetch<OAuthProvider[]>("/oauth/providers", token),
 
   sourceRegistry: (token: string) =>
     apiFetch<{ sources: RegistrySource[] }>("/api/v1/sources/registry", token),
+
+  query: (token: string, sql: string, maxRows = 500) =>
+    apiFetch<QueryResult>("/api/v1/query/", token, {
+      method: "POST",
+      body: JSON.stringify({ sql, max_rows: maxRows }),
+    }),
+
+  tables: (token: string) =>
+    apiFetch<SchemaTree>("/api/v1/query/tables", token),
+
+  describe: (token: string, table: string) =>
+    apiFetch<Record<string, unknown>>(`/api/v1/query/describe/${encodeURIComponent(table)}`, token),
+
+  getSandboxInfo: (token: string) =>
+    apiFetch<SandboxInfo>("/api/v1/sandbox/", token),
+
+  streamSandbox: async function* (
+    token: string,
+    body: SandboxRunRequest
+  ): AsyncGenerator<SandboxEvent> {
+    const res = await fetch(`${API_URL}/api/v1/sandbox/run`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Sandbox error (${res.status}): ${text}`);
+    }
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            yield JSON.parse(line.slice(6)) as SandboxEvent;
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+    }
+  },
 };

@@ -71,6 +71,11 @@ def get_encryption_key() -> str:
 
 # -- CORS --
 
+def get_query_url() -> str | None:
+    """URL of the query server. Set DINOBASE_QUERY_URL in web mode to proxy there."""
+    return os.environ.get("DINOBASE_QUERY_URL")
+
+
 def get_allowed_origins() -> list[str]:
     """Origins allowed to call the API (the web frontend)."""
     origins = os.environ.get("DINOBASE_ALLOWED_ORIGINS", "")

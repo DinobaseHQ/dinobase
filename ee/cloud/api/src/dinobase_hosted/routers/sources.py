@@ -20,6 +20,7 @@ from dinobase_hosted.db import (
     rename_user_source,
     delete_user_source,
     get_latest_sync_jobs,
+    get_profile,
 )
 from dinobase_hosted.encryption import encrypt_credentials, decrypt_credentials
 from dinobase_hosted.models import AddSourceRequest, RenameSourceRequest, SourceOAuthCallbackRequest
@@ -72,6 +73,7 @@ async def list_sources(user: User = Depends(get_current_user)) -> list[dict[str,
             "last_sync": job["finished_at"] if job else None,
             "last_sync_status": job["status"] if job else None,
             "last_sync_error": job["error_message"] if job else None,
+            "last_job_id": job["id"] if job else None,
             "tables_synced": job["tables_synced"] if job else 0,
             "rows_synced": job["rows_synced"] if job else 0,
         })
@@ -211,5 +213,21 @@ async def remove_source(
     deleted = delete_user_source(user.id, source_name)
     if not deleted:
         raise HTTPException(404, f"Source '{source_name}' not found")
-    # TODO: also delete S3 data for this source
+
+    # Delete the source's cloud storage data (best-effort)
+    profile = get_profile(user.id)
+    if profile and profile.get("storage_url"):
+        try:
+            from dinobase.cloud import CloudStorage
+            cloud = CloudStorage(profile["storage_url"])
+            data_path = cloud._to_fs_path(f"{cloud.storage_url}data/{source_name}")
+            cloud.fs.rm(data_path, recursive=True)
+        except Exception as e:
+            import sys
+            print(
+                f"[dinobase] Warning: failed to delete cloud data for source "
+                f"'{source_name}': {e}",
+                file=sys.stderr,
+            )
+
     return {"deleted": True}
