@@ -140,9 +140,12 @@ class MutationEngine:
     def confirm(self, mutation_id: str) -> dict[str, Any]:
         """Confirm and execute a pending mutation."""
         self._expire_stale()
-        rows = self.db.query(
-            f"SELECT * FROM {META_SCHEMA}.mutations WHERE mutation_id = '{mutation_id}'"
+        res = self.db.conn.execute(
+            f"SELECT * FROM {META_SCHEMA}.mutations WHERE mutation_id = ?",
+            [mutation_id],
         )
+        cols = [d[0] for d in res.description]
+        rows = [dict(zip(cols, row)) for row in res.fetchall()]
         if not rows:
             return {"error": f"Mutation '{mutation_id}' not found"}
 
@@ -187,9 +190,11 @@ class MutationEngine:
         )
 
     def cancel(self, mutation_id: str) -> dict[str, Any]:
-        rows = self.db.query(
-            f"SELECT status FROM {META_SCHEMA}.mutations WHERE mutation_id = '{mutation_id}'"
+        res = self.db.conn.execute(
+            f"SELECT status FROM {META_SCHEMA}.mutations WHERE mutation_id = ?",
+            [mutation_id],
         )
+        rows = [{"status": row[0]} for row in res.fetchall()]
         if not rows:
             return {"error": f"Mutation '{mutation_id}' not found"}
         if rows[0]["status"] != "pending":
@@ -211,6 +216,11 @@ class MutationEngine:
         table = parsed["table"]
         where_clause = parsed.get("where", "")
         set_clause = parsed.get("set_clause", "")
+
+        if where_clause:
+            err = _validate_where_clause(where_clause)
+            if err:
+                return {"error": f"Invalid WHERE clause: {err}"}
 
         count_sql = f'SELECT COUNT(*) as cnt FROM "{schema}"."{table}"'
         if where_clause:
@@ -323,6 +333,10 @@ class MutationEngine:
         schema = parsed["schema"]
         table = parsed["table"]
         where_clause = parsed["where"]  # guaranteed non-empty by parser
+
+        err = _validate_where_clause(where_clause)
+        if err:
+            return {"error": f"Invalid WHERE clause: {err}"}
 
         count_sql = f'SELECT COUNT(*) as cnt FROM "{schema}"."{table}" WHERE {where_clause}'
         try:
@@ -469,9 +483,13 @@ class MutationEngine:
 
                 # Fetch the full current row from the view (parquet data)
                 try:
-                    current = self.db.query(
-                        f'SELECT * FROM "{schema}"."{table}" WHERE CAST(id AS VARCHAR) = \'{record_id}\' LIMIT 1'
+                    result = self.db.conn.execute(
+                        f'SELECT * FROM "{schema}"."{table}" WHERE CAST(id AS VARCHAR) = ? LIMIT 1',
+                        [record_id],
                     )
+                    cols = [d[0] for d in result.description]
+                    rows = result.fetchall()
+                    current = [dict(zip(cols, r)) for r in rows]
                 except Exception:
                     current = []
 
@@ -704,7 +722,7 @@ class MutationEngine:
                 return ep["name"]
 
         # Priority 3: singular form match (table "customers" → "delete_customer")
-        table_singular = table.rstrip("s")
+        table_singular = table[:-1] if table.endswith("s") else table
         for ep in client.write_endpoints:
             if table_singular in ep["name"] and op_prefix in ep["name"]:
                 return ep["name"]
@@ -734,6 +752,13 @@ def get_endpoint_from_config(config: dict, name: str) -> dict | None:
 def _split_statements(sql: str) -> list[str]:
     """Split multi-statement SQL on semicolons, ignoring empty strings."""
     return [s.strip() for s in sql.split(";") if s.strip()]
+
+
+def _validate_where_clause(where_clause: str) -> str | None:
+    """Return an error string if the WHERE clause looks unsafe, else None."""
+    if ";" in where_clause:
+        return "WHERE clause may not contain semicolons"
+    return None
 
 
 def _parse_mutation_sql(sql: str) -> dict[str, Any]:

@@ -228,7 +228,6 @@ Works with every major agent framework:
 
 ```bash
 git clone https://github.com/DinobaseHQ/dinobase
-cd dinobase
 pip install -e ".[dev]"
 pytest
 ```

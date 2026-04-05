@@ -66,8 +66,8 @@ def _build_instructions(engine: QueryEngine) -> str:
     )
     lines.append(
         "Use `annotate` to document tables and columns: descriptions, pii flags, "
-        "deprecated status, owners. Use `annotate_relationships` to map join paths. "
-        "Both are stored permanently and returned in every future describe() call."
+        "deprecated status, owners, and relationships (join paths). "
+        "All annotations are stored permanently and returned in every future describe() call."
     )
 
     # Remind agent to build the graph for sources that don't have one yet
@@ -76,7 +76,7 @@ def _build_instructions(engine: QueryEngine) -> str:
         lines.append("")
         lines.append(
             f"Semantic layer not built for: {', '.join(no_graph)}. "
-            "Explore with describe(), then call annotate() and annotate_relationships() to document."
+            "Explore with describe(), then call annotate() to add descriptions and relationships."
         )
     if has_stale:
         lines.append("")
@@ -113,55 +113,70 @@ class _HostedClient:
 
     def get_instructions(self) -> str:
         import httpx
-        r = httpx.get(
-            f"{self.api_url}/api/v1/query/info",
-            headers=self._headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        return r.json().get("instructions", "")
+        try:
+            r = httpx.get(
+                f"{self.api_url}/api/v1/query/info",
+                headers=self._headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            return r.json().get("instructions", "")
+        except Exception as e:
+            raise  # let _create_server fall back to local
 
     def list_sources(self) -> str:
         import httpx
-        r = httpx.get(
-            f"{self.api_url}/api/v1/sources/",
-            headers=self._headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        return json.dumps(r.json(), indent=2, default=str)
+        try:
+            r = httpx.get(
+                f"{self.api_url}/api/v1/sources/",
+                headers=self._headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            return json.dumps(r.json(), indent=2, default=str)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
     def describe(self, table: str) -> str:
         import httpx
-        r = httpx.get(
-            f"{self.api_url}/api/v1/query/describe/{table}",
-            headers=self._headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        return json.dumps(r.json(), indent=2, default=str)
+        try:
+            r = httpx.get(
+                f"{self.api_url}/api/v1/query/describe/{table}",
+                headers=self._headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+            return json.dumps(r.json(), indent=2, default=str)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
     def query(self, sql: str, max_rows: int) -> str:
         import httpx
-        r = httpx.post(
-            f"{self.api_url}/api/v1/query/",
-            json={"sql": sql, "max_rows": max_rows},
-            headers=self._headers(),
-            timeout=120,
-        )
-        r.raise_for_status()
-        return json.dumps(r.json(), indent=2, default=str)
+        try:
+            r = httpx.post(
+                f"{self.api_url}/api/v1/query/",
+                json={"sql": sql, "max_rows": max_rows},
+                headers=self._headers(),
+                timeout=120,
+            )
+            r.raise_for_status()
+            return json.dumps(r.json(), indent=2, default=str)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
     def refresh(self, source: str) -> str:
         import httpx
-        # Trigger sync
-        r = httpx.post(
-            f"{self.api_url}/api/v1/sync/",
-            json={"source_name": source},
-            headers=self._headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
+        try:
+            r = httpx.post(
+                f"{self.api_url}/api/v1/sync/",
+                json={"source_name": source},
+                headers=self._headers(),
+                timeout=15,
+            )
+            r.raise_for_status()
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
         job_ids = r.json().get("job_ids", [])
         job_id = job_ids[0] if job_ids else None
 
@@ -171,15 +186,18 @@ class _HostedClient:
         # Poll until done (max 2 minutes)
         for _ in range(60):
             time.sleep(2)
-            jr = httpx.get(
-                f"{self.api_url}/api/v1/sync/jobs/{job_id}",
-                headers=self._headers(),
-                timeout=10,
-            )
-            if jr.status_code == 200:
-                job = jr.json()
-                if job.get("status") not in ("running", "pending"):
-                    return json.dumps(job, indent=2, default=str)
+            try:
+                jr = httpx.get(
+                    f"{self.api_url}/api/v1/sync/jobs/{job_id}",
+                    headers=self._headers(),
+                    timeout=10,
+                )
+                if jr.status_code == 200:
+                    job = jr.json()
+                    if job.get("status") not in ("running", "pending"):
+                        return json.dumps(job, indent=2, default=str)
+            except Exception:
+                pass
 
         return json.dumps({"status": "timeout", "job_id": job_id})
 
@@ -291,7 +309,7 @@ def _create_server() -> FastMCP:
           from_column — column name
           to_table    — "schema.table" (referenced table)
           to_column   — column name
-          cardinality — "one_to_one" | "one_to_many" | "many_to_many" (default: "one_to_many")
+          cardinality — "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many" (default: "one_to_many")
           description — human-readable explanation
 
         Examples:
@@ -301,13 +319,13 @@ def _create_server() -> FastMCP:
         """
         from dinobase import telemetry
         telemetry.capture("mcp_tool_called", {"tool": "annotate", "server_mode": "hosted" if client else "local"})
-        eng = _get_engine()
-        results = []
-        for item in items:
-            if isinstance(item, AnnotationInput):
-                results.append(apply_annotation(eng.db, item))
-            else:
-                results.append(apply_relationship(eng.db, item))
+        with DinobaseDB() as db:
+            results = []
+            for item in items:
+                if isinstance(item, AnnotationInput):
+                    results.append(apply_annotation(db, item))
+                else:
+                    results.append(apply_relationship(db, item))
         return json.dumps(results if len(results) > 1 else results[0] if results else {}, indent=2)
 
     @server.tool()
@@ -319,7 +337,6 @@ def _create_server() -> FastMCP:
         telemetry.capture("mcp_tool_called", {"tool": "confirm", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
-            eng = QueryEngine(db)
             result = MutationEngine(db).confirm(mutation_id)
         return json.dumps(result, indent=2, default=str)
 
@@ -332,7 +349,6 @@ def _create_server() -> FastMCP:
         telemetry.capture("mcp_tool_called", {"tool": "confirm_batch", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
-            eng = QueryEngine(db)
             result = MutationEngine(db).confirm_batch(mutation_ids)
         return json.dumps(result, indent=2, default=str)
 
@@ -345,7 +361,6 @@ def _create_server() -> FastMCP:
         telemetry.capture("mcp_tool_called", {"tool": "cancel", "server_mode": "hosted" if client else "local"})
         from dinobase.query.mutations import MutationEngine
         with DinobaseDB() as db:
-            eng = QueryEngine(db)
             result = MutationEngine(db).cancel(mutation_id)
         return json.dumps(result, indent=2, default=str)
 
@@ -395,7 +410,7 @@ def _create_server() -> FastMCP:
             result["reminder"] = (
                 f"No relationships mapped for '{source}' yet. "
                 "Call describe() on its tables, identify join paths, "
-                "then call annotate_relationships() to build the semantic graph."
+                "then call annotate() with relationship items to build the semantic graph."
             )
 
         return json.dumps(result, indent=2, default=str)
@@ -413,11 +428,12 @@ def run_server(sync_schedule: bool = False, sync_interval: str = "1h"):
     global mcp
     print("Dinobase MCP server starting...", file=sys.stderr)
 
+    sync_db = None
     scheduler = None
     if sync_schedule:
         from dinobase.sync.scheduler import SyncScheduler
-        engine = _get_engine()
-        scheduler = SyncScheduler(engine.db, default_interval=sync_interval)
+        sync_db = DinobaseDB()
+        scheduler = SyncScheduler(sync_db, default_interval=sync_interval)
         scheduler.start_background()
         print(f"Background sync scheduler started (interval: {sync_interval})", file=sys.stderr)
 
@@ -428,3 +444,5 @@ def run_server(sync_schedule: bool = False, sync_interval: str = "1h"):
     finally:
         if scheduler:
             scheduler.stop()
+        if sync_db:
+            sync_db.close()

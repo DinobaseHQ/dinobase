@@ -16,7 +16,6 @@ from dinobase.auth import (
     ensure_fresh_credentials,
     refresh_access_token,
     get_proxy_url,
-    DEFAULT_PROXY_URL,
     TOKEN_EXPIRY_BUFFER_SECONDS,
 )
 from dinobase.cli import cli
@@ -45,8 +44,9 @@ def tmp_config(tmp_path):
 def test_proxy_url_default():
     with patch.dict(os.environ, {}, clear=True):
         os.environ.pop("DINOBASE_OAUTH_PROXY_URL", None)
+        os.environ.pop("DINOBASE_CLOUD_URL", None)
         with patch("dinobase.config.load_config", return_value={"sources": {}}):
-            assert get_proxy_url() == DEFAULT_PROXY_URL
+            assert get_proxy_url() == "https://api.dinobase.ai/oauth"
 
 
 def test_proxy_url_from_env():
@@ -57,9 +57,10 @@ def test_proxy_url_from_env():
 def test_proxy_url_from_config():
     with patch.dict(os.environ, {}, clear=True):
         os.environ.pop("DINOBASE_OAUTH_PROXY_URL", None)
-        cfg = {"sources": {}, "oauth_proxy_url": "https://config.proxy"}
+        os.environ.pop("DINOBASE_CLOUD_URL", None)
+        cfg = {"sources": {}, "cloud_url": "https://custom.api"}
         with patch("dinobase.config.load_config", return_value=cfg):
-            assert get_proxy_url() == "https://config.proxy"
+            assert get_proxy_url() == "https://custom.api/oauth"
 
 
 def test_proxy_url_strips_trailing_slash():

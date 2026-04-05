@@ -3,7 +3,8 @@
 Supports:
 - Per-source intervals: e.g. billing syncs every 1h, CRM every 30m
 - Global default interval
-- Concurrent sync via thread pool (100 sources sync in parallel, not sequentially)
+- Parallel sync for cloud mode (data goes to S3/GCS, no DuckDB contention)
+- Sequential sync for local mode (dlt writes to DuckDB file; concurrent writes conflict)
 - Foreground daemon mode (dinobase sync --schedule)
 - Background thread mode (embedded in MCP server)
 - Reliable: catches errors per-source, logs everything, never crashes
@@ -22,22 +23,26 @@ from dinobase.db import DinobaseDB, META_SCHEMA
 from dinobase.sync.engine import SyncEngine
 
 
-DEFAULT_MAX_WORKERS = 10
+DEFAULT_MAX_WORKERS_LOCAL = 1   # dlt writes to DuckDB file; concurrent writes conflict
+DEFAULT_MAX_WORKERS_CLOUD = 8   # dlt writes parquet to object storage; safe to parallelize
 
 
 def parse_interval(interval_str: str) -> int:
     """Parse an interval string like '1h', '30m', '6h', '1d' into seconds."""
     s = interval_str.strip().lower()
     if s.endswith("s"):
-        return int(s[:-1])
+        result = int(s[:-1])
     elif s.endswith("m"):
-        return int(s[:-1]) * 60
+        result = int(s[:-1]) * 60
     elif s.endswith("h"):
-        return int(s[:-1]) * 3600
+        result = int(s[:-1]) * 3600
     elif s.endswith("d"):
-        return int(s[:-1]) * 86400
+        result = int(s[:-1]) * 86400
     else:
-        return int(s)
+        result = int(s)
+    if result <= 0:
+        raise ValueError(f"Sync interval must be positive, got: {interval_str!r}")
+    return result
 
 
 class SyncScheduler:
@@ -51,10 +56,12 @@ class SyncScheduler:
         self,
         db: DinobaseDB,
         default_interval: str = "1h",
-        max_workers: int = DEFAULT_MAX_WORKERS,
+        max_workers: int | None = None,
     ):
         self.db = db
         self.default_interval_seconds = parse_interval(default_interval)
+        if max_workers is None:
+            max_workers = DEFAULT_MAX_WORKERS_CLOUD if db.is_cloud else DEFAULT_MAX_WORKERS_LOCAL
         self.max_workers = max_workers
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -64,12 +71,14 @@ class SyncScheduler:
 
     def _get_last_sync_time(self, source_name: str) -> datetime | None:
         """Get the last successful sync time for a source."""
-        rows = self.db.query(
+        result = self.db.conn.execute(
             f"SELECT MAX(finished_at) as last_sync FROM {META_SCHEMA}.sync_log "
-            f"WHERE source_name = '{source_name}' AND status = 'success'"
+            "WHERE source_name = ? AND status = 'success'",
+            [source_name],
         )
-        if rows and rows[0]["last_sync"]:
-            return rows[0]["last_sync"]
+        row = result.fetchone()
+        if row and row[0]:
+            return row[0]
         return None
 
     def _source_needs_sync(

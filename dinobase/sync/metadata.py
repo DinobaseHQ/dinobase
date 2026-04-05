@@ -189,18 +189,9 @@ def _fetch_stripe_openapi_spec() -> dict | None:
         import ssl
         ctx = ssl.create_default_context()
         req = Request(url, headers={"User-Agent": "dinobase/0.1"})
-        try:
-            with urlopen(req, timeout=30, context=ctx) as resp:
-                _stripe_spec_cache = json.loads(resp.read())
-                return _stripe_spec_cache
-        except (URLError, OSError):
-            # Retry without SSL verification as fallback
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            with urlopen(req, timeout=30, context=ctx) as resp:
-                _stripe_spec_cache = json.loads(resp.read())
-                return _stripe_spec_cache
+        with urlopen(req, timeout=30, context=ctx) as resp:
+            _stripe_spec_cache = json.loads(resp.read())
+            return _stripe_spec_cache
     except (URLError, json.JSONDecodeError, OSError) as e:
         print(f"  Warning: Failed to fetch Stripe spec: {e}", file=sys.stderr)
         # Fall back to bundled mini-spec
@@ -210,7 +201,7 @@ def _fetch_stripe_openapi_spec() -> dict | None:
 def _load_bundled_stripe_spec() -> dict | None:
     """Load the bundled mini Stripe OpenAPI spec."""
     bundled_paths = [
-        Path(__file__).parent.parent.parent.parent / "sample_data" / "stripe_openapi_mini.json",
+        Path(__file__).parent.parent.parent / "sample_data" / "stripe_openapi_mini.json",
         Path.home() / ".dinobase" / "stripe_openapi_mini.json",
     ]
     for path in bundled_paths:

@@ -137,8 +137,10 @@ def test_get_freshness_fresh_source(sample_db):
 
 def test_get_freshness_stale_source(sample_db):
     """Source synced long ago should be stale."""
-    # Backdate the sync log to 3 hours ago
-    old_time = datetime.now(timezone.utc) - timedelta(hours=3)
+    # Backdate the sync log to 3 hours ago.
+    # get_freshness() treats stored naive datetimes as UTC (via replace(tzinfo=utc)),
+    # so we must store a naive UTC timestamp to get the correct age.
+    old_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
     sample_db.conn.execute(
         "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
         [old_time],
@@ -183,7 +185,7 @@ def test_list_sources_includes_freshness(sample_db):
 
 def test_list_sources_stale_flag(sample_db):
     """Stale sources should have is_stale=True in list_sources."""
-    old_time = datetime.now(timezone.utc) - timedelta(hours=3)
+    old_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
     sample_db.conn.execute(
         "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
         [old_time],

@@ -156,26 +156,29 @@ class DinobaseDB:
         self._conn.execute("INSTALL httpfs")
         self._conn.execute("LOAD httpfs")
 
+        def _set(key: str, value: str) -> None:
+            self._conn.execute(f"SET {key} = '{value.replace(chr(39), chr(39)*2)}'")
+
         if storage_type == "gcs":
             # GCS via S3-compatible interface — needs HMAC keys
             self._conn.execute("SET s3_endpoint = 'storage.googleapis.com'")
             if os.environ.get("GCS_HMAC_KEY_ID"):
-                self._conn.execute(f"SET s3_access_key_id = '{os.environ['GCS_HMAC_KEY_ID']}'")
+                _set("s3_access_key_id", os.environ["GCS_HMAC_KEY_ID"])
             if os.environ.get("GCS_HMAC_SECRET"):
-                self._conn.execute(f"SET s3_secret_access_key = '{os.environ['GCS_HMAC_SECRET']}'")
+                _set("s3_secret_access_key", os.environ["GCS_HMAC_SECRET"])
         else:
             # S3
             if os.environ.get("AWS_ACCESS_KEY_ID"):
-                self._conn.execute(f"SET s3_access_key_id = '{os.environ['AWS_ACCESS_KEY_ID']}'")
+                _set("s3_access_key_id", os.environ["AWS_ACCESS_KEY_ID"])
             if os.environ.get("AWS_SECRET_ACCESS_KEY"):
-                self._conn.execute(f"SET s3_secret_access_key = '{os.environ['AWS_SECRET_ACCESS_KEY']}'")
+                _set("s3_secret_access_key", os.environ["AWS_SECRET_ACCESS_KEY"])
             if os.environ.get("AWS_DEFAULT_REGION"):
-                self._conn.execute(f"SET s3_region = '{os.environ['AWS_DEFAULT_REGION']}'")
+                _set("s3_region", os.environ["AWS_DEFAULT_REGION"])
             elif os.environ.get("AWS_REGION"):
-                self._conn.execute(f"SET s3_region = '{os.environ['AWS_REGION']}'")
+                _set("s3_region", os.environ["AWS_REGION"])
             # S3-compatible endpoints (MinIO, R2, etc.)
             if os.environ.get("S3_ENDPOINT"):
-                self._conn.execute(f"SET s3_endpoint = '{os.environ['S3_ENDPOINT']}'")
+                _set("s3_endpoint", os.environ["S3_ENDPOINT"])
                 self._conn.execute("SET s3_url_style = 'path'")
 
     def _setup_azure(self) -> None:
@@ -185,22 +188,16 @@ class DinobaseDB:
         self._conn.execute("INSTALL azure")
         self._conn.execute("LOAD azure")
 
+        def _set(key: str, value: str) -> None:
+            self._conn.execute(f"SET {key} = '{value.replace(chr(39), chr(39)*2)}'")
+
         if os.environ.get("AZURE_STORAGE_CONNECTION_STRING"):
-            self._conn.execute(
-                f"SET azure_storage_connection_string = "
-                f"'{os.environ['AZURE_STORAGE_CONNECTION_STRING']}'"
-            )
+            _set("azure_storage_connection_string", os.environ["AZURE_STORAGE_CONNECTION_STRING"])
         else:
             if os.environ.get("AZURE_STORAGE_ACCOUNT_NAME"):
-                self._conn.execute(
-                    f"SET azure_account_name = "
-                    f"'{os.environ['AZURE_STORAGE_ACCOUNT_NAME']}'"
-                )
+                _set("azure_account_name", os.environ["AZURE_STORAGE_ACCOUNT_NAME"])
             if os.environ.get("AZURE_STORAGE_ACCOUNT_KEY"):
-                self._conn.execute(
-                    f"SET azure_account_key = "
-                    f"'{os.environ['AZURE_STORAGE_ACCOUNT_KEY']}'"
-                )
+                _set("azure_account_key", os.environ["AZURE_STORAGE_ACCOUNT_KEY"])
 
     def _load_cloud_metadata(self) -> None:
         """Load metadata tables from cloud parquet files."""
@@ -211,8 +208,10 @@ class DinobaseDB:
                     f"INSERT INTO {META_SCHEMA}.{table} "
                     f"SELECT * FROM read_parquet('{url}')"
                 )
-            except Exception:
-                pass  # File doesn't exist yet (fresh install)
+            except Exception as e:
+                if "does not exist" not in str(e).lower() and "no such file" not in str(e).lower():
+                    import sys
+                    print(f"[dinobase] Warning: could not load metadata table '{table}': {e}", file=sys.stderr)
 
     def _register_cloud_views(self) -> None:
         """Create DuckDB views over cloud parquet data for all known sources."""
@@ -245,8 +244,10 @@ class DinobaseDB:
                     f'  SELECT CAST(id AS VARCHAR) FROM "{source_name}"."{staging_table}"'
                     f")"
                 )
-            except Exception:
-                pass  # Parquet files may not exist yet
+            except Exception as e:
+                if "does not exist" not in str(e).lower() and "no such file" not in str(e).lower():
+                    import sys
+                    print(f"[dinobase] Warning: could not register view for '{source_name}.{table_name}': {e}", file=sys.stderr)
 
     def save_cloud_metadata(self) -> None:
         """Persist metadata tables to cloud storage as parquet files."""
@@ -306,20 +307,24 @@ class DinobaseDB:
 
     def get_tables(self, schema: str) -> list[str]:
         """List all tables in a schema."""
-        rows = self.query(
-            f"SELECT table_name FROM information_schema.tables "
-            f"WHERE table_schema = '{schema}' ORDER BY table_name"
+        res = self.conn.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = ? ORDER BY table_name",
+            [schema],
         )
-        return [r["table_name"] for r in rows]
+        return [row[0] for row in res.fetchall()]
 
     def get_columns(self, schema: str, table: str) -> list[dict[str, Any]]:
         """Get column info for a table."""
-        return self.query(
-            f"SELECT column_name, data_type, is_nullable "
-            f"FROM information_schema.columns "
-            f"WHERE table_schema = '{schema}' AND table_name = '{table}' "
-            f"ORDER BY ordinal_position"
+        res = self.conn.execute(
+            "SELECT column_name, data_type, is_nullable "
+            "FROM information_schema.columns "
+            "WHERE table_schema = ? AND table_name = ? "
+            "ORDER BY ordinal_position",
+            [schema, table],
         )
+        cols = [d[0] for d in res.description]
+        return [dict(zip(cols, row)) for row in res.fetchall()]
 
     def get_row_count(self, schema: str, table: str) -> int:
         """Get row count for a table."""
@@ -409,14 +414,15 @@ class DinobaseDB:
 
     def get_column_annotations(self, schema_name: str, table_name: str) -> dict[str, dict[str, str | None]]:
         """Get annotations for all columns in a table. Returns {col_name: {description, note}}."""
-        rows = self.query(
+        result = self.conn.execute(
             f"SELECT column_name, description, note FROM {META_SCHEMA}.columns "
-            f"WHERE schema_name = '{schema_name}' AND table_name = '{table_name}'"
+            "WHERE schema_name = ? AND table_name = ?",
+            [schema_name, table_name],
         )
         return {
-            r["column_name"]: {"description": r["description"], "note": r["note"]}
-            for r in rows
-            if r["description"] or r["note"]
+            r[0]: {"description": r[1], "note": r[2]}
+            for r in result.fetchall()
+            if r[1] or r[2]
         }
 
     def upsert_relationship(
@@ -569,11 +575,12 @@ class DinobaseDB:
 
     def get_live_row_ids(self, source_name: str, table_name: str) -> list[str]:
         """Get IDs of all live rows for a source.table."""
-        rows = self.query(
+        result = self.conn.execute(
             f"SELECT record_id FROM {META_SCHEMA}.live_rows "
-            f"WHERE source_name = '{source_name}' AND table_name = '{table_name}'"
+            "WHERE source_name = ? AND table_name = ?",
+            [source_name, table_name],
         )
-        return [r["record_id"] for r in rows]
+        return [r[0] for r in result.fetchall()]
 
     def clear_live_rows(self, source_name: str, table_name: str | None = None) -> int:
         """Clear live rows after a successful sync. Returns count cleared."""

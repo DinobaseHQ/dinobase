@@ -257,7 +257,7 @@ def run_claude_agent(db: DinobaseDB, source_name: str, api_key: str) -> None:
 
     for _ in range(20):  # hard cap to prevent runaway loops
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=os.environ.get("DINOBASE_SEMANTIC_MODEL", "claude-haiku-4-5"),
             max_tokens=4096,
             system=system,
             tools=_TOOLS,  # type: ignore[arg-type]

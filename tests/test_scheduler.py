@@ -86,9 +86,13 @@ def test_source_needs_sync_respects_per_source_interval(db):
     # With default 1h interval, recently synced = no sync needed
     assert scheduler._source_needs_sync("stripe", {"type": "stripe"}) is False
 
-    # With 0s interval, always needs sync
+    # With a short interval and an old sync, needs sync.
+    # Backdate the log so the source is older than 1s.
+    db.conn.execute(
+        "UPDATE _dinobase.sync_log SET finished_at = '2000-01-01' WHERE source_name = 'stripe'"
+    )
     assert scheduler._source_needs_sync(
-        "stripe", {"type": "stripe", "sync_interval": "0s"}
+        "stripe", {"type": "stripe", "sync_interval": "1s"}
     ) is True
 
 

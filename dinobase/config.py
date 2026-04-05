@@ -200,16 +200,20 @@ _DEFAULT_THRESHOLDS: dict[str, str] = {
 
 def _parse_duration(duration: str) -> int:
     """Parse a human duration string (e.g., '1h', '30m', '6h') into seconds."""
+    original = duration
     duration = duration.strip().lower()
-    if duration.endswith("h"):
-        return int(duration[:-1]) * 3600
-    if duration.endswith("m"):
-        return int(duration[:-1]) * 60
-    if duration.endswith("s"):
-        return int(duration[:-1])
-    if duration.endswith("d"):
-        return int(duration[:-1]) * 86400
-    return int(duration)
+    try:
+        if duration.endswith("h"):
+            return int(duration[:-1]) * 3600
+        if duration.endswith("m"):
+            return int(duration[:-1]) * 60
+        if duration.endswith("s"):
+            return int(duration[:-1])
+        if duration.endswith("d"):
+            return int(duration[:-1]) * 86400
+        return int(duration)
+    except ValueError:
+        raise ValueError(f"Invalid duration '{original}': expected a number followed by h, m, s, or d (e.g. '1h', '30m', '6h')")
 
 
 def _source_category(source_type: str) -> str:
@@ -300,7 +304,7 @@ def ensure_fresh_cloud_token() -> str | None:
         return None
 
     expires_at = creds.get("expires_at", 0)
-    if not expires_at or time.time() < expires_at - 60:
+    if expires_at and time.time() < expires_at - 60:
         return access_token  # still valid
 
     refresh_token = creds.get("refresh_token", "")
@@ -326,6 +330,12 @@ def ensure_fresh_cloud_token() -> str | None:
         save_cloud_credentials(creds)
         return creds["access_token"]
     except Exception:
+        import click
+        click.echo(
+            "Warning: session token could not be refreshed. "
+            "Run `dinobase login` if you see authentication errors.",
+            err=True,
+        )
         return access_token  # refresh failed; caller will get a 401
 
 

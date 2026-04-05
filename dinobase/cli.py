@@ -250,7 +250,7 @@ def quickstart():
     server_entry = (
         {"command": dinobase_path, "args": ["serve"]}
         if dinobase_path
-        else {"command": sys.executable, "args": ["-m", "dinobase.mcp.server"]}
+        else {"command": sys.executable, "args": ["-m", "dinobase.mcp"]}
     )
     click.echo("To use with Claude or Cursor, add this to your MCP config:\n")
     click.echo(json.dumps({"mcpServers": {"dinobase": server_entry}}, indent=2))
@@ -283,7 +283,7 @@ def login(headless: bool):
 
     init_dinobase()
     api_url = get_cloud_api_url()
-    web_url = os.environ.get("DINOBASE_WEB_URL", "http://localhost:3000")
+    web_url = os.environ.get("DINOBASE_WEB_URL", "https://app.dinobase.ai")
 
     # Reuse the same local callback server pattern from auth.py
     from dinobase.auth import _start_callback_server
@@ -323,6 +323,10 @@ def login(headless: bool):
 
     if "error" in result:
         click.echo(json.dumps({"status": "error", "error": result["error"]}))
+        sys.exit(1)
+
+    if result.get("state") != state:
+        click.echo(json.dumps({"status": "error", "error": "State mismatch — possible CSRF. Try logging in again."}))
         sys.exit(1)
 
     # The web frontend sends back the token directly via query params
@@ -1574,7 +1578,7 @@ def mcp_config(client: str | None):
     else:
         server_entry = {
             "command": sys.executable,
-            "args": ["-m", "dinobase.mcp.server"],
+            "args": ["-m", "dinobase.mcp"],
         }
 
     mcp_block = {"mcpServers": {"dinobase": server_entry}}
@@ -1627,7 +1631,7 @@ def install_mcp(client: str):
     server_entry = (
         {"command": dinobase_path, "args": ["serve"]}
         if dinobase_path
-        else {"command": sys.executable, "args": ["-m", "dinobase.mcp.server"]}
+        else {"command": sys.executable, "args": ["-m", "dinobase.mcp"]}
     )
 
     if client == "claude-code":

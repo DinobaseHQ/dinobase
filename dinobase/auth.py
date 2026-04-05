@@ -12,24 +12,34 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
 from urllib.parse import urlencode, urlparse, parse_qs
 from urllib.request import Request, urlopen
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import json
 
 
-DEFAULT_PROXY_URL = "https://auth.dinobase.dev"
 TOKEN_EXPIRY_BUFFER_SECONDS = 300  # refresh 5 min before expiry
 
 
 def get_proxy_url() -> str:
-    """Get the OAuth proxy URL from env or config."""
+    """Return the base URL for OAuth proxy endpoints (/auth/, /token/, /refresh/).
+
+    Resolution order:
+    1. DINOBASE_OAUTH_PROXY_URL — explicit override, backward-compatible with
+       standalone proxy deployments.
+    2. DINOBASE_CLOUD_URL + "/oauth" — the cloud API serves these endpoints at
+       /oauth/* in both 'web' and 'query' modes, so no separate proxy needed.
+    """
     url = os.environ.get("DINOBASE_OAUTH_PROXY_URL")
     if url:
         return url.rstrip("/")
 
-    from dinobase.config import load_config
+    from dinobase.config import load_config, DEFAULT_CLOUD_API_URL
     config = load_config()
-    return config.get("oauth_proxy_url", DEFAULT_PROXY_URL).rstrip("/")
+    cloud_url = os.environ.get(
+        "DINOBASE_CLOUD_URL",
+        config.get("cloud_url", DEFAULT_CLOUD_API_URL),
+    )
+    return cloud_url.rstrip("/") + "/oauth"
 
 
 # ---------------------------------------------------------------------------
@@ -87,31 +97,59 @@ def _start_callback_server() -> HTTPServer:
 # Token exchange
 # ---------------------------------------------------------------------------
 
-def _proxy_request(url: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Make a JSON request to the OAuth proxy."""
+def _get_cloud_token() -> str | None:
+    """Return the current Supabase access token, or None if not logged in."""
+    try:
+        from dinobase.config import ensure_fresh_cloud_token
+        return ensure_fresh_cloud_token()
+    except Exception:
+        return None
+
+
+def _proxy_request(url: str, data: dict[str, Any] | None = None, token: str | None = None) -> dict[str, Any]:
+    """Make a JSON request to the OAuth proxy.
+
+    If ``token`` is provided it is sent as a Bearer token — required for
+    protected proxy endpoints (/token/, /refresh/).
+    """
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     if data is not None:
         req = Request(
             url,
             data=json.dumps(data).encode(),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
     else:
-        req = Request(url)
+        req = Request(url, headers=headers)
 
     try:
         with urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
+    except HTTPError as e:
+        body = e.read().decode(errors="replace")
+        raise RuntimeError(
+            f"OAuth proxy returned HTTP {e.code} at {url}: {body}"
+        ) from e
     except URLError as e:
         raise RuntimeError(f"Failed to reach OAuth proxy at {url}: {e}") from e
 
 
 def _exchange_code(provider: str, code: str, redirect_uri: str) -> dict[str, Any]:
     """Exchange an authorization code for tokens via the proxy."""
+    token = _get_cloud_token()
+    if not token:
+        raise RuntimeError(
+            "Not logged in to Dinobase cloud. Run `dinobase login` first."
+        )
     proxy_url = get_proxy_url()
     return _proxy_request(
         f"{proxy_url}/token/{provider}",
         {"code": code, "redirect_uri": redirect_uri},
+        token=token,
     )
 
 
@@ -187,10 +225,16 @@ def refresh_access_token(provider: str, refresh_token: str) -> dict[str, Any]:
     Returns the proxy response with at least: access_token, expires_in.
     May also include a rotated refresh_token.
     """
+    token = _get_cloud_token()
+    if not token:
+        raise RuntimeError(
+            "Not logged in to Dinobase cloud. Run `dinobase login` first."
+        )
     proxy_url = get_proxy_url()
     return _proxy_request(
         f"{proxy_url}/refresh/{provider}",
         {"refresh_token": refresh_token},
+        token=token,
     )
 
 

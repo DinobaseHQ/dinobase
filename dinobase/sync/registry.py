@@ -139,8 +139,9 @@ def _load_yaml_api_configs(apis_dir: Path | None = None) -> None:
                 _load_yaml_graphql(cfg)
             else:
                 _load_yaml_rest_api(cfg)
-        except Exception:
-            pass  # skip broken configs silently
+        except Exception as e:
+            import sys
+            print(f"[dinobase] Warning: skipping {yaml_path.name}: {e}", file=sys.stderr)
 
 
 def _build_credentials(cfg: dict[str, Any]) -> list[CredentialParam]:

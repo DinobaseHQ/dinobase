@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from dinobase.db import DinobaseDB
 
 
+_COLUMN_ONLY_KEYS: frozenset[str] = frozenset({"description", "note"})
+
+
 class AnnotationInput(BaseModel):
     target: str  # "schema.table" or "schema.table.column"
     key: str
@@ -21,7 +24,7 @@ class RelationshipInput(BaseModel):
     from_column: str
     to_table: str  # "schema.table"
     to_column: str
-    cardinality: Literal["one_to_one", "one_to_many", "many_to_many"] = "one_to_many"
+    cardinality: Literal["one_to_one", "one_to_many", "many_to_one", "many_to_many"] = "one_to_many"
     description: str = ""
 
 
@@ -39,7 +42,7 @@ def apply_annotation(db: DinobaseDB, item: AnnotationInput) -> dict:
             db.set_metadata(schema, tbl, item.key, item.value, column="")
     elif len(parts) == 3:
         schema, tbl, col = parts
-        if item.key in ("description", "note"):
+        if item.key in _COLUMN_ONLY_KEYS:
             db.conn.execute(
                 f"INSERT INTO _dinobase.columns "
                 f"(source_name, schema_name, table_name, column_name, {item.key}) "

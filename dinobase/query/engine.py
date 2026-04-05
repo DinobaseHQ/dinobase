@@ -217,7 +217,7 @@ class QueryEngine:
 
         # Sample rows
         try:
-            sample = self.db.query(f"SELECT * FROM {schema}.{table} LIMIT 3")
+            sample = self.db.query(f'SELECT * FROM "{schema}"."{table}" LIMIT 3')
             result["sample_rows"] = sample
         except Exception:
             result["sample_rows"] = []
@@ -229,10 +229,10 @@ class QueryEngine:
             for r in related:
                 if r["from_schema"] == schema and r["from_table"] == table:
                     other = f"{r['to_schema']}.{r['to_table']}"
-                    join = f"ON {table}.{r['from_column']} = {r['to_table']}.{r['to_column']}"
+                    join = f"ON {r['from_schema']}.{r['from_table']}.{r['from_column']} = {r['to_schema']}.{r['to_table']}.{r['to_column']}"
                 else:
                     other = f"{r['from_schema']}.{r['from_table']}"
-                    join = f"ON {r['from_table']}.{r['from_column']} = {table}.{r['to_column']}"
+                    join = f"ON {r['from_schema']}.{r['from_table']}.{r['from_column']} = {r['to_schema']}.{r['to_table']}.{r['to_column']}"
                 related_tables.append({
                     "table": other,
                     "join": join,
@@ -250,14 +250,13 @@ class QueryEngine:
         """
         from dinobase.config import get_freshness_threshold
 
-        sync_rows = self.db.query(
+        result = self.db.conn.execute(
             f"SELECT MAX(finished_at) as last_sync FROM {META_SCHEMA}.sync_log "
-            f"WHERE source_name = '{source_name}' AND status = 'success'"
+            "WHERE source_name = ? AND status = 'success'",
+            [source_name],
         )
-
-        last_sync = None
-        if sync_rows and sync_rows[0]["last_sync"]:
-            last_sync = sync_rows[0]["last_sync"]
+        row = result.fetchone()
+        last_sync = row[0] if row and row[0] else None
 
         threshold = get_freshness_threshold(source_name)
 
