@@ -1,9 +1,9 @@
 ---
 title: Mutations
-description: Write data back to source systems through SQL -- UPDATE and INSERT with preview/confirm flow.
+description: Reverse ETL via SQL — write data back to source systems with UPDATE and INSERT, using a preview/confirm flow to prevent accidental changes.
 ---
 
-Dinobase supports writing data back to source systems through SQL. Mutations use a preview/confirm flow to prevent accidental changes.
+Dinobase mutations are the SQL interface to reverse ETL — write data back to source systems via UPDATE and INSERT. Every mutation uses a preview/confirm flow to prevent accidental changes.
 
 ## How it works
 
@@ -20,7 +20,7 @@ UPDATE stripe...       "2 rows affected"     confirm(id)          Stripe API cal
 
 ## Supported operations
 
-Only `UPDATE` and `INSERT` are allowed. These statements are blocked: `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`, `GRANT`, `REVOKE`.
+`UPDATE`, `INSERT`, and `DELETE` are supported. Destructive DDL is blocked entirely: `DROP`, `ALTER`, `TRUNCATE`, `CREATE`, `GRANT`, `REVOKE`. `DELETE` requires a `WHERE` clause — bulk deletes without a filter are rejected.
 
 ## CLI usage
 

@@ -21,7 +21,7 @@ Ask an AI agent: *"Which customers that churned last quarter had declining usage
 
 It can't answer — or it gets it wrong. Agents calling per-source tools have no way to `JOIN` across APIs, no semantic context to interpret field values, and return paginated JSON that fills context windows before producing an answer.
 
-Dinobase gives agents a unified SQL interface with semantic context across all your sources. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
+Dinobase gives agents a unified SQL interface with semantic context across all your sources. Agents can read across all sources with a single SQL query, and write data back (reverse ETL) via SQL mutations with a preview/confirm flow. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
 
 ## Quick start
 
@@ -103,6 +103,19 @@ Set `DINOBASE_AUTO_ANNOTATE=false` to disable. See [Semantic Layer docs](https:/
 > "Which companies have closed-won deals over $100K but their subscription is past due?"
 
 The agent writes the SQL, Dinobase executes it across your sources, and the answer comes back in seconds.
+
+### 5. Write data back (reverse ETL)
+
+Agents can also mutate source data via SQL. Every mutation goes through a preview/confirm flow — nothing executes until confirmed.
+
+```bash
+dinobase query "UPDATE stripe.customers SET name = 'Acme Inc' WHERE id = 'cus_123'"
+# Returns a preview: 1 row affected, will call Stripe API
+
+dinobase confirm <mutation_id>
+# ✓ Stripe API called (1/1 succeeded)
+# ✓ Data updated
+```
 
 ## Connectors
 
@@ -301,7 +314,7 @@ Native MCP support. Zero adapter code.
 - **[Getting Started](https://dinobase.ai/docs/getting-started/)** — Install, connect, query in 5 minutes
 - **[Connecting Sources](https://dinobase.ai/docs/guides/connecting-sources/)** — Credentials, naming, sync intervals
 - **[Querying Data](https://dinobase.ai/docs/guides/querying/)** — Cross-source joins, aggregations, DuckDB SQL
-- **[Mutations](https://dinobase.ai/docs/guides/mutations/)** — Write data back to sources with preview/confirm flow
+- **[Reverse ETL (Mutations)](https://dinobase.ai/docs/guides/mutations/)** — Write data back to source APIs via SQL with preview/confirm flow
 - **[MCP Integration](https://dinobase.ai/docs/guides/mcp/)** — Agent setup for Claude Desktop, Cursor
 - **[OpenClaw](https://dinobase.ai/docs/integrations/openclaw/)** — OpenClaw skill setup
 - **[Vercel AI SDK](https://dinobase.ai/docs/integrations/vercel-ai/)** — MCP integration for Next.js apps

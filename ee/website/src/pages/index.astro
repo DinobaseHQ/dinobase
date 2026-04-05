@@ -978,6 +978,8 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 white-space: pre;
                 overflow-x: auto;
             }
+            .code-block .cmd { color: var(--green-accent); }
+            .code-block .out { color: var(--muted); }
 
             /* ── DEMO ── */
             .demo-card {
@@ -1959,6 +1961,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 <span>semantic layer</span><span class="dot">●</span>
                 <span>10× fewer tokens</span><span class="dot">●</span>
                 <span>100+ sources</span><span class="dot">●</span>
+                <span>reverse ETL</span><span class="dot">●</span>
                 <span>millisecond queries</span><span class="dot">●</span>
                 <span>no rate limits</span><span class="dot">●</span>
                 <span>SQL over everything</span><span class="dot">●</span>
@@ -1966,6 +1969,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 <span>semantic layer</span><span class="dot">●</span>
                 <span>10× fewer tokens</span><span class="dot">●</span>
                 <span>100+ sources</span><span class="dot">●</span>
+                <span>reverse ETL</span><span class="dot">●</span>
                 <span>millisecond queries</span><span class="dot">●</span>
                 <span>no rate limits</span><span class="dot">●</span>
             </div>
@@ -2482,10 +2486,62 @@ Related: stripe.customers, stripe.invoices</pre>
             </div>
         </div>
 
+        <!-- REVERSE ETL -->
+        <div class="section-wrap reveal" id="reverse-etl">
+            <div class="container">
+                <p class="section-no">04 — reverse ETL</p>
+                <h2>
+                    Agents that <span class="h-word">write back</span>.
+                </h2>
+                <div class="section-sub">
+                    <p>
+                        The same SQL interface works in both directions. Agents UPDATE, INSERT, or DELETE via SQL — Dinobase previews every change before anything executes. Destructive DDL (DROP, ALTER, TRUNCATE) is blocked entirely. Source APIs are only called after explicit confirmation.
+                    </p>
+                    <a
+                        href="/docs/guides/mutations/"
+                        class="section-sub-btn btn-ghost">Mutations docs →</a
+                    >
+                </div>
+                <div class="install-list reveal-stagger">
+                    <div class="install-item">
+                        <span class="install-num">01</span>
+                        <div class="install-body">
+                            <h3>Write SQL</h3>
+                            <p class="install-tag">Agent sends UPDATE or INSERT</p>
+                            <pre class="code-block"><span class="cmd">dinobase query "UPDATE stripe.customers
+  SET name = 'Acme Inc'
+  WHERE id = 'cus_123'"</span></pre>
+                        </div>
+                    </div>
+                    <div class="install-item">
+                        <span class="install-num">02</span>
+                        <div class="install-body">
+                            <h3>Review the preview</h3>
+                            <p class="install-tag">Nothing executes yet</p>
+                            <pre class="code-block"><span class="out">mutation_id: mut_abc123
+rows_affected: 1
+side_effects: "Will call Stripe API
+  to update 1 record"</span></pre>
+                        </div>
+                    </div>
+                    <div class="install-item">
+                        <span class="install-num">03</span>
+                        <div class="install-body">
+                            <h3>Confirm to execute</h3>
+                            <p class="install-tag">Source API called + Dinobase data updated</p>
+                            <pre class="code-block"><span class="cmd">dinobase confirm mut_abc123</span>
+<span class="out"># ✓ Stripe API called (1/1 succeeded)
+# ✓ Local data updated</span></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- INSTALL -->
         <div class="section-wrap reveal" id="install">
             <div class="container">
-                <p class="section-no">04 — setup</p>
+                <p class="section-no">05 — setup</p>
                 <h2>
                     One line to <span class="h-word">connect</span> your agent.
                 </h2>
