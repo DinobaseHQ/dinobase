@@ -1,0 +1,344 @@
+---
+const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Join the waitlist — Dinobase</title>
+        <meta
+            name="description"
+            content="Join the Dinobase waitlist for early access to the agent-first database."
+        />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --green: #7abf7a;
+                --green-accent: #4ade80;
+                --bg: #0e1410;
+                --surface: #161d13;
+                --border: #28342090;
+                --border-light: #3a4a30;
+                --text: #eceae0;
+                --muted: #a8a49a;
+                --dimmed: #6b7060;
+            }
+
+            html {
+                scroll-behavior: smooth;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family:
+                    "Atkinson Hyperlegible",
+                    -apple-system,
+                    sans-serif;
+                line-height: 1.5;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 2rem 1.5rem;
+            }
+
+            .card {
+                background: var(--surface);
+                border: 1px solid var(--border-light);
+                border-radius: 1.25rem;
+                padding: 3rem 2.5rem;
+                width: 100%;
+                max-width: 480px;
+                text-align: center;
+            }
+
+            .logo {
+                font-size: 2.5rem;
+                margin-bottom: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+                font-weight: 700;
+                margin-bottom: 0.75rem;
+            }
+
+            .subtitle {
+                color: var(--muted);
+                font-size: 0.9375rem;
+                margin-bottom: 2rem;
+                line-height: 1.6;
+            }
+
+            .waitlist-form {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .waitlist-input {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid var(--border-light);
+                border-radius: 0.625rem;
+                padding: 0.875rem 1.25rem;
+                font-size: 1rem;
+                color: var(--text);
+                outline: none;
+                transition: border-color 0.2s;
+                font-family: "Atkinson Hyperlegible", sans-serif;
+                width: 100%;
+            }
+
+            .waitlist-input::placeholder {
+                color: var(--dimmed);
+            }
+
+            .waitlist-input:focus {
+                border-color: var(--green);
+            }
+
+            .btn {
+                background: var(--green);
+                color: #0e1410;
+                border: none;
+                border-radius: 0.625rem;
+                padding: 0.875rem 1.5rem;
+                font-size: 0.9375rem;
+                font-weight: 700;
+                cursor: pointer;
+                font-family: "Atkinson Hyperlegible", sans-serif;
+                transition: filter 0.15s;
+            }
+
+            .btn:hover {
+                filter: brightness(1.1);
+            }
+
+            .btn:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+
+            .waitlist-success {
+                color: var(--green);
+                font-size: 1rem;
+                font-weight: 700;
+                padding: 0.5rem 0;
+                display: none;
+            }
+
+            .early-access {
+                display: none;
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+
+            .early-access p {
+                color: var(--muted);
+                font-size: 0.9375rem;
+            }
+
+            .early-access a {
+                display: inline-block;
+                background: var(--green);
+                color: #0e1410;
+                text-decoration: none;
+                border-radius: 0.625rem;
+                padding: 0.875rem 1.75rem;
+                font-size: 0.9375rem;
+                font-weight: 700;
+                transition: filter 0.15s;
+            }
+
+            .early-access a:hover {
+                filter: brightness(1.1);
+            }
+
+            .back-link {
+                display: block;
+                margin-top: 1.5rem;
+                color: var(--dimmed);
+                font-size: 0.875rem;
+                text-decoration: none;
+            }
+
+            .back-link:hover {
+                color: var(--muted);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="logo">&#x1F995;</div>
+            <h1>Join the waitlist</h1>
+            <p class="subtitle">
+                Dinobase is in early access. Enter your email and we&apos;ll let
+                you know when you&apos;re in.
+            </p>
+
+            <form id="waitlist-form" class="waitlist-form">
+                <input
+                    id="waitlist-email"
+                    type="email"
+                    class="waitlist-input"
+                    placeholder="your@email.com"
+                    required
+                />
+                <button type="submit" class="btn">Join waitlist</button>
+            </form>
+
+            <p id="waitlist-success" class="waitlist-success">
+                &#x2713; You&apos;re on the list &mdash; we&apos;ll be in touch.
+            </p>
+
+            <div id="early-access" class="early-access">
+                <p>You have early access!</p>
+                <a href="https://app.dinobase.ai">Get started free &rarr;</a>
+            </div>
+        </div>
+
+        <a href="/" class="back-link">&larr; Back to dinobase.ai</a>
+
+        <script define:vars={{ posthogKey }}>
+            !(function (t, e) {
+                var o, n, p, r;
+                e.__SV ||
+                    ((window.posthog = e),
+                    (e._i = []),
+                    (e.init = function (i, s, a) {
+                        function g(t, e) {
+                            var o = e.split(".");
+                            2 == o.length && ((t = t[o[0]]), (e = o[1]));
+                            t[e] = function () {
+                                t.push(
+                                    [e].concat(
+                                        Array.prototype.slice.call(
+                                            arguments,
+                                            0,
+                                        ),
+                                    ),
+                                );
+                            };
+                        }
+                        (((p = t.createElement("script")).type =
+                            "text/javascript"),
+                            (p.crossOrigin = "anonymous"),
+                            (p.async = !0),
+                            (p.src = s.api_host + "/static/array.js"),
+                            (r =
+                                t.getElementsByTagName(
+                                    "script",
+                                )[0]).parentNode.insertBefore(p, r));
+                        var u = e;
+                        for (
+                            void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
+                                u.people = u.people || [],
+                                u.toString = function (t) {
+                                    var e = "posthog";
+                                    return (
+                                        "posthog" !== a && (e += "." + a),
+                                        t || (e += " (stub)"),
+                                        e
+                                    );
+                                },
+                                u.people.toString = function () {
+                                    return u.toString(1) + " (stub)";
+                                },
+                                o =
+                                    "init me ws register register_once register_for_session unregister opt_out_capturing opt_in_capturing has_opted_out_capturing has_opted_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties".split(
+                                        " ",
+                                    ),
+                                n = 0;
+                            n < o.length;
+                            n++
+                        )
+                            g(u, o[n]);
+                        e._i.push([i, s, a]);
+                    }),
+                    (e.__SV = 1));
+            })(document, window.posthog || []);
+
+            if (posthogKey) {
+                posthog.init(posthogKey, {
+                    api_host: "https://f.dinobase.ai",
+                    ui_host: "https://us.posthog.com",
+                    defaults: "2026-01-30",
+                    person_profiles: "identified_only",
+                    loaded: function (ph) {
+                        ph.onFeatureFlags(function () {
+                            window.__posthogReady = true;
+                            window.dispatchEvent(new Event("posthog:ready"));
+                        });
+                    },
+                });
+            }
+
+            // If user already has early_access, skip the form
+            function applyEarlyAccess() {
+                if (!window.posthog || !posthog.isFeatureEnabled("early_access"))
+                    return;
+                const form = document.getElementById("waitlist-form");
+                const ea = document.getElementById("early-access");
+                if (form) form.style.display = "none";
+                if (ea) ea.style.display = "flex";
+            }
+
+            window.addEventListener("posthog:ready", applyEarlyAccess);
+            if (window.__posthogReady) applyEarlyAccess();
+
+            // Waitlist form submission
+            const form = document.getElementById("waitlist-form");
+            if (form) {
+                form.addEventListener("submit", function (e) {
+                    e.preventDefault();
+                    const emailEl = document.getElementById("waitlist-email");
+                    const successEl = document.getElementById("waitlist-success");
+                    if (!emailEl || !successEl) return;
+
+                    const email = emailEl.value.trim();
+                    if (!email) return;
+
+                    const btn = form.querySelector('button[type="submit"]');
+                    if (btn) btn.disabled = true;
+
+                    if (window.posthog) {
+                        posthog.identify(email, { email });
+                        posthog.capture("waitlist_joined", { email });
+                    }
+
+                    form.style.display = "none";
+                    successEl.style.display = "block";
+                    sessionStorage.setItem("waitlist_joined", "1");
+                });
+            }
+
+            // If already joined this session, hide the form
+            if (sessionStorage.getItem("waitlist_joined")) {
+                const form = document.getElementById("waitlist-form");
+                const successEl = document.getElementById("waitlist-success");
+                if (form) form.style.display = "none";
+                if (successEl) successEl.style.display = "block";
+            }
+        </script>
+    </body>
+</html>
