@@ -16,6 +16,25 @@ _AGENT_COMMANDS = frozenset({
     "confirm", "cancel", "refresh", "auth",
 })
 
+_CLI_INSTRUCTIONS = """\
+Dinobase is installed on this system. It gives you SQL access to the user's business data
+(Stripe, HubSpot, Postgres, and 100+ other sources) synced into a local DuckDB database.
+
+Use the CLI — it is more token-efficient than MCP.
+
+Workflow:
+1. `dinobase info` — see what sources and tables are available
+2. `dinobase describe <schema.table>` — columns, types, annotations, relationships, sample data
+3. `dinobase query "<sql>"` — run SQL (DuckDB dialect, reference tables as schema.table)
+4. `dinobase refresh [source]` — re-sync stale data before querying
+5. `dinobase annotate '<json>'` — document tables/columns: descriptions, PII flags, relationships
+
+For mutations (INSERT/UPDATE/DELETE), `query` returns a preview with a mutation ID.
+Call `dinobase confirm <id>` to execute or `dinobase cancel <id>` to discard.
+
+Always start with `dinobase info` to understand what data is available.
+Output is JSON by default. Add --pretty for human-readable tables."""
+
 
 def _get_cloud_client():
     """Return an authenticated CloudClient if logged in, else None."""
@@ -123,7 +142,32 @@ def init(storage: str | None):
         click.echo(f"Storage: {get_storage_url()}")
     else:
         click.echo(f"Database: {get_db_path()}")
-    click.echo("Add a source: dinobase add <source> --api-key ...  (run `dinobase sources` to list all)")
+
+    # Prompt for agent setup (interactive) or print instructions (non-interactive)
+    if sys.stdin.isatty():
+        click.echo("\nSet up an agent? (optional)\n")
+        choices = [
+            ("1", "claude-code",    "Claude Code"),
+            ("2", "cursor",         "Cursor"),
+            ("3", "claude-desktop", "Claude Desktop"),
+            ("4", "codex",          "Codex"),
+        ]
+        for num, _, label in choices:
+            click.echo(f"  {num}. {label}")
+        click.echo("  5. Skip\n")
+        choice = click.prompt("Choose", default="5", show_default=False)
+        matched = {num: client for num, client, _ in choices}
+        if choice in matched:
+            _install_client(matched[choice])
+        elif choice != "5":
+            click.echo("Skipped.")
+    else:
+        click.echo("\nSet up your coding agent:\n")
+        click.echo("  dinobase install claude-code       # Claude Code")
+        click.echo("  dinobase install cursor            # Cursor")
+        click.echo("  dinobase install claude-desktop    # Claude Desktop")
+        click.echo("  dinobase install codex             # Codex")
+        click.echo("\nDocs: https://dinobase.ai/docs")
 
 
 _QUICKSTART_SOURCES = [
@@ -239,9 +283,9 @@ def quickstart():
     # Summary + next steps
     click.echo(f"\nConnected: {', '.join(added_sources)}\n")
     click.echo("Next steps:")
-    click.echo(f"  dinobase sync                         # load data from your sources")
-    click.echo(f"  dinobase info                         # see all synced tables")
-    click.echo(f"  dinobase query 'SELECT ...'           # run SQL across sources")
+    click.echo("  dinobase sync                         # load data from your sources")
+    click.echo("  dinobase info                         # see all synced tables")
+    click.echo("  dinobase query 'SELECT ...'           # run SQL across sources")
     click.echo()
 
     # MCP config snippet
@@ -289,7 +333,7 @@ def login(headless: bool):
     from dinobase.auth import _start_callback_server
     import secrets
     import webbrowser
-    from urllib.parse import urlencode, parse_qs, urlparse
+    from urllib.parse import urlencode
 
     server = _start_callback_server()
     port = server.server_address[1]
@@ -458,7 +502,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
             from dinobase import telemetry
             telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": True})
             click.echo(f"Added {source_type} source as '{source_name}' (cloud)")
-            click.echo(f"Run `dinobase sync` to load data.")
+            click.echo("Run `dinobase sync` to load data.")
         except RuntimeError as e:
             click.echo(f"Failed: {e}", err=True)
             sys.exit(1)
@@ -505,7 +549,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         available = ", ".join(list_available_sources())
         click.echo(f"Unknown source: '{source_type}'", err=True)
         click.echo(f"Available sources: {available}", err=True)
-        click.echo(f"Also: parquet, csv (file sources)", err=True)
+        click.echo("Also: parquet, csv (file sources)", err=True)
         sys.exit(1)
 
     # Parse extra args as --flag value pairs
@@ -561,7 +605,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         click.echo(f"Sync interval: {sync_interval}")
     if freshness_threshold:
         click.echo(f"Freshness threshold: {freshness_threshold}")
-    click.echo(f"Run `dinobase sync` to load data.")
+    click.echo("Run `dinobase sync` to load data.")
 
 
 def _parse_extra_args(args: tuple) -> dict[str, str]:
@@ -633,9 +677,7 @@ def auth(source_type: str, name: str | None, headless: bool):
 
     # Start OAuth flow via the cloud API using local callback server
     from dinobase.auth import _start_callback_server
-    import secrets
     import webbrowser
-    from urllib.parse import urlencode
 
     server = _start_callback_server()
     port = server.server_address[1]
@@ -694,7 +736,7 @@ def auth(source_type: str, name: str | None, headless: bool):
         }))
     else:
         click.echo(f"Connected {source_type} as '{source_name}' via OAuth.")
-        click.echo(f"Run `dinobase sync` to load data.")
+        click.echo("Run `dinobase sync` to load data.")
 
 
 @cli.command("sources")
@@ -1463,11 +1505,11 @@ def doctor():
         # Try parsing
         try:
             config = load_config()
-            _pass(f"Config file is valid YAML")
+            _pass("Config file is valid YAML")
         except SystemExit:
             _fail("Config file has a YAML parse error", f"Fix manually: {config_path}")
     else:
-        _fail(f"Config file not found", "Run `dinobase init` to create it.")
+        _fail("Config file not found", "Run `dinobase init` to create it.")
 
     # 3. Database / storage
     if is_cloud_storage():
@@ -1609,60 +1651,91 @@ def mcp_config(client: str | None):
         click.echo(json.dumps(mcp_block, indent=2))
 
 
-@cli.command("install")
-@click.argument("client", type=click.Choice(
-    ["claude-code", "claude-desktop", "cursor"], case_sensitive=False
-))
-def install_mcp(client: str):
-    """Install the Dinobase MCP server into your AI client.
+def _upsert_tagged_block(path, tag: str, content: str) -> None:
+    """Insert or replace a <tag>...</tag> block in a markdown file."""
+    import re
 
-    Examples:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tagged = f"<{tag}>\n{content}\n</{tag}>"
+    if path.exists():
+        text = path.read_text()
+        pattern = re.compile(rf"<{re.escape(tag)}>.*?</{re.escape(tag)}>", re.DOTALL)
+        if pattern.search(text):
+            text = pattern.sub(tagged, text)
+        else:
+            text = text.rstrip() + "\n\n" + tagged + "\n"
+    else:
+        text = tagged + "\n"
+    path.write_text(text)
 
-      dinobase install claude-code      # runs: claude mcp add dinobase -- dinobase serve
-      dinobase install claude-desktop   # writes mcpServers entry to Claude Desktop config
-      dinobase install cursor           # writes mcpServers entry to .cursor/mcp.json
-    """
+
+_AGENT_CLIENTS = ["claude-code", "claude-desktop", "cursor", "codex"]
+
+
+def _install_client(client: str) -> None:
+    """Install Dinobase config for a given AI client."""
     import shutil
-    import subprocess
     from pathlib import Path
 
-    # Build server entry (same logic as mcp-config)
-    dinobase_path = shutil.which("dinobase")
-    server_entry = (
-        {"command": dinobase_path, "args": ["serve"]}
-        if dinobase_path
-        else {"command": sys.executable, "args": ["-m", "dinobase.mcp"]}
-    )
+    from dinobase import telemetry
 
     if client == "claude-code":
-        try:
-            subprocess.run(
-                ["claude", "mcp", "add", "dinobase", "--", "dinobase", "serve"],
-                check=True,
-            )
-        except FileNotFoundError:
-            raise click.ClickException("'claude' CLI not found — install it from https://claude.ai/code")
-        except subprocess.CalledProcessError as e:
-            raise click.ClickException(f"claude mcp add failed: {e}")
-        return
+        target = Path.home() / ".claude" / "CLAUDE.md"
+        _upsert_tagged_block(target, "dinobase", _CLI_INSTRUCTIONS)
+        click.echo(f"✓ Dinobase instructions added to {target}")
 
-    if client == "claude-desktop":
+    elif client == "codex":
+        target = Path.home() / ".codex" / "AGENTS.md"
+        _upsert_tagged_block(target, "dinobase", _CLI_INSTRUCTIONS)
+        click.echo(f"✓ Dinobase instructions added to {target}")
+
+    elif client == "cursor":
+        target = Path.cwd() / "AGENTS.md"
+        _upsert_tagged_block(target, "dinobase", _CLI_INSTRUCTIONS)
+        click.echo(f"✓ Dinobase instructions added to {target} (local)")
+
+    elif client == "claude-desktop":
+        import os
+        # Desktop can't run CLI — install MCP server config
+        dinobase_path = shutil.which("dinobase")
+        server_entry = (
+            {"command": dinobase_path, "args": ["serve"]}
+            if dinobase_path
+            else {"command": sys.executable, "args": ["-m", "dinobase.mcp"]}
+        )
         if sys.platform == "darwin":
             config_path = Path.home() / "Library/Application Support/Claude/claude_desktop_config.json"
         elif sys.platform == "win32":
             config_path = Path(os.environ["APPDATA"]) / "Claude/claude_desktop_config.json"
         else:
             config_path = Path.home() / ".config/Claude/claude_desktop_config.json"
-    else:  # cursor
-        config_path = Path.cwd() / ".cursor/mcp.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        data = json.loads(config_path.read_text()) if config_path.exists() else {}
+        data.setdefault("mcpServers", {})["dinobase"] = server_entry
+        config_path.write_text(json.dumps(data, indent=2) + "\n")
+        click.echo(f"✓ Dinobase MCP added to {config_path}")
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.loads(config_path.read_text()) if config_path.exists() else {}
-    data.setdefault("mcpServers", {})["dinobase"] = server_entry
-    config_path.write_text(json.dumps(data, indent=2) + "\n")
-    from dinobase import telemetry
-    telemetry.capture("mcp_installed", {"client": client})
-    click.echo(f"✓ Dinobase MCP added to {config_path}")
+    telemetry.capture("client_installed", {"client": client})
+
+
+@cli.command("install")
+@click.argument("client", type=click.Choice(_AGENT_CLIENTS, case_sensitive=False))
+def install_cmd(client: str):
+    """Install Dinobase into your AI coding tool.
+
+    For claude-code, cursor, and codex: writes CLI usage instructions
+    to the tool's instructions file.
+
+    For claude-desktop: writes MCP server config (Desktop can't run CLI).
+
+    Examples:
+
+      dinobase install claude-code      # writes to ~/.claude/CLAUDE.md
+      dinobase install codex            # writes to ~/.codex/AGENTS.md
+      dinobase install cursor           # writes to ./AGENTS.md (local)
+      dinobase install claude-desktop   # writes MCP config to Claude Desktop
+    """
+    _install_client(client)
 
 
 if __name__ == "__main__":

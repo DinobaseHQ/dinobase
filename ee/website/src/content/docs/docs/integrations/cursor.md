@@ -30,45 +30,33 @@ Run the install command from your project root:
 dinobase install cursor
 ```
 
-This writes the `mcpServers` entry to `.cursor/mcp.json` in your current directory. Safe to run multiple times — it merges rather than overwrites.
+This writes CLI usage instructions to `AGENTS.md` in your current directory, wrapped in `<dinobase>` tags. Safe to run multiple times — it replaces the existing block if present.
 
-## With background sync
-
-Keep data fresh while Cursor is running:
-
-```json
-{
-  "mcpServers": {
-    "dinobase": {
-      "command": "dinobase",
-      "args": ["serve", "--sync", "--sync-interval", "30m"]
-    }
-  }
-}
-```
+Cursor's agent can then run shell commands like `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer questions about your data.
 
 ## How it works
 
-When Cursor connects, it sees dynamic instructions computed from your actual database state — which sources are connected, what tables exist, and how many rows are loaded. The agent will:
+The agent will:
 
-1. Call `list_sources` to discover available data
-2. Call `describe` on relevant tables to understand columns and types
-3. Write and execute SQL via `query`
-4. For mutations (UPDATE/INSERT), `query` returns a preview — the agent calls `confirm` to execute
+1. Run `dinobase info` to discover available data
+2. Run `dinobase describe <table>` to understand columns and types
+3. Run `dinobase query "<sql>"` to execute SQL (DuckDB dialect)
+4. For mutations (UPDATE/INSERT), `query` returns a preview — the agent runs `dinobase confirm <id>` to execute
 
-## Available tools
+## Alternative: MCP server
 
-The MCP server exposes these tools to Cursor:
+If you prefer MCP, run `dinobase mcp-config cursor` to get the JSON config, then add it to `.cursor/mcp.json` in your project root.
 
-| Tool | Description |
-|------|-------------|
-| `query` | Execute SQL queries (DuckDB dialect) |
-| `describe` | Get table schema, column types, and sample data |
-| `list_sources` | List all connected sources with row counts and freshness |
-| `refresh` | Re-sync a data source to get fresh data |
-| `confirm` | Execute a pending mutation (write-back to source API) |
-| `confirm_batch` | Execute multiple pending mutations |
-| `cancel` | Cancel a pending mutation |
+## Available CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `dinobase info` | Database overview — sources, tables, row counts |
+| `dinobase describe <table>` | Table schema, column types, and sample data |
+| `dinobase query "<sql>"` | Execute SQL queries (DuckDB dialect) |
+| `dinobase refresh [source]` | Re-sync a data source to get fresh data |
+| `dinobase confirm <id>` | Execute a pending mutation |
+| `dinobase cancel <id>` | Cancel a pending mutation |
 
 ## Next steps
 

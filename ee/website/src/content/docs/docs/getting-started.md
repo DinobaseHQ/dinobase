@@ -8,6 +8,12 @@ Get up and running with Dinobase in under 5 minutes.
 ## Install
 
 ```bash
+curl -fsSL https://dinobase.ai/install.sh | bash
+```
+
+Or install directly with pip:
+
+```bash
 pip install dinobase
 ```
 

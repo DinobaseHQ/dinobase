@@ -22,35 +22,27 @@ dinobase sync
 
 See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
-## Option 1: CLI (recommended)
+## Setup
 
-Claude Code can run shell commands directly, so no configuration is needed. Just ask questions about your data:
-
-> "Query my Dinobase for customers who churned last quarter"
-
-Claude Code will run commands like `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer your question.
-
-The CLI outputs JSON by default, which Claude Code parses automatically. This is **27% more token-efficient** than the MCP transport.
-
-## Option 2: MCP server
-
-Run the install command:
+Run the install command to add Dinobase instructions to your global `~/.claude/CLAUDE.md`:
 
 ```bash
 dinobase install claude-code
 ```
 
-This runs `claude mcp add dinobase -- dinobase serve` for you. Requires the [Claude CLI](https://claude.ai/code).
+This writes CLI usage instructions wrapped in `<dinobase>` tags. Safe to run multiple times — it replaces the existing block if present.
 
-## CLI vs MCP
+Claude Code can run shell commands directly, so no MCP configuration is needed. Just ask questions about your data:
 
-| | CLI | MCP |
-|--|-----|-----|
-| **Setup** | None (just install dinobase) | Add `.mcp.json` config |
-| **Token efficiency** | 27% fewer tokens | Standard |
-| **Output format** | JSON or `--pretty` | JSON (always) |
+> "Query my Dinobase for customers who churned last quarter"
 
-Both use the same query engine and data. The CLI is recommended for Claude Code since it's simpler and more efficient.
+Claude Code will run commands like `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer your question.
+
+The CLI outputs JSON by default, which Claude Code parses automatically. This is **27% more token-efficient** than MCP.
+
+## Alternative: MCP server
+
+If you prefer MCP, you can manually configure it. Run `dinobase mcp-config claude-code` to get the JSON config, then add it to your project's `.mcp.json`.
 
 ## Available commands
 
