@@ -3,19 +3,35 @@ title: Getting Started
 description: Install Dinobase, connect your first source, and run your first cross-source query.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Get up and running with Dinobase in under 5 minutes.
 
 ## Install
 
-```bash
-curl -fsSL https://dinobase.ai/install.sh | bash
-```
-
-Or install directly with pip:
-
-```bash
-pip install dinobase
-```
+<Tabs>
+  <TabItem label="Script (recommended)">
+    ```bash
+    curl -fsSL https://dinobase.ai/install.sh | bash
+    ```
+    Installs `uv` + `dinobase` automatically. No Python required.
+  </TabItem>
+  <TabItem label="uv">
+    ```bash
+    uv tool install dinobase
+    ```
+  </TabItem>
+  <TabItem label="pip">
+    ```bash
+    pip install dinobase
+    ```
+  </TabItem>
+  <TabItem label="pipx">
+    ```bash
+    pipx install dinobase
+    ```
+  </TabItem>
+</Tabs>
 
 Requires Python 3.10+.
 

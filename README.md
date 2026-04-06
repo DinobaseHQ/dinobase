@@ -28,12 +28,13 @@ Dinobase gives agents a unified SQL interface with semantic context across all y
 ## Quick start
 
 ```bash
+# recommended — installs everything automatically
 curl -fsSL https://dinobase.ai/install.sh | bash
-```
 
-Or with pip directly:
+# or with uv
+uv tool install dinobase
 
-```bash
+# or with pip
 pip install dinobase
 ```
 
