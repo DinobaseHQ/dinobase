@@ -66,6 +66,15 @@ class CategorizedGroup(click.Group):
         from dinobase import telemetry
         cmd = ctx.protected_args[0] if ctx.protected_args else (ctx.args[0] if ctx.args else "unknown")
         telemetry.capture("cli_invoked", {"command": cmd})
+
+        # Auto-update before running the command (skips agent commands)
+        if cmd not in _AGENT_COMMANDS:
+            try:
+                from dinobase.updater import maybe_auto_update
+                maybe_auto_update(cmd)
+            except Exception:
+                pass
+
         return super().invoke(ctx)
 
     def format_commands(self, ctx, formatter):
@@ -1736,6 +1745,51 @@ def install_cmd(client: str):
       dinobase install claude-desktop   # writes MCP config to Claude Desktop
     """
     _install_client(client)
+
+
+@cli.command()
+@click.option("--check", is_flag=True, help="Only check for updates, don't install.")
+def update(check: bool):
+    """Check for and install Dinobase updates.
+
+    Examples:
+
+      dinobase update           # update to latest version
+      dinobase update --check   # just check, don't install
+    """
+    from dinobase.updater import check_for_update, perform_update, detect_install_method, get_update_command
+
+    click.echo(f"Current version: {__version__}")
+
+    update_info = check_for_update(force=True)
+
+    if not update_info or not update_info.get("update_available"):
+        click.echo("Already up to date.")
+        return
+
+    latest = update_info["latest_version"]
+    method = detect_install_method()
+
+    if check:
+        click.echo(f"Update available: {latest}")
+        click.echo(f"Run `dinobase update` to install, or: {get_update_command(method)}")
+        return
+
+    click.echo(f"Updating to {latest} via {method}...")
+    success, message = perform_update()
+
+    if success:
+        click.echo(message)
+        from dinobase import telemetry
+        telemetry.capture("cli_updated", {
+            "from_version": __version__,
+            "to_version": latest,
+            "method": method,
+        })
+    else:
+        click.echo(message, err=True)
+        click.echo(f"\nManual update: {get_update_command(method)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
