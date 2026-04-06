@@ -1,17 +1,17 @@
 ---
-title: Cursor
-description: Connect Dinobase to Cursor so its AI agent can query your business data directly.
+title: Codex
+description: Connect Dinobase to Codex so its AI agent can query your business data directly.
 ---
 
-Dinobase integrates with [Cursor](https://cursor.com) via MCP. Once connected, Cursor's AI agent can query all your synced business data while you code.
+Dinobase integrates with [Codex](https://openai.com/codex) via CLI. Once connected, Codex's AI agent can query all your synced business data while you code.
 
 ## Install
 
 ```bash
-curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex
 ```
 
-Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `AGENTS.md` in your current directory. Then connect your data sources:
+Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.codex/AGENTS.md`. Then connect your data sources:
 
 ```bash
 dinobase add stripe --api-key sk_test_...
@@ -21,9 +21,9 @@ dinobase sync
 
 See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
-Cursor's agent can then run shell commands like `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer questions about your data.
+Codex can run shell commands directly, so no MCP configuration is needed. Just ask questions about your data and Codex will run `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer them.
 
-To re-run the setup step: `dinobase install cursor` from your project root (safe to run multiple times — replaces the existing block).
+To re-run the setup step: `dinobase install codex` (safe to run multiple times — replaces the existing block).
 
 ## How it works
 
@@ -36,7 +36,7 @@ The agent will:
 
 ## Alternative: MCP server
 
-If you prefer MCP, run `dinobase mcp-config cursor` to get the JSON config, then add it to `.cursor/mcp.json` in your project root.
+If you prefer MCP, run `dinobase mcp-config codex` to get the JSON config, then add it to your Codex MCP configuration.
 
 ## Available CLI commands
 

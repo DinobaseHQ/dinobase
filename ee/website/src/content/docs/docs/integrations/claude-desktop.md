@@ -8,13 +8,12 @@ Dinobase integrates with [Claude Desktop](https://claude.ai/download) via MCP. O
 ## Install
 
 ```bash
-pip install dinobase
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop
 ```
 
-Set up your data sources:
+Installs Dinobase via `uv`, runs `dinobase init`, and writes the `mcpServers` entry to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS). Then connect your data sources:
 
 ```bash
-dinobase init
 dinobase add stripe --api-key sk_test_...
 dinobase add hubspot --api-key pat-...
 dinobase sync
@@ -22,15 +21,7 @@ dinobase sync
 
 See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
-## Configure Claude Desktop
-
-Run the install command:
-
-```bash
-dinobase install claude-desktop
-```
-
-This writes the `mcpServers` entry directly to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS). Safe to run multiple times — it merges rather than overwrites.
+To re-run the setup step: `dinobase install claude-desktop` (safe to run multiple times — merges rather than overwrites).
 
 ## With background sync
 
