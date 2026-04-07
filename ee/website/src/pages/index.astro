@@ -308,11 +308,11 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
             .btn-primary {
                 display: inline-flex;
                 align-items: center;
-                padding: 0.875rem 2rem;
+                padding: 1.125rem 2.5rem;
                 background: var(--green);
                 color: #000;
                 font-weight: 700;
-                font-size: 0.9375rem;
+                font-size: 1.0625rem;
                 border-radius: 999px;
                 border: none;
                 cursor: pointer;
@@ -606,7 +606,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
 
             /* ── SECTION CHROME ── */
             .section-wrap {
-                padding: 7rem 2.5rem;
+                padding: 5rem 2.5rem;
                 position: relative;
                 overflow: hidden;
             }
@@ -1296,11 +1296,11 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 align-items: center;
                 background: var(--green);
                 color: #000;
-                padding: 1rem 2.5rem;
+                padding: 1.25rem 3rem;
                 border-radius: 999px;
                 font-family: "Atkinson Hyperlegible", sans-serif;
                 font-weight: 700;
-                font-size: 1.0625rem;
+                font-size: 1.1875rem;
                 border: none;
                 cursor: pointer;
                 transition:
@@ -1750,6 +1750,21 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 }
             }
         </style>
+        <!-- Cal element-click embed code begins -->
+        <script type="text/javascript">
+            (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if(typeof namespace === "string"){cal.ns[namespace] = cal.ns[namespace] || api;p(cal.ns[namespace], ar);p(cal, ["initNamespace", namespace]);} else p(cal, ar); return;} p(cal, ar); }; })(window, "https://app.cal.eu/embed/embed.js", "init");
+            Cal("init", "dinobase-15-min-setup", {origin:"https://app.cal.eu"});
+            Cal.ns["dinobase-15-min-setup"]("ui", {"hideEventTypeDetails":false,"layout":"month_view"});
+            Cal.ns["dinobase-15-min-setup"]("on", {
+                action: "bookingSuccessful",
+                callback: function (e) {
+                    const email = e.detail?.data?.booking?.attendees?.[0]?.email;
+                    window.dispatchEvent(new CustomEvent("cal:bookingSuccessful", { detail: { email } }));
+                },
+            });
+        </script>
+        <!-- Cal element-click embed code ends -->
+
         <script define:vars={{ posthogKey }}>
             !(function (t, e) {
                 var o, n, p, r;
@@ -1839,7 +1854,13 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                     <a href="https://github.com/DinobaseHQ/dinobase">GitHub</a>
                 </li>
                 <li>
-                    <a href="#hero" class="nav-cta" id="nav-cta"
+                    <a
+                        href="/waitlist"
+                        class="nav-cta"
+                        id="nav-cta"
+                        data-cal-namespace="dinobase-15-min-setup"
+                        data-cal-link="em-dinobase/dinobase-15-min-setup"
+                        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
                         >Join waitlist</a
                     >
                 </li>
@@ -1882,34 +1903,13 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                     your data SQL-ready for agents.
                 </p>
                 <div class="hero-actions">
-                    <form
-                        id="hero-waitlist-form"
-                        class="waitlist-form"
-                        style="margin:0"
-                    >
-                        <input
-                            type="email"
-                            id="hero-email"
-                            name="email"
-                            placeholder="your@email.com"
-                            required
-                            autocomplete="email"
-                            class="waitlist-input"
-                        />
-                        <button type="submit" class="btn-primary">
-                            <span class="btn-label"
-                                ><span>Join waitlist</span><span
-                                    >Join waitlist</span
-                                ></span
-                            >
-                        </button>
-                    </form>
-                    <div
-                        id="hero-success"
-                        class="waitlist-success"
-                        style="display:none"
-                    >
-                        ✓ You're on the list — we'll be in touch.
+                    <div id="hero-cal-container">
+                        <button
+                            class="btn-primary"
+                            data-cal-namespace="dinobase-15-min-setup"
+                            data-cal-link="em-dinobase/dinobase-15-min-setup"
+                            data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                        ><span class="btn-label"><span>Join waitlist</span><span>Join waitlist</span></span></button>
                     </div>
                     <a
                         href="https://app.dinobase.ai/login"
@@ -2602,31 +2602,13 @@ side_effects: "Will call Stripe API
                         database.
                     </p>
                     <div class="cta-actions">
-                        <form id="footer-waitlist-form" class="waitlist-form">
-                            <input
-                                type="email"
-                                id="footer-email"
-                                name="email"
-                                placeholder="your@email.com"
-                                required
-                                autocomplete="email"
-                                class="waitlist-input"
-                                style="font-size:1rem;"
-                            />
-                            <button type="submit" class="btn-cta"
-                                ><span class="btn-label"
-                                    ><span>Join waitlist</span><span
-                                        >Join waitlist</span
-                                    ></span
-                                ></button
-                            >
-                        </form>
-                        <div
-                            id="footer-success"
-                            class="waitlist-success"
-                            style="display:none; font-size:1.125rem;"
-                        >
-                            ✓ You're on the list.
+                        <div id="footer-cal-container">
+                            <button
+                                class="btn-cta"
+                                data-cal-namespace="dinobase-15-min-setup"
+                                data-cal-link="em-dinobase/dinobase-15-min-setup"
+                                data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                            ><span class="btn-label"><span>Book a setup call</span><span>Book a setup call</span></span></button>
                         </div>
                         <div
                             id="footer-early-access"
@@ -2991,87 +2973,14 @@ side_effects: "Will call Stripe API
                     { threshold: 0.25 },
                 ).observe(document.getElementById("numbers"));
 
-                // Waitlist session state
-                if (sessionStorage.getItem("waitlist_joined")) {
-                    ["hero-waitlist-form", "footer-waitlist-form"].forEach(
-                        (id) => {
-                            const f = document.getElementById(id);
-                            if (f) f.style.display = "none";
-                        },
-                    );
-                    const hs = document.getElementById("hero-success");
-                    if (hs) hs.style.display = "block";
-                    const fs = document.getElementById("footer-success");
-                    if (fs) {
-                        fs.style.display = "block";
-                        fs.style.fontSize = "1.125rem";
+                // Capture PostHog event when Cal booking is confirmed
+                window.addEventListener("cal:bookingSuccessful", function (e) {
+                    const email = e.detail?.email;
+                    if (email && window.posthog) {
+                        posthog.identify(email, { email });
+                        posthog.capture("waitlist_joined", { email });
                     }
-                    const gl = document.getElementById("footer-ghost-link");
-                    if (gl) gl.style.display = "none";
-                }
-
-                function handleWaitlist(emailId, formId, successId) {
-                    return (e) => {
-                        e.preventDefault();
-                        const ei = document.getElementById(emailId);
-                        const form = document.getElementById(formId);
-                        const succ = document.getElementById(successId);
-                        if (!ei || !form || !succ) return;
-                        const email = ei.value.trim();
-                        if (!email) return;
-                        const btn = form.querySelector('button[type="submit"]');
-                        if (btn) {
-                            btn.disabled = true;
-                        }
-                        if (window.posthog) {
-                            posthog.identify(email, { email });
-                            posthog.capture("waitlist_joined", { email });
-                        }
-                        form.style.display = "none";
-                        succ.style.display = "block";
-                        sessionStorage.setItem("waitlist_joined", "1");
-                        if (formId === "footer-waitlist-form") {
-                            const gl =
-                                document.getElementById("footer-ghost-link");
-                            if (gl) gl.style.display = "none";
-                        }
-                    };
-                }
-
-                const hf = document.getElementById("hero-waitlist-form");
-                if (hf)
-                    hf.addEventListener(
-                        "submit",
-                        handleWaitlist(
-                            "hero-email",
-                            "hero-waitlist-form",
-                            "hero-success",
-                        ),
-                    );
-                const ff = document.getElementById("footer-waitlist-form");
-                if (ff)
-                    ff.addEventListener(
-                        "submit",
-                        handleWaitlist(
-                            "footer-email",
-                            "footer-waitlist-form",
-                            "footer-success",
-                        ),
-                    );
-
-                function handleNavClick(e) {
-                    const hf = document.getElementById("hero-waitlist-form");
-                    if (hf && hf.style.display !== "none") {
-                        e.preventDefault();
-                        const inp = document.getElementById("hero-email");
-                        if (inp) inp.focus();
-                        document
-                            .getElementById("hero")
-                            .scrollIntoView({ behavior: "smooth" });
-                    }
-                }
-                const nc = document.getElementById("nav-cta");
-                if (nc) nc.addEventListener("click", handleNavClick);
+                });
 
                 function applyEarlyAccess() {
                     if (
@@ -3083,16 +2992,16 @@ side_effects: "Will call Stripe API
                     if (nc) {
                         nc.textContent = "Get started free";
                         nc.href = "https://app.dinobase.ai/login";
-                        nc.removeEventListener("click", handleNavClick);
+                        nc.removeAttribute("data-cal-namespace");
+                        nc.removeAttribute("data-cal-link");
+                        nc.removeAttribute("data-cal-config");
                     }
-                    const hwf = document.getElementById("hero-waitlist-form");
-                    if (hwf) hwf.style.display = "none";
+                    const hc = document.getElementById("hero-cal-container");
+                    if (hc) hc.style.display = "none";
                     const ha = document.getElementById("hero-early-access");
                     if (ha) ha.style.display = "inline-flex";
-                    const fwf = document.getElementById("footer-waitlist-form");
-                    if (fwf) fwf.style.display = "none";
-                    const gl = document.getElementById("footer-ghost-link");
-                    if (gl) gl.style.display = "none";
+                    const fc = document.getElementById("footer-cal-container");
+                    if (fc) fc.style.display = "none";
                     const fa = document.getElementById("footer-early-access");
                     if (fa) fa.style.display = "flex";
                 }

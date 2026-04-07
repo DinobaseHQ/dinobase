@@ -65,9 +65,13 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 background: var(--surface);
                 border: 1px solid var(--border-light);
                 border-radius: 1.25rem;
-                padding: 3rem 2.5rem;
                 width: 100%;
-                max-width: 480px;
+                max-width: 900px;
+                overflow: hidden;
+            }
+
+            .card-header {
+                padding: 3rem 2.5rem 2rem;
                 text-align: center;
             }
 
@@ -85,65 +89,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
             .subtitle {
                 color: var(--muted);
                 font-size: 0.9375rem;
-                margin-bottom: 2rem;
                 line-height: 1.6;
-            }
-
-            .waitlist-form {
-                display: flex;
-                flex-direction: column;
-                gap: 0.75rem;
-            }
-
-            .waitlist-input {
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid var(--border-light);
-                border-radius: 0.625rem;
-                padding: 0.875rem 1.25rem;
-                font-size: 1rem;
-                color: var(--text);
-                outline: none;
-                transition: border-color 0.2s;
-                font-family: "Atkinson Hyperlegible", sans-serif;
-                width: 100%;
-            }
-
-            .waitlist-input::placeholder {
-                color: var(--dimmed);
-            }
-
-            .waitlist-input:focus {
-                border-color: var(--green);
-            }
-
-            .btn {
-                background: var(--green);
-                color: #0e1410;
-                border: none;
-                border-radius: 0.625rem;
-                padding: 0.875rem 1.5rem;
-                font-size: 0.9375rem;
-                font-weight: 700;
-                cursor: pointer;
-                font-family: "Atkinson Hyperlegible", sans-serif;
-                transition: filter 0.15s;
-            }
-
-            .btn:hover {
-                filter: brightness(1.1);
-            }
-
-            .btn:disabled {
-                opacity: 0.55;
-                cursor: not-allowed;
-            }
-
-            .waitlist-success {
-                color: var(--green);
-                font-size: 1rem;
-                font-weight: 700;
-                padding: 0.5rem 0;
-                display: none;
             }
 
             .early-access {
@@ -151,6 +97,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 flex-direction: column;
                 align-items: center;
                 gap: 1rem;
+                padding: 0 2.5rem 3rem;
             }
 
             .early-access p {
@@ -189,27 +136,18 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
     </head>
     <body>
         <div class="card">
-            <div class="logo">&#x1F995;</div>
-            <h1>Join the waitlist</h1>
-            <p class="subtitle">
-                Dinobase is in early access. Enter your email and we&apos;ll let
-                you know when you&apos;re in.
-            </p>
+            <div class="card-header">
+                <div class="logo">&#x1F995;</div>
+                <h1>Book a setup call</h1>
+                <p class="subtitle">
+                    Dinobase is in early access. Pick a time and we&apos;ll get
+                    you set up.
+                </p>
+            </div>
 
-            <form id="waitlist-form" class="waitlist-form">
-                <input
-                    id="waitlist-email"
-                    type="email"
-                    class="waitlist-input"
-                    placeholder="your@email.com"
-                    required
-                />
-                <button type="submit" class="btn">Join waitlist</button>
-            </form>
-
-            <p id="waitlist-success" class="waitlist-success">
-                &#x2713; You&apos;re on the list &mdash; we&apos;ll be in touch.
-            </p>
+            <div id="cal-container">
+                <div id="my-cal-inline-dinobase-15-min-setup" style="width:100%;height:100%;overflow:scroll"></div>
+            </div>
 
             <div id="early-access" class="early-access">
                 <p>You have early access!</p>
@@ -218,6 +156,26 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
         </div>
 
         <a href="/" class="back-link">&larr; Back to dinobase.ai</a>
+
+        <!-- Cal inline embed code begins -->
+        <script type="text/javascript">
+            (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if(typeof namespace === "string"){cal.ns[namespace] = cal.ns[namespace] || api;p(cal.ns[namespace], ar);p(cal, ["initNamespace", namespace]);} else p(cal, ar); return;} p(cal, ar); }; })(window, "https://app.cal.eu/embed/embed.js", "init");
+            Cal("init", "dinobase-15-min-setup", {origin:"https://app.cal.eu"});
+            Cal.ns["dinobase-15-min-setup"]("inline", {
+                elementOrSelector: "#my-cal-inline-dinobase-15-min-setup",
+                config: {"layout":"month_view","useSlotsViewOnSmallScreen":"true"},
+                calLink: "em-dinobase/dinobase-15-min-setup",
+            });
+            Cal.ns["dinobase-15-min-setup"]("ui", {"hideEventTypeDetails":false,"layout":"month_view"});
+            Cal.ns["dinobase-15-min-setup"]("on", {
+                action: "bookingSuccessful",
+                callback: function (e) {
+                    const email = e.detail?.data?.booking?.attendees?.[0]?.email;
+                    window.dispatchEvent(new CustomEvent("cal:bookingSuccessful", { detail: { email } }));
+                },
+            });
+        </script>
+        <!-- Cal inline embed code ends -->
 
         <script define:vars={{ posthogKey }}>
             !(function (t, e) {
@@ -293,52 +251,28 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 });
             }
 
-            // If user already has early_access, skip the form
+            // Capture PostHog event when Cal booking is confirmed
+            window.addEventListener("cal:bookingSuccessful", function (e) {
+                const email = e.detail?.email;
+                console.log(email)
+                if (email && window.posthog) {
+                    posthog.identify(email, { email });
+                    posthog.capture("waitlist_joined", { email });
+                }
+            });
+
+            // If user already has early_access, hide the calendar
             function applyEarlyAccess() {
                 if (!window.posthog || !posthog.isFeatureEnabled("early_access"))
                     return;
-                const form = document.getElementById("waitlist-form");
+                const calContainer = document.getElementById("cal-container");
                 const ea = document.getElementById("early-access");
-                if (form) form.style.display = "none";
+                if (calContainer) calContainer.style.display = "none";
                 if (ea) ea.style.display = "flex";
             }
 
             window.addEventListener("posthog:ready", applyEarlyAccess);
             if (window.__posthogReady) applyEarlyAccess();
-
-            // Waitlist form submission
-            const form = document.getElementById("waitlist-form");
-            if (form) {
-                form.addEventListener("submit", function (e) {
-                    e.preventDefault();
-                    const emailEl = document.getElementById("waitlist-email");
-                    const successEl = document.getElementById("waitlist-success");
-                    if (!emailEl || !successEl) return;
-
-                    const email = emailEl.value.trim();
-                    if (!email) return;
-
-                    const btn = form.querySelector('button[type="submit"]');
-                    if (btn) btn.disabled = true;
-
-                    if (window.posthog) {
-                        posthog.identify(email, { email });
-                        posthog.capture("waitlist_joined", { email });
-                    }
-
-                    form.style.display = "none";
-                    successEl.style.display = "block";
-                    sessionStorage.setItem("waitlist_joined", "1");
-                });
-            }
-
-            // If already joined this session, hide the form
-            if (sessionStorage.getItem("waitlist_joined")) {
-                const form = document.getElementById("waitlist-form");
-                const successEl = document.getElementById("waitlist-success");
-                if (form) form.style.display = "none";
-                if (successEl) successEl.style.display = "block";
-            }
         </script>
     </body>
 </html>

@@ -21,7 +21,6 @@ function CLILoginInner() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
-  const [waitlisted, setWaitlisted] = useState(false);
   const posthogReady = useRef(false);
 
   // Initialize PostHog once on mount (client-only)
@@ -95,8 +94,7 @@ function CLILoginInner() {
     const hasAccess = await checkEarlyAccess(userEmail);
 
     if (!hasAccess) {
-      setWaitlisted(true);
-      setRedirecting(false);
+      window.location.href = `${WEBSITE_URL}/waitlist`;
       return;
     }
 
@@ -146,27 +144,6 @@ function CLILoginInner() {
         redirectTo: `${window.location.origin}/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`,
       },
     });
-  }
-
-  if (waitlisted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <div className="text-center max-w-sm px-6">
-          <div className="text-4xl mb-4">&#x1F995;</div>
-          <h1 className="text-2xl font-bold mb-3">You&apos;re on the waitlist</h1>
-          <p className="text-zinc-400 text-sm mb-6">
-            We&apos;ll email you when your early access is ready.
-          </p>
-          <a
-            href={`${WEBSITE_URL}/waitlist`}
-            className="inline-block bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
-          >
-            Join the waitlist &rarr;
-          </a>
-          <p className="text-zinc-600 text-xs mt-6">You can close this tab.</p>
-        </div>
-      </div>
-    );
   }
 
   if (redirecting) {

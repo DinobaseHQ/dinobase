@@ -3,6 +3,9 @@
 app = 'dinobase-cloud'
 primary_region = 'sjc'
 
+[env]
+  DINOBASE_MODE = 'all'
+
 [build]
 
 [http_service]
