@@ -981,6 +981,43 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
             .code-block .cmd { color: var(--green-accent); }
             .code-block .out { color: var(--muted); }
 
+            /* ── INTEGRATION TABS ── */
+            .int-tabs { margin-top: 3rem; }
+            .tab-bar {
+                display: flex;
+                border-bottom: 1px solid var(--border);
+                overflow-x: auto;
+                scrollbar-width: none;
+                gap: 0;
+            }
+            .tab-bar::-webkit-scrollbar { display: none; }
+            .tab-btn {
+                font-family: "DM Mono", monospace;
+                font-size: 0.75rem;
+                letter-spacing: 0.05em;
+                color: var(--dimmed);
+                background: none;
+                border: none;
+                border-bottom: 2px solid transparent;
+                padding: 0.75rem 1.25rem;
+                cursor: pointer;
+                white-space: nowrap;
+                transition: color 0.2s, border-color 0.2s;
+                margin-bottom: -1px;
+            }
+            .tab-btn:hover { color: var(--muted); }
+            .tab-btn.active {
+                color: var(--green-accent);
+                border-bottom-color: var(--green-accent);
+            }
+            .tab-panel { display: none; padding: 2rem 0 0; }
+            .tab-panel.active { display: block; }
+            .tab-panel h3 {
+                font-size: 1.0625rem;
+                font-weight: 700;
+                margin-bottom: 1rem;
+            }
+
             /* ── DEMO ── */
             .demo-card {
                 margin-top: 4rem;
@@ -1894,7 +1931,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
             <div class="hero-content">
                 <p class="hero-eyebrow">The agent-first database</p>
                 <h1>
-                    Your AI agents deserve<br /><span class="h-word"
+                    Your agents are missing<br /><span class="h-word"
                         >a real database.</span
                     >
                 </h1>
@@ -2193,11 +2230,11 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                     Your agents are <span class="h-word">flying blind.</span>
                 </h2>
                 <p class="section-sub section-sub-drag">
-                    Drag to see what changes when you give your agent a real
+                    Drag to see what changes when your agent stack has a real
                     database.
                 </p>
                 <p class="section-sub section-sub-scroll">
-                    Scroll to see what changes when you give your agent a real
+                    Scroll to see what changes when your agent stack has a real
                     database.
                 </p>
                 <div class="slider-wrap" id="slider-wrap">
@@ -2285,25 +2322,14 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                     <!-- AFTER panel -->
                     <div class="slider-panel after">
                         <div class="slider-panel-body">
-                            <div class="slider-sql">
-                                <span class="kw">SELECT</span> c.name, c.mrr, h.owner,
-                                <span class="fn">DATEDIFF</span>(<span
-                                    class="str">'day'</span
-                                >, <span class="fn">MAX</span>(a.created_at), <span
-                                    class="fn">NOW</span
-                                >()) <span class="kw">AS</span> days_silent
-                                <span class="kw">FROM</span> stripe.customers c
-                                <span class="kw">JOIN</span> hubspot.contacts h <span
-                                    class="kw">USING</span
-                                > (email)
-                                <span class="kw">LEFT JOIN</span> hubspot.activities
-                                a <span class="kw">ON</span> h.id = a.contact_id
-                                <span class="kw">WHERE</span> c.mrr > 200
-                                <span class="kw">GROUP BY</span> 1,2,3 <span
-                                    class="kw">ORDER BY</span
-                                > days_silent <span class="kw">DESC</span>
-                                <span class="kw">LIMIT</span> 10
-                            </div>
+                            <div class="slider-sql"><span class="kw">SELECT</span> c.name, c.mrr, h.owner,
+<span class="fn">DATEDIFF</span>(<span class="str">'day'</span>, <span class="fn">MAX</span>(a.created_at), <span class="fn">NOW</span>()) <span class="kw">AS</span> days_silent
+<span class="kw">FROM</span> stripe.customers c
+<span class="kw">JOIN</span> hubspot.contacts h <span class="kw">USING</span> (email)
+<span class="kw">LEFT JOIN</span> hubspot.activities a <span class="kw">ON</span> h.id = a.contact_id
+<span class="kw">WHERE</span> c.mrr > 200
+<span class="kw">GROUP BY</span> 1,2,3 <span class="kw">ORDER BY</span> days_silent <span class="kw">DESC</span>
+<span class="kw">LIMIT</span> 10</div>
                             <div class="slider-result">
                                 <table>
                                     <thead
@@ -2541,52 +2567,86 @@ side_effects: "Will call Stripe API
         <!-- INSTALL -->
         <div class="section-wrap reveal" id="install">
             <div class="container">
-                <p class="section-no">05 — setup</p>
+                <p class="section-no">05 — integrations</p>
                 <h2>
-                    One line to <span class="h-word">connect</span> your agent.
+                    Drop it into <span class="h-word">your stack.</span>
                 </h2>
                 <div class="section-sub">
                     <p>
-                        Works with Claude Code, Claude Desktop, Cursor, Codex, OpenClaw
-                        and more — one command to connect.
+                        Native SDKs for LangChain, CrewAI, LlamaIndex, Pydantic AI, and Mastra.
+                        MCP server for Claude Desktop, Cursor, and Codex.
                     </p>
                     <a
                         href="/docs/getting-started/#set-up-an-agent"
                         class="section-sub-btn btn-ghost">Read the docs →</a
                     >
                 </div>
-                <div class="install-list reveal-stagger">
-                    <div class="install-item">
-                        <span class="install-num">01</span>
-                        <div class="install-body">
-                            <h3>Claude Code</h3>
-                            <pre
-                                class="code-block">curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code</pre>
-                        </div>
+                <div class="int-tabs reveal-stagger">
+                    <div class="tab-bar" role="tablist">
+                        <button class="tab-btn active" data-tab="langchain" role="tab">LangChain</button>
+                        <button class="tab-btn" data-tab="crewai" role="tab">CrewAI</button>
+                        <button class="tab-btn" data-tab="llamaindex" role="tab">LlamaIndex</button>
+                        <button class="tab-btn" data-tab="pydantic" role="tab">Pydantic AI</button>
+                        <button class="tab-btn" data-tab="mastra" role="tab">Mastra</button>
+                        <button class="tab-btn" data-tab="mcp" role="tab">MCP clients</button>
                     </div>
-                    <div class="install-item">
-                        <span class="install-num">02</span>
-                        <div class="install-body">
-                            <h3>Cursor</h3>
-                            <pre
-                                class="code-block">curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor</pre>
-                        </div>
+                    <div class="tab-panel active" id="tab-langchain">
+                        <pre class="code-block"><span class="cmd">pip install dinobase langchain langgraph</span>
+
+<span class="out">from integrations.langchain.toolkit import DinobaseToolkit
+
+toolkit = DinobaseToolkit()
+agent = create_react_agent(model, tools=toolkit.get_tools())</span></pre>
                     </div>
-                    <div class="install-item">
-                        <span class="install-num">03</span>
-                        <div class="install-body">
-                            <h3>Claude Desktop</h3>
-                            <pre
-                                class="code-block">curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop</pre>
-                        </div>
+                    <div class="tab-panel" id="tab-crewai">
+                        <pre class="code-block"><span class="cmd">pip install dinobase crewai</span>
+
+<span class="out">from integrations.crewai.tools import dinobase_query, dinobase_describe
+
+analyst = Agent(tools=[dinobase_describe, dinobase_query], ...)</span></pre>
                     </div>
-                    <div class="install-item">
-                        <span class="install-num">04</span>
-                        <div class="install-body">
-                            <h3>Codex</h3>
-                            <pre
-                                class="code-block">curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex</pre>
-                        </div>
+                    <div class="tab-panel" id="tab-llamaindex">
+                        <pre class="code-block"><span class="cmd">pip install dinobase llama-index llama-index-llms-anthropic</span>
+
+<span class="out">from integrations.llamaindex.tool_spec import DinobaseToolSpec
+
+tool_spec = DinobaseToolSpec()
+agent = ReActAgent.from_tools(tool_spec.to_tool_list(), llm=llm)</span></pre>
+                    </div>
+                    <div class="tab-panel" id="tab-pydantic">
+                        <pre class="code-block"><span class="cmd">pip install "dinobase[pydantic-ai]"</span>
+
+<span class="out">from dinobase.integrations.pydantic_ai.tools import DinobaseDeps, dinobase_tools
+
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    deps_type=DinobaseDeps,
+    toolsets=[dinobase_tools],
+)</span></pre>
+                    </div>
+                    <div class="tab-panel" id="tab-mastra">
+                        <pre class="code-block"><span class="cmd">npm install @mastra/core @mastra/mcp @ai-sdk/anthropic && pip install dinobase</span>
+
+<span class="out">const mcp = new MCPClient(&#123;
+  servers: &#123; dinobase: &#123; command: "dinobase", args: ["serve"] &#125; &#125;,
+&#125;);
+const agent = new Agent(&#123;
+  model: anthropic("claude-sonnet-4-6"),
+  tools: await mcp.listTools(), // all 7 tools, auto-discovered
+&#125;);</span></pre>
+                    </div>
+                    <div class="tab-panel" id="tab-mcp">
+                        <pre class="code-block"><span class="out"># Claude Desktop</span>
+<span class="cmd">curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop</span>
+
+<span class="out"># Cursor</span>
+<span class="cmd">curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor</span>
+
+<span class="out"># Codex</span>
+<span class="cmd">curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex</span>
+
+<span class="out"># Claude Code</span>
+<span class="cmd">curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code</span></pre>
                     </div>
                 </div>
             </div>
@@ -3083,6 +3143,18 @@ side_effects: "Will call Stripe API
                 }
                 window.addEventListener("posthog:ready", applyEarlyAccess);
                 if (window.__posthogReady) applyEarlyAccess();
+
+                // Integration tabs
+                document.querySelectorAll(".tab-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        const tab = btn.dataset.tab;
+                        const container = btn.closest(".int-tabs");
+                        container.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+                        container.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+                        btn.classList.add("active");
+                        container.querySelector(`#tab-${tab}`).classList.add("active");
+                    });
+                });
             })();
         </script>
     </body>

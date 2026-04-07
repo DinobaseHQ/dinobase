@@ -1,6 +1,6 @@
 # Dinobase Benchmark
 
-11 LLMs, 15 RevOps questions, two approaches. Same models, same data — only data access differs.
+11 LLMs, 75 questions, two approaches. Same models, same data — only data access differs.
 
 ## Results
 

@@ -17,11 +17,9 @@ Connect your business data. Let AI agents query across all of it.
 
 ---
 
-Ask an AI agent: *"Which customers that churned last quarter had declining usage AND open support tickets?"*
+Agent stacks built on per-source tool calls have a structural gap: agents can't `JOIN` across APIs, have no semantic context to interpret field values, and receive paginated JSON that fills context windows. Take the question *"Which customers churned last quarter with declining usage AND open support tickets?"* — it spans three sources and agents built on tool calls can't answer it reliably. This isn't a model problem. It's an architecture problem.
 
-It can't answer — or it gets it wrong. Agents calling per-source tools have no way to `JOIN` across APIs, no semantic context to interpret field values, and return paginated JSON that fills context windows before producing an answer.
-
-Dinobase gives agents a unified SQL interface with semantic context across all your sources. Agents can read across all sources with a single SQL query, and write data back (reverse ETL) via SQL mutations with a preview/confirm flow. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
+Dinobase is the query layer that fills it. Each source (SaaS APIs, databases, file storages) becomes a schema. Agents write one SQL query across all sources, write data back via SQL mutations with a preview/confirm flow, and get back a single result set. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16-22x cheaper per correct answer.**
 
 ---
 
@@ -130,7 +128,7 @@ Set `DINOBASE_AUTO_ANNOTATE=false` to disable. See [Semantic Layer docs](https:/
 
 ## Benchmark
 
-We tested Dinobase SQL against per-source MCP tools across 11 LLMs on 15 RevOps questions (same models, same data, same questions):
+We tested Dinobase SQL against per-source MCP tools across 11 LLMs on 75 questions (same models, same data, same questions):
 
 | Metric | Dinobase (SQL) | Per-Source MCP |
 |--------|---------------|---------------|
@@ -138,7 +136,7 @@ We tested Dinobase SQL against per-source MCP tools across 11 LLMs on 15 RevOps 
 | **Avg latency** | **34s** | 106s |
 | **Cost per correct answer** | **$0.027** | $0.445 |
 
-**56pp more accurate, 3x faster, 16x cheaper per correct answer — across every model tested.**
+**56pp more accurate, 3x faster, 16-22x cheaper per correct answer — across every model tested.**
 
 See [`benchmarks/`](benchmarks/) for full results, per-model breakdown, and methodology.
 

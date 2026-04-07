@@ -3,7 +3,7 @@ title: Benchmark
 description: How Dinobase SQL compares to per-source MCP tools across 11 LLMs on accuracy, cost, and speed.
 ---
 
-We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 15 RevOps business questions. Same models, same data, same questions — only the data access method differs.
+We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 75 business questions. Same models, same data, same questions — only the data access method differs.
 
 ## Results
 
@@ -41,7 +41,7 @@ We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 15 R
 
 ## Methodology
 
-- **15 questions** across 3 tiers: simple (single-source counts/filters), semantic (MRR, win rate, CSAT — requires domain knowledge), and cross-source (require joining HubSpot and Stripe data)
+- **75 questions** across 3 tiers: simple (single-source counts/filters), semantic (MRR, win rate, CSAT — requires domain knowledge), and cross-source (e.g. require joining HubSpot and Stripe data)
 - **Scoring**: deterministic for ~60% of questions (regex number extraction with tolerance), LLM-as-judge (Claude Haiku 4.5) for the rest
 - **Cost per correct answer**: total API cost divided by number of correct answers — this penalizes approaches that spend tokens on wrong answers
 - **Total benchmark cost**: $29.44 across all 11 models via OpenRouter

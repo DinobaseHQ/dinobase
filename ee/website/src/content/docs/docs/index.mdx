@@ -5,11 +5,9 @@ description: The agent-first database. Connect your business data. Let AI agents
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Dinobase is an agent-first database that connects 100+ business data sources and makes them queryable via SQL — for both humans and AI agents.
+Dinobase is the SQL query layer for agent stacks. It connects 100+ business data sources and makes them queryable via a unified DuckDB interface — agents write SQL, cross-source JOINs work natively.
 
-Ask an AI agent: *"Which customers that churned last quarter had declining usage AND open support tickets?"*
-
-Without Dinobase, it can't answer — agents calling per-source tools have no way to `JOIN` across APIs, no semantic context to interpret field values, and return paginated JSON that fills context windows. With Dinobase, the agent writes one SQL query and gets it right 3x of the time, 3x faster, 16x cheaper per correct answer.
+Agent stacks built on per-source tool calls have a structural gap: agents can't `JOIN` across APIs, have no semantic context to interpret field values, and receive paginated JSON that fills context windows. Dinobase fills that gap. In [benchmarks across 11 LLMs](/docs/project/benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
 
 ## Why Dinobase
 
