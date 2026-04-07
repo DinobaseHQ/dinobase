@@ -59,36 +59,31 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (user) {
-    // Fast path: already verified in a prior request
-    if (request.cookies.get(EA_COOKIE)?.value === "1") {
-      return supabaseResponse;
-    }
-    if (!(await hasEarlyAccess(user.email!))) {
-      return NextResponse.redirect(WAITLIST_URL);
-    }
-    // Cache the result so subsequent requests skip the PostHog call
-    supabaseResponse.cookies.set(EA_COOKIE, "1", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 3600,
-      path: "/",
-    });
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 3600,
+    path: "/",
+  };
+
+  // Fast path: already verified in a prior request
+  if (request.cookies.get(EA_COOKIE)?.value === "1") {
     return supabaseResponse;
   }
 
-  // Not logged in — allow through only if ?email= has early access
+  // ?email= param works regardless of auth state (survives OAuth redirect too)
   const emailParam = request.nextUrl.searchParams.get("email");
   if (emailParam && (await hasEarlyAccess(emailParam))) {
-    // Set a short-lived cookie so the check survives the OAuth redirect
-    supabaseResponse.cookies.set(EA_COOKIE, "1", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 3600,
-      path: "/",
-    });
+    supabaseResponse.cookies.set(EA_COOKIE, "1", cookieOptions);
+    return supabaseResponse;
+  }
+
+  if (user) {
+    if (!(await hasEarlyAccess(user.email!))) {
+      return NextResponse.redirect(WAITLIST_URL);
+    }
+    supabaseResponse.cookies.set(EA_COOKIE, "1", cookieOptions);
     return supabaseResponse;
   }
 
