@@ -25,7 +25,7 @@ def _get_client():
         return None
     try:
         from posthog import Posthog
-        _client = Posthog(_POSTHOG_KEY, host=_POSTHOG_HOST)
+        _client = Posthog(_POSTHOG_KEY, host=_POSTHOG_HOST, enable_exception_autocapture=True)
     except Exception:
         pass
     return _client
