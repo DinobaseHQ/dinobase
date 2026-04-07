@@ -53,7 +53,9 @@ export async function middleware(request: NextRequest) {
   // accessible without early access.
   const { pathname } = request.nextUrl;
   const isAuthRoute =
-    pathname.startsWith("/auth/") || pathname.startsWith("/cli-login");
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/cli-login") ||
+    pathname === "/login";
 
   if (isAuthRoute) {
     return supabaseResponse;
