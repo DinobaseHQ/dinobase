@@ -271,6 +271,12 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 if (ea) ea.style.display = "flex";
             }
 
+            // Identify from ?email= query param before flags load
+            const emailParam = new URLSearchParams(window.location.search).get("email");
+            if (emailParam && window.posthog) {
+                posthog.identify(emailParam, { email: emailParam });
+            }
+
             window.addEventListener("posthog:ready", applyEarlyAccess);
             if (window.__posthogReady) applyEarlyAccess();
         </script>
