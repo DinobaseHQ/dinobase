@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const POSTHOG_HOST = "https://f.dinobase.ai";
 const WAITLIST_URL = "https://dinobase.ai/waitlist";
+const EA_COOKIE = "ea_verified";
 
 async function hasEarlyAccess(distinctId: string): Promise<boolean> {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
@@ -15,7 +16,7 @@ async function hasEarlyAccess(distinctId: string): Promise<boolean> {
       signal: AbortSignal.timeout(3000),
     });
     const data = await res.json();
-    return data.featureFlags?.early_access === true;
+    return !!data.featureFlags?.early_access;
   } catch {
     return false;
   }
@@ -49,7 +50,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Only /auth/* (OAuth/magic-link callbacks) and /cli-login (CLI auth flow) are
-  // accessible without early access. Everything else — including /login — is gated.
+  // accessible without early access.
   const { pathname } = request.nextUrl;
   const isAuthRoute =
     pathname.startsWith("/auth/") || pathname.startsWith("/cli-login");
@@ -58,15 +59,40 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (!user) {
-    return NextResponse.redirect(WAITLIST_URL);
+  if (user) {
+    // Fast path: already verified in a prior request
+    if (request.cookies.get(EA_COOKIE)?.value === "1") {
+      return supabaseResponse;
+    }
+    if (!(await hasEarlyAccess(user.email!))) {
+      return NextResponse.redirect(WAITLIST_URL);
+    }
+    // Cache the result so subsequent requests skip the PostHog call
+    supabaseResponse.cookies.set(EA_COOKIE, "1", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 3600,
+      path: "/",
+    });
+    return supabaseResponse;
   }
 
-  if (!(await hasEarlyAccess(user.email!))) {
-    return NextResponse.redirect(WAITLIST_URL);
+  // Not logged in — allow through only if ?email= has early access
+  const emailParam = request.nextUrl.searchParams.get("email");
+  if (emailParam && (await hasEarlyAccess(emailParam))) {
+    // Set a short-lived cookie so the check survives the OAuth redirect
+    supabaseResponse.cookies.set(EA_COOKIE, "1", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 3600,
+      path: "/",
+    });
+    return supabaseResponse;
   }
 
-  return supabaseResponse;
+  return NextResponse.redirect(WAITLIST_URL);
 }
 
 export const config = {

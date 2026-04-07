@@ -92,36 +92,7 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                 line-height: 1.6;
             }
 
-            .early-access {
-                display: none;
-                flex-direction: column;
-                align-items: center;
-                gap: 1rem;
-                padding: 0 2.5rem 3rem;
-            }
-
-            .early-access p {
-                color: var(--muted);
-                font-size: 0.9375rem;
-            }
-
-            .early-access a {
-                display: inline-block;
-                background: var(--green);
-                color: #0e1410;
-                text-decoration: none;
-                border-radius: 0.625rem;
-                padding: 0.875rem 1.75rem;
-                font-size: 0.9375rem;
-                font-weight: 700;
-                transition: filter 0.15s;
-            }
-
-            .early-access a:hover {
-                filter: brightness(1.1);
-            }
-
-            .back-link {
+.back-link {
                 display: block;
                 margin-top: 1.5rem;
                 color: var(--dimmed);
@@ -147,11 +118,6 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
 
             <div id="cal-container">
                 <div id="my-cal-inline-dinobase-15-min-setup" style="width:100%;height:100%;overflow:scroll"></div>
-            </div>
-
-            <div id="early-access" class="early-access">
-                <p>You have early access!</p>
-                <a href="https://app.dinobase.ai">Get started free &rarr;</a>
             </div>
         </div>
 
@@ -242,43 +208,17 @@ const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY ?? "";
                     ui_host: "https://us.posthog.com",
                     defaults: "2026-01-30",
                     person_profiles: "identified_only",
-                    loaded: function (ph) {
-                        ph.onFeatureFlags(function () {
-                            window.__posthogReady = true;
-                            window.dispatchEvent(new Event("posthog:ready"));
-                        });
-                    },
                 });
             }
 
             // Capture PostHog event when Cal booking is confirmed
             window.addEventListener("cal:bookingSuccessful", function (e) {
                 const email = e.detail?.email;
-                console.log(email)
                 if (email && window.posthog) {
                     posthog.identify(email, { email });
                     posthog.capture("waitlist_joined", { email });
                 }
             });
-
-            // If user already has early_access, hide the calendar
-            function applyEarlyAccess() {
-                if (!window.posthog || !posthog.isFeatureEnabled("early_access"))
-                    return;
-                const calContainer = document.getElementById("cal-container");
-                const ea = document.getElementById("early-access");
-                if (calContainer) calContainer.style.display = "none";
-                if (ea) ea.style.display = "flex";
-            }
-
-            // Identify from ?email= query param before flags load
-            const emailParam = new URLSearchParams(window.location.search).get("email");
-            if (emailParam && window.posthog) {
-                posthog.identify(emailParam, { email: emailParam });
-            }
-
-            window.addEventListener("posthog:ready", applyEarlyAccess);
-            if (window.__posthogReady) applyEarlyAccess();
         </script>
     </body>
 </html>
