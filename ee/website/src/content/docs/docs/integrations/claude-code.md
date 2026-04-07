@@ -8,29 +8,18 @@ Dinobase works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 ## Install
 
 ```bash
-pip install dinobase
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code
 ```
 
-Set up your data sources:
+Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.claude/CLAUDE.md`. Then connect your data sources:
 
 ```bash
-dinobase init
 dinobase add stripe --api-key sk_test_...
 dinobase add hubspot --api-key pat-...
 dinobase sync
 ```
 
 See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
-
-## Setup
-
-Run the install command to add Dinobase instructions to your global `~/.claude/CLAUDE.md`:
-
-```bash
-dinobase install claude-code
-```
-
-This writes CLI usage instructions wrapped in `<dinobase>` tags. Safe to run multiple times — it replaces the existing block if present.
 
 Claude Code can run shell commands directly, so no MCP configuration is needed. Just ask questions about your data:
 
@@ -39,6 +28,8 @@ Claude Code can run shell commands directly, so no MCP configuration is needed. 
 Claude Code will run commands like `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer your question.
 
 The CLI outputs JSON by default, which Claude Code parses automatically. This is **27% more token-efficient** than MCP.
+
+To re-run the setup step: `dinobase install claude-code` (safe to run multiple times — replaces the existing block).
 
 ## Alternative: MCP server
 

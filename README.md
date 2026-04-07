@@ -59,27 +59,27 @@ dinobase add postgres --connection-string postgresql://...
 <tr>
 <td valign="top" width="50%">
 
-**MCP server** — for Claude Desktop, Cursor, any MCP client
+**CLI** — for Claude Code, Cursor, Codex, Aider, any agent that runs shell
 
 ```bash
-dinobase install claude-desktop   # Claude Desktop
-dinobase install cursor           # Cursor
+dinobase install claude-code   # Claude Code (~/.claude/CLAUDE.md)
+dinobase install cursor        # Cursor (./AGENTS.md)
+dinobase install codex         # Codex (~/.codex/AGENTS.md)
 ```
 
-Writes the correct config file for your platform automatically.
+Writes usage instructions to the tool's instructions file. Agents run `dinobase info`, `dinobase describe`, and `dinobase query` directly.
 
 </td>
 <td valign="top" width="50%">
 
-**CLI** — for Claude Code, Aider, any agent that runs shell
+**MCP server** — for Claude Desktop, any MCP client
 
 ```bash
-dinobase info
-dinobase describe stripe.customers --pretty
-dinobase query "SELECT * FROM ..." --pretty
+dinobase install claude-desktop   # Claude Desktop (writes config automatically)
+dinobase serve                    # any other MCP client
 ```
 
-All commands output JSON by default.
+`dinobase serve` starts the MCP server on stdio. Run `dinobase mcp-config <client>` to get the JSON snippet to paste into your client's config.
 
 </td>
 </tr>

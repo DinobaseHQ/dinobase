@@ -45,6 +45,7 @@ export default defineConfig({
             { label: 'Claude Code', slug: 'docs/integrations/claude-code' },
             { label: 'Claude Desktop', slug: 'docs/integrations/claude-desktop' },
             { label: 'Cursor', slug: 'docs/integrations/cursor' },
+            { label: 'Codex', slug: 'docs/integrations/codex' },
             { label: 'OpenClaw', slug: 'docs/integrations/openclaw' },
             { label: 'Vercel AI SDK', slug: 'docs/integrations/vercel-ai' },
 						{ label: 'CrewAI', slug: 'docs/integrations/crewai' },
