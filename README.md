@@ -17,6 +17,10 @@ Connect your business data. Let AI agents query across all of it.
 
 ---
 
+⭐️ star this repo! Thank you for your support!
+
+---
+
 Agent stacks built on per-source tool calls have a structural gap: agents can't `JOIN` across APIs, have no semantic context to interpret field values, and receive paginated JSON that fills context windows. Take the question *"Which customers churned last quarter with declining usage AND open support tickets?"* — it spans three sources and agents built on tool calls can't answer it reliably. This isn't a model problem. It's an architecture problem.
 
 Dinobase is the query layer that fills it. Each source (SaaS APIs, databases, file storages) becomes a schema. Agents write one SQL query across all sources, write data back via SQL mutations with a preview/confirm flow, and get back a single result set. In [benchmarks across 11 LLMs](benchmarks/): **91% accuracy vs 35%, 3x faster, 16-22x cheaper per correct answer.**
