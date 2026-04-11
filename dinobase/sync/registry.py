@@ -745,6 +745,25 @@ _register(SourceEntry(
 
 
 # ===================================================================
+# User-defined local connectors (~/.dinobase/connectors/*.yaml)
+# ===================================================================
+# Loaded last so they override package configs and hardcoded entries.
+
+def _load_local_configs() -> None:
+    try:
+        from dinobase.config import get_connectors_dir
+
+        local_dir = get_connectors_dir()
+        if local_dir.is_dir():
+            _load_yaml_api_configs(apis_dir=local_dir)
+    except Exception:
+        pass  # graceful: don't break import if ~/.dinobase doesn't exist
+
+
+_load_local_configs()
+
+
+# ===================================================================
 # Lookup functions
 # ===================================================================
 

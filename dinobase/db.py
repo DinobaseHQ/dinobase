@@ -379,6 +379,14 @@ class DinobaseDB:
         self._conn.execute(
             f"ALTER TABLE {META_SCHEMA}.tables ADD COLUMN IF NOT EXISTS description VARCHAR"
         )
+        # Register views for cached local connector data
+        self._register_endpoint_views()
+
+    def _register_endpoint_views(self) -> None:
+        """Create DuckDB views for any existing JSON cache files from local connectors."""
+        from dinobase.fetch.connector import register_cached_views
+
+        register_cached_views(self)
 
     def execute(self, sql: str, params: list | None = None) -> duckdb.DuckDBPyRelation:
         if params:

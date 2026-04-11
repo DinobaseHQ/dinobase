@@ -25,12 +25,14 @@ from dinobase.sync.source_config import CONFIGS_DIR
 
 
 def load_yaml_config(source_name: str) -> dict[str, Any] | None:
-    """Load a YAML source config by name."""
-    path = CONFIGS_DIR / f"{source_name}.yaml"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        return yaml.safe_load(f)
+    """Load a YAML source config by name.
+
+    Delegates to source_config.load_source_config() which checks
+    the user's local connectors dir first, then the package configs dir.
+    """
+    from dinobase.sync.source_config import load_source_config
+
+    return load_source_config(source_name)
 
 
 def build_dlt_source(

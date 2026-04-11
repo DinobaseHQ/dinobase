@@ -53,6 +53,9 @@ class QueryEngine:
                     })
                     return live_result
 
+        # Refresh stale local connector caches before executing
+        self._refresh_stale_connectors(sql)
+
         _exec_error: Exception | None = None
         for _attempt in range(2):
             try:
@@ -64,16 +67,21 @@ class QueryEngine:
                 break
             except Exception as e:
                 _exec_error = e
-                # On first attempt, try on-demand view registration for cloud mode
-                if _attempt == 0 and self.db.is_cloud:
+                if _attempt == 0:
                     _err_lower = str(e).lower()
                     if "does not exist" in _err_lower or "catalog error" in _err_lower:
                         _m = re.search(
                             r'\bFROM\b\s+"?(\w+)"?\s*\.\s*"?(\w+)"?',
                             sql, re.IGNORECASE,
                         )
-                        if _m and self.db.register_view_on_demand(_m.group(1), _m.group(2)):
-                            continue  # retry with view now registered
+                        if _m:
+                            _schema, _table = _m.group(1), _m.group(2)
+                            # Try cloud view registration
+                            if self.db.is_cloud and self.db.register_view_on_demand(_schema, _table):
+                                continue
+                            # Try local connector live fetch
+                            if self._try_local_connector_fetch(_schema, _table):
+                                continue
                 break  # non-retryable or retry exhausted
 
         if _exec_error is not None:
@@ -426,6 +434,73 @@ class QueryEngine:
             "_freshness": "live",
             "_source": f"{source_type} API",
         }
+
+    def _refresh_stale_connectors(self, sql: str) -> None:
+        """Re-fetch data for local connectors referenced in the query if stale."""
+        try:
+            from dinobase.fetch.connector import (
+                LocalConnectorFetcher,
+                get_connector_mode,
+                is_local_connector,
+                load_local_connector_config,
+            )
+        except ImportError:
+            return
+
+        # Extract all schema.table references from the SQL
+        refs = re.findall(
+            r'"?(\w+)"?\s*\.\s*"?(\w+)"?', sql, re.IGNORECASE
+        )
+        for schema, table in refs:
+            if not is_local_connector(schema):
+                continue
+            config = load_local_connector_config(schema)
+            if config is None:
+                continue
+            if get_connector_mode(config) != "live":
+                continue
+            try:
+                fetcher = LocalConnectorFetcher(self.db, schema)
+                if table in fetcher.resources and not fetcher.is_fresh(table):
+                    fetcher.fetch_resource(table)
+            except Exception:
+                pass  # best-effort; stale data still queryable
+
+    def _try_local_connector_fetch(self, schema: str, table: str) -> bool:
+        """Try to fetch data from a local connector for a missing table.
+
+        Returns True if the view was created and the query should be retried.
+        """
+        try:
+            from dinobase.fetch.connector import (
+                LocalConnectorFetcher,
+                get_connector_mode,
+                is_local_connector,
+                load_local_connector_config,
+            )
+
+            if not is_local_connector(schema):
+                return False
+
+            config = load_local_connector_config(schema)
+            if config is None:
+                return False
+
+            mode = get_connector_mode(config)
+            if mode == "sync":
+                return False  # sync mode: don't auto-fetch on query
+
+            fetcher = LocalConnectorFetcher(self.db, schema)
+            if table not in fetcher.resources:
+                return False
+
+            fetcher.fetch_resource(table)
+            return True
+        except Exception as e:
+            import sys
+
+            print(f"  [connector] live fetch failed: {e}", file=sys.stderr)
+            return False
 
     def _find_schema_for_table(self, table: str) -> str | None:
         schemas = self.db.get_schemas()

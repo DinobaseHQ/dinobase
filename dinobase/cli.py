@@ -1792,5 +1792,256 @@ def update(check: bool):
         sys.exit(1)
 
 
+# ===================================================================
+# Connector management (local custom connectors)
+# ===================================================================
+
+
+@cli.group()
+def connector():
+    """Manage local custom connectors."""
+    pass
+
+
+_CONNECTOR_TEMPLATE = """\
+name: {name}
+description: "{description}"
+mode: {mode}
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: {env_prefix}_API_KEY
+    prompt: "{display_name} API key"
+    secret: true
+
+client:
+  base_url: "{base_url}"
+  auth:
+    type: {auth_type}
+    token: "{{api_key}}"
+{paginator_block}
+resource_defaults:
+  primary_key: id
+  write_disposition: replace
+  endpoint:
+    data_selector: "{data_selector}"
+
+resources:
+  - name: {resource_name}
+    endpoint:
+      path: {endpoint_path}
+"""
+
+
+@connector.command("create")
+@click.argument("name")
+@click.option("--url", help="Base URL for the API (e.g., https://api.example.com/)")
+@click.option(
+    "--auth-type",
+    type=click.Choice(["bearer", "http_basic", "api_key_header"]),
+    default="bearer",
+    help="Authentication type (default: bearer)",
+)
+@click.option("--endpoint", help="Endpoint path (e.g., projects/123/feature_flags/)")
+@click.option("--data-selector", default="$", help="JSON path to data array (default: $ for root)")
+@click.option("--mode", type=click.Choice(["live", "sync", "auto"]), default="auto", help="Fetch mode")
+def connector_create(
+    name: str,
+    url: str | None,
+    auth_type: str,
+    endpoint: str | None,
+    data_selector: str,
+    mode: str,
+):
+    """Create a new local connector YAML config.
+
+    Examples:
+
+      dinobase connector create posthog_flags \\
+        --url "https://app.posthog.com/api/" \\
+        --endpoint "projects/123/feature_flags/" \\
+        --data-selector results
+
+      dinobase connector create my_api
+    """
+    from dinobase.config import get_connectors_dir
+
+    connectors_dir = get_connectors_dir()
+    connectors_dir.mkdir(parents=True, exist_ok=True)
+
+    yaml_path = connectors_dir / f"{name}.yaml"
+    if yaml_path.exists():
+        click.echo(f"Error: connector '{name}' already exists at {yaml_path}", err=True)
+        sys.exit(1)
+
+    display_name = name.replace("_", " ").title()
+    env_prefix = name.upper()
+    resource_name = (endpoint or name).strip("/").split("/")[-1] or name
+
+    # Detect if paginator should be included
+    paginator_block = ""
+    if url and "posthog" in url.lower():
+        paginator_block = '  paginator:\n    type: json_link\n    next_url_path: "next"\n'
+
+    content = _CONNECTOR_TEMPLATE.format(
+        name=name,
+        description=f"Custom connector for {display_name}",
+        mode=mode,
+        base_url=url or "https://api.example.com/",
+        auth_type=auth_type,
+        env_prefix=env_prefix,
+        display_name=display_name,
+        data_selector=data_selector,
+        resource_name=resource_name,
+        endpoint_path=endpoint or "endpoint/path",
+        paginator_block=paginator_block,
+    )
+
+    yaml_path.write_text(content)
+    click.echo(f"Created connector: {yaml_path}")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  1. Edit the config: dinobase connector edit {name}")
+    click.echo(f"  2. Add credentials: dinobase add {name} --api-key YOUR_KEY")
+    click.echo(f"  3. Query: dinobase query \"SELECT * FROM {name}.{resource_name} LIMIT 10\"")
+
+
+@connector.command("list")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def connector_list(pretty: bool):
+    """List all local custom connectors."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    connectors_dir = get_connectors_dir()
+    if not connectors_dir.is_dir():
+        if pretty:
+            click.echo("No local connectors directory found.")
+        else:
+            click.echo(json.dumps([]))
+        return
+
+    connectors = []
+    for path in sorted(connectors_dir.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            from dinobase.fetch.connector import get_connector_mode
+
+            connectors.append({
+                "name": cfg.get("name", path.stem),
+                "description": cfg.get("description", ""),
+                "mode": get_connector_mode(cfg),
+                "resources": [r["name"] for r in cfg.get("resources", [])],
+                "path": str(path),
+            })
+        except Exception as e:
+            connectors.append({
+                "name": path.stem,
+                "error": str(e),
+                "path": str(path),
+            })
+
+    if pretty:
+        if not connectors:
+            click.echo("No local connectors. Create one with: dinobase connector create <name>")
+            return
+        for c in connectors:
+            if "error" in c:
+                click.echo(f"  {c['name']} — ERROR: {c['error']}")
+            else:
+                resources = ", ".join(c["resources"]) if c["resources"] else "(none)"
+                click.echo(f"  {c['name']} ({c['mode']}) — {c['description']}")
+                click.echo(f"    resources: {resources}")
+    else:
+        click.echo(json.dumps(connectors, indent=2))
+
+
+@connector.command("edit")
+@click.argument("name")
+def connector_edit(name: str):
+    """Open a local connector config in your editor."""
+    import os
+
+    from dinobase.config import get_connectors_dir
+
+    yaml_path = get_connectors_dir() / f"{name}.yaml"
+    if not yaml_path.exists():
+        click.echo(f"Error: connector '{name}' not found at {yaml_path}", err=True)
+        click.echo(f"Create it with: dinobase connector create {name}")
+        sys.exit(1)
+
+    editor = os.environ.get("EDITOR", os.environ.get("VISUAL"))
+    if editor:
+        os.execlp(editor, editor, str(yaml_path))
+    else:
+        click.echo(f"No $EDITOR set. Config path: {yaml_path}")
+
+
+@connector.command("validate")
+@click.argument("name")
+def connector_validate(name: str):
+    """Validate a local connector YAML config."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    yaml_path = get_connectors_dir() / f"{name}.yaml"
+    if not yaml_path.exists():
+        click.echo(f"Error: connector '{name}' not found at {yaml_path}", err=True)
+        sys.exit(1)
+
+    try:
+        with open(yaml_path) as f:
+            cfg = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        click.echo(f"YAML parse error: {e}", err=True)
+        sys.exit(1)
+
+    errors = []
+
+    if not cfg.get("name"):
+        errors.append("Missing required field: name")
+    if not cfg.get("client", {}).get("base_url"):
+        errors.append("Missing required field: client.base_url")
+    if not cfg.get("resources"):
+        errors.append("No resources defined — add at least one resource")
+
+    for i, r in enumerate(cfg.get("resources", [])):
+        if not r.get("name"):
+            errors.append(f"Resource #{i + 1}: missing 'name' field")
+        if not r.get("endpoint", {}).get("path"):
+            errors.append(f"Resource '{r.get('name', f'#{i + 1}')}': missing endpoint.path")
+
+    # Check credential placeholders
+    import re
+
+    base_url = cfg.get("client", {}).get("base_url", "")
+    auth_token = cfg.get("client", {}).get("auth", {}).get("token", "")
+    placeholders = set(re.findall(r"\{(\w+)\}", base_url + auth_token))
+    cred_names = {c["name"] for c in cfg.get("credentials", [])}
+    for resource in cfg.get("resources", []):
+        path = resource.get("endpoint", {}).get("path", "")
+        placeholders.update(re.findall(r"\{(\w+)\}", path))
+
+    undefined = placeholders - cred_names
+    if undefined:
+        errors.append(
+            f"Undefined credential placeholders: {', '.join(sorted(undefined))}. "
+            f"Add them to the 'credentials' list."
+        )
+
+    if errors:
+        click.echo(f"Validation failed for {name}:", err=True)
+        for e in errors:
+            click.echo(f"  - {e}", err=True)
+        sys.exit(1)
+    else:
+        click.echo(f"Connector '{name}' is valid.")
+
+
 if __name__ == "__main__":
     cli()

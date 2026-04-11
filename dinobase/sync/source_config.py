@@ -17,9 +17,40 @@ import yaml
 
 CONFIGS_DIR = Path(__file__).parent / "sources" / "configs"
 
+# Cached local connectors directory (lazy, avoids circular import)
+_local_configs_dir: Path | None | bool = False  # False = not yet resolved
+
+
+def _get_local_configs_dir() -> Path | None:
+    """Lazy accessor for user's local connectors directory."""
+    global _local_configs_dir
+    if _local_configs_dir is not False:
+        return _local_configs_dir  # type: ignore[return-value]
+    try:
+        from dinobase.config import get_connectors_dir
+
+        d = get_connectors_dir()
+        _local_configs_dir = d if d.is_dir() else None
+    except Exception:
+        _local_configs_dir = None
+    return _local_configs_dir
+
 
 def load_source_config(source_name: str) -> dict[str, Any] | None:
-    """Load a YAML source config by name. Returns None if not found."""
+    """Load a YAML source config by name.
+
+    Checks user's local connectors dir first, then the package configs dir.
+    Returns None if not found in either location.
+    """
+    # Local connectors take priority
+    local_dir = _get_local_configs_dir()
+    if local_dir:
+        path = local_dir / f"{source_name}.yaml"
+        if path.exists():
+            with open(path) as f:
+                return yaml.safe_load(f)
+
+    # Fall back to package configs
     path = CONFIGS_DIR / f"{source_name}.yaml"
     if not path.exists():
         return None
@@ -28,13 +59,25 @@ def load_source_config(source_name: str) -> dict[str, Any] | None:
 
 
 def list_yaml_sources() -> list[str]:
-    """List all source names that have YAML configs."""
-    if not CONFIGS_DIR.exists():
-        return []
-    return sorted(
-        p.stem for p in CONFIGS_DIR.glob("*.yaml")
-        if not p.name.startswith("_")
-    )
+    """List all source names that have YAML configs (local + package)."""
+    names: set[str] = set()
+
+    # Local connectors
+    local_dir = _get_local_configs_dir()
+    if local_dir and local_dir.exists():
+        names.update(
+            p.stem for p in local_dir.glob("*.yaml")
+            if not p.name.startswith("_")
+        )
+
+    # Package configs
+    if CONFIGS_DIR.exists():
+        names.update(
+            p.stem for p in CONFIGS_DIR.glob("*.yaml")
+            if not p.name.startswith("_")
+        )
+
+    return sorted(names)
 
 
 def get_read_endpoints(config: dict[str, Any]) -> list[dict[str, Any]]:
