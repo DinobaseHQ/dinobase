@@ -13,15 +13,115 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.error import HTTPError, URLError
 
 import yaml
 
 if TYPE_CHECKING:
     from dinobase.db import DinobaseDB
+
+
+class ConnectorError(Exception):
+    """User-facing error from a local connector with actionable guidance."""
+
+    pass
+
+
+def _classify_error(
+    exc: Exception, source_name: str, resource_name: str
+) -> str:
+    """Translate a raw exception into an actionable error message."""
+    exc_str = str(exc)
+    exc_lower = exc_str.lower()
+
+    # HTTP errors (from urllib or requests)
+    if isinstance(exc, HTTPError) or "httperror" in type(exc).__name__.lower():
+        code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+        if code is None:
+            # Try to extract from string
+            import re as _re
+
+            m = _re.search(r"(\d{3})", exc_str)
+            code = int(m.group(1)) if m else 0
+
+        if code in (401, 403):
+            return (
+                f"Authentication failed for '{source_name}' (HTTP {code}).\n"
+                f"Check your API key: dinobase add {source_name} --api-key <value>"
+            )
+        if code == 404:
+            return (
+                f"Endpoint not found for '{source_name}.{resource_name}' (HTTP 404).\n"
+                f"Check the endpoint path in your connector config: "
+                f"dinobase connector edit {source_name}"
+            )
+        if code == 429:
+            return (
+                f"Rate limited by '{source_name}' (HTTP 429).\n"
+                f"Wait a moment, then retry: dinobase refresh {source_name}"
+            )
+        if code and code >= 500:
+            return (
+                f"Server error from '{source_name}' (HTTP {code}).\n"
+                f"The API may be temporarily down — retry later."
+            )
+
+    # Connection errors
+    if "connectionerror" in type(exc).__name__.lower() or "urlerror" in type(exc).__name__.lower():
+        # Try to extract hostname
+        host_match = re.search(r"host[= ]*'?([^\s'\",:]+)", exc_lower)
+        host = host_match.group(1) if host_match else "the API"
+        return (
+            f"Cannot connect to {host}.\n"
+            f"Check the base_url in your connector config: "
+            f"dinobase connector edit {source_name}"
+        )
+
+    if "timeout" in exc_lower:
+        return (
+            f"Request timed out for '{source_name}.{resource_name}'.\n"
+            f"The API may be slow — retry later: dinobase refresh {source_name}"
+        )
+
+    # Auth-related strings in generic errors
+    if "401" in exc_str or "403" in exc_str or "unauthorized" in exc_lower or "forbidden" in exc_lower:
+        return (
+            f"Authentication failed for '{source_name}'.\n"
+            f"Check your API key: dinobase add {source_name} --api-key <value>"
+        )
+
+    if "404" in exc_str and "not found" in exc_lower:
+        return (
+            f"Endpoint not found for '{source_name}.{resource_name}'.\n"
+            f"Check the endpoint path: dinobase connector edit {source_name}"
+        )
+
+    # Check nested/wrapped exceptions (dlt wraps errors in PipelineStepFailed etc.)
+    if "resolve" in exc_lower or "nodename" in exc_lower or "name resolution" in exc_lower:
+        host_match = re.search(r"host='([^']+)'", exc_str)
+        host = host_match.group(1) if host_match else "the API"
+        return (
+            f"Cannot connect to {host}.\n"
+            f"Check the base_url in your connector config: "
+            f"dinobase connector edit {source_name}"
+        )
+
+    if "max retries exceeded" in exc_lower or "connection refused" in exc_lower:
+        host_match = re.search(r"host='([^']+)'", exc_str)
+        host = host_match.group(1) if host_match else "the API"
+        return (
+            f"Cannot connect to {host}.\n"
+            f"Check the base_url in your connector config, "
+            f"or verify your network connection."
+        )
+
+    # Fallback
+    return f"Fetch failed for '{source_name}.{resource_name}': {exc}"
 
 
 def is_local_connector(source_name: str) -> bool:
@@ -66,8 +166,8 @@ class LocalConnectorFetcher:
         self.source_name = source_name
         self.config = load_local_connector_config(source_name)
         if self.config is None:
-            raise ValueError(
-                f"No local connector config found: {source_name}. "
+            raise ConnectorError(
+                f"No local connector config found: '{source_name}'.\n"
                 f"Create one with: dinobase connector create {source_name}"
             )
 
@@ -88,13 +188,48 @@ class LocalConnectorFetcher:
         """List of resource names defined in the connector."""
         return [r["name"] for r in self.config.get("resources", [])]
 
+    def _validate_before_fetch(self) -> None:
+        """Check credentials and config before making HTTP calls."""
+        # Check credentials exist in config.yaml
+        if not self.credentials:
+            cred_names = [c["name"] for c in self.config.get("credentials", [])]
+            flags = " ".join(
+                f"--{c.replace('_', '-')} <value>" for c in cred_names
+            )
+            raise ConnectorError(
+                f"No credentials configured for '{self.source_name}'.\n"
+                f"Run: dinobase add {self.source_name} {flags}"
+            )
+
+        # Check all placeholders have values
+        base_url = self.config.get("client", {}).get("base_url", "")
+        auth_token = self.config.get("client", {}).get("auth", {}).get("token", "")
+        template = base_url + auth_token
+        for resource in self.config.get("resources", []):
+            template += resource.get("endpoint", {}).get("path", "")
+
+        placeholders = set(re.findall(r"\{(\w+)\}", template))
+        missing = placeholders - set(self.credentials.keys())
+        if missing:
+            flags = " ".join(
+                f"--{c.replace('_', '-')} <value>" for c in sorted(missing)
+            )
+            raise ConnectorError(
+                f"Missing credentials for '{self.source_name}': "
+                f"{', '.join(sorted(missing))}.\n"
+                f"Run: dinobase add {self.source_name} {flags}"
+            )
+
     def fetch_resource(self, resource_name: str) -> Path:
         """Fetch all records for one resource via dlt, write to JSON cache.
 
         Returns path to the cache file.
+        Raises ConnectorError with actionable guidance on failure.
         """
         from dinobase.config import get_cache_dir
         from dinobase.sync.yaml_source import build_dlt_source
+
+        self._validate_before_fetch()
 
         print(
             f"  [connector] fetching {self.source_name}.{resource_name}...",
@@ -102,18 +237,29 @@ class LocalConnectorFetcher:
         )
 
         # Build dlt source — handles auth, pagination, credential substitution
-        source = build_dlt_source(
-            self.source_type, self.credentials, [resource_name]
-        )
+        try:
+            source = build_dlt_source(
+                self.source_type, self.credentials, [resource_name]
+            )
+        except Exception as e:
+            raise ConnectorError(
+                f"Invalid connector config for '{self.source_name}': {e}\n"
+                f"Check your config: dinobase connector edit {self.source_name}"
+            ) from e
 
         # Iterate the dlt source directly to collect all records
         rows: list[dict[str, Any]] = []
-        for resource_obj in source.resources.values():
-            for item in resource_obj:
-                if isinstance(item, dict):
-                    rows.append(item)
-                elif isinstance(item, list):
-                    rows.extend(item)
+        try:
+            for resource_obj in source.resources.values():
+                for item in resource_obj:
+                    if isinstance(item, dict):
+                        rows.append(item)
+                    elif isinstance(item, list):
+                        rows.extend(item)
+        except Exception as e:
+            raise ConnectorError(
+                _classify_error(e, self.source_name, resource_name)
+            ) from e
 
         # Write to cache file
         cache_dir = get_cache_dir() / self.source_name

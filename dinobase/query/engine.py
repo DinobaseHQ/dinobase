@@ -91,7 +91,10 @@ class QueryEngine:
                 "duration_ms": round((_time.monotonic() - _start) * 1000),
                 "error_type": type(_exec_error).__name__,
             })
-            return {"error": str(_exec_error)}
+            # Prefer the connector error (actionable) over the generic DuckDB error
+            connector_err = getattr(self, "_last_connector_error", None)
+            self._last_connector_error = None
+            return {"error": connector_err or str(_exec_error)}
 
         total_rows = len(rows)
         truncated = total_rows > max_rows
@@ -470,9 +473,11 @@ class QueryEngine:
         """Try to fetch data from a local connector for a missing table.
 
         Returns True if the view was created and the query should be retried.
+        On failure, stores the error in _last_connector_error for the caller.
         """
         try:
             from dinobase.fetch.connector import (
+                ConnectorError,
                 LocalConnectorFetcher,
                 get_connector_mode,
                 is_local_connector,
@@ -496,10 +501,11 @@ class QueryEngine:
 
             fetcher.fetch_resource(table)
             return True
+        except ConnectorError as e:
+            self._last_connector_error = str(e)
+            return False
         except Exception as e:
-            import sys
-
-            print(f"  [connector] live fetch failed: {e}", file=sys.stderr)
+            self._last_connector_error = f"Connector fetch failed: {e}"
             return False
 
     def _find_schema_for_table(self, table: str) -> str | None:

@@ -316,13 +316,17 @@ class SyncEngine:
                 table_names=list(paths.keys()),
             )
         except Exception as e:
+            # ConnectorError already has a friendly message; other exceptions get wrapped
+            from dinobase.fetch.connector import ConnectorError
+
+            error_msg = str(e) if isinstance(e, ConnectorError) else f"Unexpected error: {e}"
             return SyncResult(
                 source_name=source_name,
                 source_type=source_type,
                 tables_synced=0,
                 rows_synced=0,
                 status="error",
-                error=str(e),
+                error=error_msg,
             )
 
     def _run_pipeline(
