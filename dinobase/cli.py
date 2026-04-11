@@ -1846,6 +1846,8 @@ resources:
 @click.option("--endpoint", help="Endpoint path (e.g., projects/123/feature_flags/)")
 @click.option("--data-selector", default="$", help="JSON path to data array (default: $ for root)")
 @click.option("--mode", type=click.Choice(["live", "sync", "auto"]), default="auto", help="Fetch mode")
+@click.option("--transport", type=click.Choice(["stdio", "sse", "streamable_http"]), help="MCP transport type")
+@click.option("--command", help="MCP stdio command (e.g., 'npx -y @modelcontextprotocol/server-filesystem /data')")
 def connector_create(
     name: str,
     url: str | None,
@@ -1853,6 +1855,8 @@ def connector_create(
     endpoint: str | None,
     data_selector: str,
     mode: str,
+    transport: str | None,
+    command: str | None,
 ):
     """Create a new local connector YAML config.
 
@@ -1864,6 +1868,13 @@ def connector_create(
         --data-selector results
 
       dinobase connector create my_api
+
+      dinobase connector create my_files \\
+        --transport stdio \\
+        --command "npx -y @modelcontextprotocol/server-filesystem /data"
+
+      dinobase connector create remote_tools \\
+        --transport sse --url http://localhost:8080/sse
     """
     from dinobase.config import get_connectors_dir
 
@@ -1875,6 +1886,54 @@ def connector_create(
         click.echo(f"Error: connector '{name}' already exists at {yaml_path}", err=True)
         sys.exit(1)
 
+    # MCP connector path
+    if transport:
+        if transport == "stdio" and not command:
+            click.echo("Error: --command is required for stdio transport", err=True)
+            sys.exit(1)
+        if transport in ("sse", "streamable_http") and not url:
+            click.echo(f"Error: --url is required for {transport} transport", err=True)
+            sys.exit(1)
+
+        mcp_mode = mode if mode != "auto" else "live"
+        display_name = name.replace("_", " ").title()
+
+        if transport == "stdio":
+            import shlex
+            parts = shlex.split(command)
+            cmd = parts[0]
+            args = parts[1:] if len(parts) > 1 else []
+            args_str = "\n".join(f'    - "{a}"' for a in args)
+            content = (
+                f'name: {name}\n'
+                f'description: "MCP connector for {display_name}"\n'
+                f'mode: {mcp_mode}\n'
+                f'\n'
+                f'transport:\n'
+                f'  type: stdio\n'
+                f'  command: {cmd}\n'
+            )
+            if args:
+                content += f'  args:\n{args_str}\n'
+        else:
+            content = (
+                f'name: {name}\n'
+                f'description: "MCP connector for {display_name}"\n'
+                f'mode: {mcp_mode}\n'
+                f'\n'
+                f'transport:\n'
+                f'  type: {transport}\n'
+                f'  url: "{url}"\n'
+            )
+
+        yaml_path.write_text(content)
+        click.echo(f"Created MCP connector: {yaml_path}")
+        click.echo(f"\nNext steps:")
+        click.echo(f"  1. Sync: dinobase sync {name}")
+        click.echo(f"  2. Query: dinobase query \"SELECT * FROM {name}.<tool_name> LIMIT 10\"")
+        return
+
+    # REST connector path
     display_name = name.replace("_", " ").title()
     env_prefix = name.upper()
     resource_name = (endpoint or name).strip("/").split("/")[-1] or name

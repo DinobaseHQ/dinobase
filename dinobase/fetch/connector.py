@@ -147,15 +147,32 @@ def get_connector_mode(config: dict[str, Any]) -> str:
 
     Returns 'live', 'sync', or resolves 'auto':
     - auto → live if no paginator defined, sync if paginator present.
+    - MCP connectors without explicit mode default to live.
     """
     mode = config.get("mode", "auto")
     if mode != "auto":
         return mode
+    # MCP connectors default to live
+    if "transport" in config:
+        return "live"
     # Auto-detect: if a paginator is configured, default to sync
     paginator = config.get("client", {}).get("paginator")
     if paginator and paginator.get("type") not in (None, "single_page"):
         return "sync"
     return "live"
+
+
+def get_fetcher(db: DinobaseDB, source_name: str) -> LocalConnectorFetcher | Any:
+    """Factory: return the right fetcher for a local connector config.
+
+    MCP connectors (those with a `transport:` key) get an MCPConnectorFetcher;
+    REST connectors get a LocalConnectorFetcher.
+    """
+    config = load_local_connector_config(source_name)
+    if config and "transport" in config:
+        from dinobase.fetch.mcp_connector import MCPConnectorFetcher
+        return MCPConnectorFetcher(db, source_name)
+    return LocalConnectorFetcher(db, source_name)
 
 
 class LocalConnectorFetcher:

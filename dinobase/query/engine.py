@@ -442,8 +442,8 @@ class QueryEngine:
         """Re-fetch data for local connectors referenced in the query if stale."""
         try:
             from dinobase.fetch.connector import (
-                LocalConnectorFetcher,
                 get_connector_mode,
+                get_fetcher,
                 is_local_connector,
                 load_local_connector_config,
             )
@@ -463,7 +463,7 @@ class QueryEngine:
             if get_connector_mode(config) != "live":
                 continue
             try:
-                fetcher = LocalConnectorFetcher(self.db, schema)
+                fetcher = get_fetcher(self.db, schema)
                 if table in fetcher.resources and not fetcher.is_fresh(table):
                     fetcher.fetch_resource(table)
             except Exception:
@@ -478,8 +478,8 @@ class QueryEngine:
         try:
             from dinobase.fetch.connector import (
                 ConnectorError,
-                LocalConnectorFetcher,
                 get_connector_mode,
+                get_fetcher,
                 is_local_connector,
                 load_local_connector_config,
             )
@@ -495,7 +495,7 @@ class QueryEngine:
             if mode == "sync":
                 return False  # sync mode: don't auto-fetch on query
 
-            fetcher = LocalConnectorFetcher(self.db, schema)
+            fetcher = get_fetcher(self.db, schema)
             if table not in fetcher.resources:
                 return False
 

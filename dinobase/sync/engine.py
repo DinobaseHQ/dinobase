@@ -278,13 +278,13 @@ class SyncEngine:
         source_config: dict[str, Any],
     ) -> SyncResult:
         """Lightweight sync for local connectors — uses dlt iteration + JSON cache."""
-        from dinobase.fetch.connector import LocalConnectorFetcher
+        from dinobase.fetch.connector import get_fetcher
 
         source_type = source_config["type"]
         t0 = time.monotonic()
 
         try:
-            fetcher = LocalConnectorFetcher(self.db, source_name)
+            fetcher = get_fetcher(self.db, source_name)
             paths = fetcher.fetch_all()
 
             total_rows = 0
