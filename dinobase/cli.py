@@ -45,6 +45,14 @@ SQL lets you filter, join, aggregate, and paginate — much more powerful than r
 Use `mcp call` only for actions (writes, mutations) or tools that need specific arguments.
 Note: only tools with no required parameters are auto-synced into tables.
 
+When writing code that calls MCP tools, prefer the Python API over shelling out to the CLI:
+  from dinobase.mcp import call, tools, servers, search, instructions
+  call("server.tool", arg=value)  — call a tool with keyword args
+  tools("server")                 — list tools with schemas
+  servers()                       — list connected MCP servers
+  search("pattern")               — regex search across all servers
+  instructions("server")          — server info and usage instructions
+
 Always start with `dinobase info` to understand what data is available.
 Output is JSON by default. Add --pretty for human-readable tables."""
 
