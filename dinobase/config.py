@@ -32,6 +32,16 @@ def get_db_path() -> Path | str:
     return get_dinobase_dir() / DB_FILE
 
 
+def get_connectors_dir() -> Path:
+    """Directory for user-defined local connector YAML configs."""
+    return get_dinobase_dir() / "connectors"
+
+
+def get_cache_dir() -> Path:
+    """Directory for cached JSON data from local connectors."""
+    return get_dinobase_dir() / "cache"
+
+
 # ---------------------------------------------------------------------------
 # Cloud storage
 # ---------------------------------------------------------------------------
@@ -122,6 +132,8 @@ def init_dinobase(storage_url: str | None = None) -> Path:
     """
     ddir = get_dinobase_dir()
     ddir.mkdir(parents=True, exist_ok=True)
+    (ddir / "connectors").mkdir(exist_ok=True)
+    (ddir / "cache").mkdir(exist_ok=True)
     config_path = get_config_path()
     if not config_path.exists():
         config: dict[str, Any] = {"sources": {}}
