@@ -98,6 +98,116 @@ def _extract_rows(result: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _get_transport(transport_config: dict[str, Any]):
+    """Create the appropriate MCP transport context manager from config."""
+    transport_type = transport_config["type"]
+
+    if transport_type == "stdio":
+        from mcp.client.stdio import StdioServerParameters, stdio_client
+        params = StdioServerParameters(
+            command=transport_config["command"],
+            args=transport_config.get("args", []),
+            env=transport_config.get("env"),
+        )
+        return stdio_client(params)
+    elif transport_type == "sse":
+        from mcp.client.sse import sse_client
+        return sse_client(
+            url=transport_config["url"],
+            headers=transport_config.get("headers"),
+        )
+    elif transport_type == "streamable_http":
+        from mcp.client.streamable_http import streamablehttp_client
+        return streamablehttp_client(
+            url=transport_config["url"],
+            headers=transport_config.get("headers"),
+        )
+    else:
+        from dinobase.fetch.connector import ConnectorError
+        raise ConnectorError(
+            f"Unknown MCP transport type: '{transport_type}'.\n"
+            f"Supported: stdio, sse, streamable_http"
+        )
+
+
+def _load_transport_config(source_name: str) -> dict[str, Any]:
+    """Load and return the transport config for an MCP connector."""
+    from dinobase.fetch.connector import ConnectorError, load_local_connector_config
+
+    config = load_local_connector_config(source_name)
+    if config is None:
+        raise ConnectorError(
+            f"No connector config found: '{source_name}'.\n"
+            f"Create one with: dinobase connector create {source_name}"
+        )
+    if "transport" not in config:
+        raise ConnectorError(f"'{source_name}' is not an MCP connector (no transport config).")
+    return config["transport"]
+
+
+async def get_server_info(source_name: str) -> dict[str, Any]:
+    """Connect to an MCP server and return its info and instructions."""
+    from mcp import ClientSession
+
+    transport_config = _load_transport_config(source_name)
+    transport_cm = _get_transport(transport_config)
+    async with transport_cm as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            result = await session.initialize()
+            info: dict[str, Any] = {}
+            if result.serverInfo:
+                info["name"] = result.serverInfo.name
+                if result.serverInfo.version:
+                    info["version"] = result.serverInfo.version
+            if result.instructions:
+                info["instructions"] = result.instructions
+            return info
+
+
+async def list_all_tools(source_name: str) -> list[dict[str, Any]]:
+    """Connect to an MCP server and return all tools with full metadata."""
+    from mcp import ClientSession
+
+    transport_config = _load_transport_config(source_name)
+    transport_cm = _get_transport(transport_config)
+    async with transport_cm as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.list_tools()
+            return [t.model_dump(exclude_none=True) for t in result.tools]
+
+
+async def call_tool(
+    source_name: str, tool_name: str, arguments: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call any MCP tool and return the raw result."""
+    from mcp import ClientSession
+
+    transport_config = _load_transport_config(source_name)
+    transport_cm = _get_transport(transport_config)
+    async with transport_cm as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments or {})
+
+            # Build a structured response
+            content = []
+            for block in result.content or []:
+                if block.type == "text":
+                    content.append({"type": "text", "text": block.text})
+                elif block.type == "image":
+                    content.append({"type": "image", "mimeType": block.mimeType})
+                else:
+                    content.append({"type": block.type})
+
+            response: dict[str, Any] = {"content": content}
+            if result.isError:
+                response["isError"] = True
+            if result.structuredContent is not None:
+                response["structuredContent"] = result.structuredContent
+            return response
+
+
 class MCPConnectorFetcher:
     """Fetches data from an MCP server's reading tools."""
 
@@ -154,37 +264,15 @@ class MCPConnectorFetcher:
 
     # -- async internals --
 
-    async def _get_session(self):
+    def _get_session(self):
         """Create the appropriate MCP transport context manager."""
-        t = self._transport_config
-        transport_type = t["type"]
-
-        if transport_type == "stdio":
-            from mcp.client.stdio import StdioServerParameters, stdio_client
-            params = StdioServerParameters(
-                command=t["command"],
-                args=t.get("args", []),
-                env=t.get("env"),
-            )
-            return stdio_client(params)
-        elif transport_type == "sse":
-            from mcp.client.sse import sse_client
-            return sse_client(url=t["url"], headers=t.get("headers"))
-        elif transport_type == "streamable_http":
-            from mcp.client.streamable_http import streamablehttp_client
-            return streamablehttp_client(url=t["url"], headers=t.get("headers"))
-        else:
-            from dinobase.fetch.connector import ConnectorError
-            raise ConnectorError(
-                f"Unknown MCP transport type: '{transport_type}'.\n"
-                f"Supported: stdio, sse, streamable_http"
-            )
+        return _get_transport(self._transport_config)
 
     async def _discover_tools(self) -> list[str]:
         """Connect to MCP server and discover reading tools."""
         from mcp import ClientSession
 
-        transport_cm = await self._get_session()
+        transport_cm = self._get_session()
         async with transport_cm as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
@@ -204,7 +292,7 @@ class MCPConnectorFetcher:
             file=sys.stderr,
         )
 
-        transport_cm = await self._get_session()
+        transport_cm = self._get_session()
         async with transport_cm as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
@@ -228,7 +316,7 @@ class MCPConnectorFetcher:
         """Fetch all reading tools in a single MCP connection."""
         from mcp import ClientSession
 
-        transport_cm = await self._get_session()
+        transport_cm = self._get_session()
         results: dict[str, Path] = {}
 
         async with transport_cm as (read_stream, write_stream):

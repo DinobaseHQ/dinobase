@@ -13,7 +13,7 @@ from dinobase.annotations import AnnotateBatchInput, AnnotationInput, Relationsh
 
 _AGENT_COMMANDS = frozenset({
     "info", "query", "describe", "status", "sources",
-    "confirm", "cancel", "refresh", "auth",
+    "confirm", "cancel", "refresh", "auth", "mcp",
 })
 
 _CLI_INSTRUCTIONS = """\
@@ -917,10 +917,16 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
     # One-time sync
     from dinobase.sync.engine import SyncEngine
 
+    from dinobase.fetch.connector import is_local_connector
+
     if source_name:
         if source_name not in sources:
-            click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
-            sys.exit(1)
+            # Check if it's a standalone local connector (e.g. MCP)
+            if is_local_connector(source_name):
+                sources[source_name] = {"type": source_name}
+            else:
+                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                sys.exit(1)
         to_sync = {source_name: sources[source_name]}
     else:
         to_sync = sources
@@ -998,12 +1004,17 @@ def refresh(source_name: str | None, stale: bool, pretty: bool):
     engine = QueryEngine(db)
     sync_engine = SyncEngine(db)
 
+    from dinobase.fetch.connector import is_local_connector
+
     # Determine which sources to refresh
     if source_name:
         if source_name not in sources:
-            click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
-            db.close()
-            sys.exit(1)
+            if is_local_connector(source_name):
+                sources[source_name] = {"type": source_name}
+            else:
+                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                db.close()
+                sys.exit(1)
         to_refresh = {source_name: sources[source_name]}
     elif stale:
         to_refresh = {}
@@ -2100,6 +2111,315 @@ def connector_validate(name: str):
         sys.exit(1)
     else:
         click.echo(f"Connector '{name}' is valid.")
+
+
+# ---------------------------------------------------------------------------
+# MCP tool proxy commands
+# ---------------------------------------------------------------------------
+
+
+def _get_mcp_connectors() -> list[dict[str, Any]]:
+    """Scan connectors dir for MCP connectors (those with transport: key)."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    connectors_dir = get_connectors_dir()
+    if not connectors_dir.is_dir():
+        return []
+
+    results = []
+    for path in sorted(connectors_dir.glob("*.yaml")):
+        try:
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            if cfg and "transport" in cfg:
+                results.append(cfg)
+        except Exception:
+            continue
+    return results
+
+
+@cli.group()
+def mcp():
+    """Proxy MCP server tools — list, search, inspect, and call."""
+    pass
+
+
+@mcp.command("servers")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_servers(pretty: bool):
+    """List connected MCP servers and their tools."""
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    connectors = _get_mcp_connectors()
+    if not connectors:
+        if pretty:
+            click.echo("No MCP servers configured. Create one with:")
+            click.echo("  dinobase connector create <name> --transport stdio --command '...'")
+        else:
+            click.echo(json.dumps({"servers": []}))
+        return
+
+    servers = []
+    for cfg in connectors:
+        name = cfg["name"]
+        transport = cfg["transport"]
+        entry: dict[str, Any] = {
+            "name": name,
+            "description": cfg.get("description", ""),
+            "transport": transport["type"],
+        }
+        if transport["type"] == "stdio":
+            entry["command"] = transport.get("command", "")
+        else:
+            entry["url"] = transport.get("url", "")
+
+        try:
+            tools = asyncio.run(list_all_tools(name))
+            entry["tools"] = len(tools)
+            entry["tool_names"] = [t["name"] for t in tools]
+        except Exception as e:
+            entry["tools"] = 0
+            entry["error"] = str(e)
+
+        servers.append(entry)
+
+    if pretty:
+        for s in servers:
+            status = f"{s['tools']} tools" if "error" not in s else f"error: {s['error']}"
+            click.echo(f"  {s['name']} ({s['transport']}) — {status}")
+            if s.get("tool_names"):
+                for t in s["tool_names"]:
+                    click.echo(f"    - {t}")
+    else:
+        click.echo(json.dumps({"servers": servers}, indent=2, default=str))
+
+
+@mcp.command("instructions")
+@click.argument("server")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_instructions(server: str, pretty: bool):
+    """Show an MCP server's instructions (how to use it).
+
+    Examples:
+
+      dinobase mcp instructions my_server
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import get_server_info
+
+    try:
+        info = asyncio.run(get_server_info(server))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if pretty:
+        if info.get("name"):
+            version = f" v{info['version']}" if info.get("version") else ""
+            click.echo(f"{info['name']}{version}\n")
+        if info.get("instructions"):
+            click.echo(info["instructions"])
+        else:
+            click.echo("(no instructions provided by this server)")
+    else:
+        click.echo(json.dumps(info, indent=2, default=str))
+
+
+@mcp.command("info")
+@click.argument("ref")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_info(ref: str, pretty: bool):
+    """Show tool schema. REF is 'server' (list all) or 'server.tool' (one tool).
+
+    Examples:
+
+      dinobase mcp info my_server
+      dinobase mcp info my_server.list_files
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    if "." in ref:
+        server, tool_name = ref.split(".", 1)
+    else:
+        server, tool_name = ref, None
+
+    try:
+        tools = asyncio.run(list_all_tools(server))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if tool_name:
+        match = [t for t in tools if t["name"] == tool_name]
+        if not match:
+            available = [t["name"] for t in tools]
+            click.echo(
+                json.dumps({"error": f"Tool '{tool_name}' not found on '{server}'", "available": available}),
+            )
+            sys.exit(1)
+        result = match[0]
+
+        if pretty:
+            click.echo(f"{server}.{result['name']}")
+            if result.get("description"):
+                click.echo(f"  {result['description']}")
+            schema = result.get("inputSchema", {})
+            props = schema.get("properties", {})
+            required = set(schema.get("required", []))
+            if props:
+                click.echo(f"\n  Parameters:")
+                for pname, pdef in props.items():
+                    req = " (required)" if pname in required else ""
+                    ptype = pdef.get("type", "any")
+                    desc = pdef.get("description", "")
+                    click.echo(f"    {pname}: {ptype}{req}")
+                    if desc:
+                        click.echo(f"      {desc}")
+            ann = result.get("annotations", {})
+            if ann:
+                flags = []
+                if ann.get("readOnlyHint"):
+                    flags.append("read-only")
+                if ann.get("destructiveHint"):
+                    flags.append("destructive")
+                if ann.get("idempotentHint"):
+                    flags.append("idempotent")
+                if flags:
+                    click.echo(f"\n  Annotations: {', '.join(flags)}")
+        else:
+            click.echo(json.dumps(result, indent=2, default=str))
+    else:
+        # List all tools on the server
+        if pretty:
+            click.echo(f"{server} — {len(tools)} tools\n")
+            for t in tools:
+                desc = f" — {t['description']}" if t.get("description") else ""
+                params = t.get("inputSchema", {}).get("properties", {})
+                required = t.get("inputSchema", {}).get("required", [])
+                param_str = ""
+                if params:
+                    parts = []
+                    for p in params:
+                        parts.append(f"{p}*" if p in required else p)
+                    param_str = f" ({', '.join(parts)})"
+                click.echo(f"  {t['name']}{param_str}{desc}")
+        else:
+            click.echo(json.dumps({"server": server, "tools": tools}, indent=2, default=str))
+
+
+@mcp.command("search")
+@click.argument("pattern")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_search(pattern: str, pretty: bool):
+    """Search tools across all MCP servers by regex.
+
+    Matches against tool names and descriptions.
+
+    Examples:
+
+      dinobase mcp search "list.*"
+      dinobase mcp search "file"
+    """
+    import asyncio
+    import re as _re
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    connectors = _get_mcp_connectors()
+    if not connectors:
+        click.echo(json.dumps({"matches": []}))
+        return
+
+    try:
+        regex = _re.compile(pattern, _re.IGNORECASE)
+    except _re.error as e:
+        click.echo(json.dumps({"error": f"Invalid regex: {e}"}))
+        sys.exit(1)
+
+    matches = []
+    for cfg in connectors:
+        name = cfg["name"]
+        try:
+            tools = asyncio.run(list_all_tools(name))
+        except Exception:
+            continue
+
+        for t in tools:
+            text = t["name"] + " " + (t.get("description") or "")
+            if regex.search(text):
+                matches.append({
+                    "server": name,
+                    "tool": t["name"],
+                    "description": t.get("description", ""),
+                })
+
+    if pretty:
+        if not matches:
+            click.echo(f"No tools matching '{pattern}'")
+        else:
+            click.echo(f"{len(matches)} match(es):\n")
+            for m in matches:
+                desc = f" — {m['description']}" if m["description"] else ""
+                click.echo(f"  {m['server']}.{m['tool']}{desc}")
+    else:
+        click.echo(json.dumps({"matches": matches}, indent=2, default=str))
+
+
+@mcp.command("call")
+@click.argument("ref")
+@click.argument("args_json", required=False, default=None)
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_call(ref: str, args_json: str | None, pretty: bool):
+    """Call an MCP tool. REF is 'server.tool', ARGS_JSON is optional JSON arguments.
+
+    Examples:
+
+      dinobase mcp call my_server.list_allowed_directories
+      dinobase mcp call my_server.list_directory '{"path": "/tmp"}'
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import call_tool
+
+    if "." not in ref:
+        click.echo(json.dumps({"error": "Use server.tool format (e.g. my_server.list_files)"}))
+        sys.exit(1)
+
+    server, tool_name = ref.split(".", 1)
+
+    arguments = {}
+    if args_json:
+        try:
+            arguments = json.loads(args_json)
+        except json.JSONDecodeError as e:
+            click.echo(json.dumps({"error": f"Invalid JSON arguments: {e}"}))
+            sys.exit(1)
+
+    try:
+        result = asyncio.run(call_tool(server, tool_name, arguments))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if pretty:
+        if result.get("isError"):
+            click.echo("Error:", err=True)
+        has_text = False
+        for block in result.get("content", []):
+            if block.get("type") == "text":
+                click.echo(block["text"])
+                has_text = True
+        if not has_text and result.get("structuredContent"):
+            click.echo(json.dumps(result["structuredContent"], indent=2, default=str))
+    else:
+        click.echo(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":
