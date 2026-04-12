@@ -32,6 +32,19 @@ Workflow:
 For mutations (INSERT/UPDATE/DELETE), `query` returns a preview with a mutation ID.
 Call `dinobase confirm <id>` to execute or `dinobase cancel <id>` to discard.
 
+MCP tool proxy — call tools on connected MCP servers directly:
+- `dinobase mcp servers` — list connected MCP servers and their tools
+- `dinobase mcp instructions <server>` — show a server's usage instructions
+- `dinobase mcp info <server>[.tool]` — list tools or show one tool's schema (parameters, types)
+- `dinobase mcp search "<pattern>"` — regex search tool names/descriptions across all servers
+- `dinobase mcp call <server.tool> ['{"arg": "value"}']` — call a tool with optional JSON args
+
+Prefer the SQL interface (`dinobase query`) over MCP retrieval tools for reading data.
+MCP server data is automatically synced into DuckDB tables (schema: server name, table: tool name).
+SQL lets you filter, join, aggregate, and paginate — much more powerful than raw tool calls.
+Use `mcp call` only for actions (writes, mutations) or tools that need specific arguments.
+Note: only tools with no required parameters are auto-synced into tables.
+
 Always start with `dinobase info` to understand what data is available.
 Output is JSON by default. Add --pretty for human-readable tables."""
 

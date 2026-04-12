@@ -8,8 +8,8 @@ as DuckDB views via read_json_auto(). Same downstream as LocalConnectorFetcher.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
-import re
 import sys
 import time
 from pathlib import Path
@@ -66,13 +66,46 @@ def _has_required_params(tool: Any) -> bool:
     return len(required) > 0
 
 
+def _parse_text(text: str) -> dict[str, Any] | list | None:
+    """Try to parse text as JSON, TOON, or YAML. Returns parsed data or None."""
+    # JSON
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # TOON (text object notation — used by PostHog MCP and others)
+    try:
+        import toon
+        parsed = toon.decode(text)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except Exception:
+        pass
+
+    # YAML
+    try:
+        import yaml
+        parsed = yaml.safe_load(text)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except Exception:
+        pass
+
+    return None
+
+
 def _extract_rows(result: Any) -> list[dict[str, Any]]:
     """Extract tabular data from a CallToolResult.
 
-    Tries structuredContent first, then parses TextContent as JSON,
-    falls back to a single (content TEXT) row.
+    Priority:
+    1. structuredContent (already structured)
+    2. TextContent auto-detected as JSON, TOON, or YAML
+    3. Fallback: single (content TEXT) row
     """
-    # Try structuredContent
+    # 1. Try structuredContent
     if result.structuredContent is not None:
         data = result.structuredContent
         if isinstance(data, list):
@@ -80,22 +113,28 @@ def _extract_rows(result: Any) -> list[dict[str, Any]]:
         if isinstance(data, dict):
             return [data]
 
-    # Try parsing text content as JSON
+    # 2-3. Try parsing text content
     for block in result.content or []:
         if block.type == "text" and block.text:
             text = block.text.strip()
-            try:
-                parsed = json.loads(text)
-                if isinstance(parsed, list):
-                    return parsed
-                if isinstance(parsed, dict):
-                    return [parsed]
-            except (json.JSONDecodeError, ValueError):
-                pass
-            # Not JSON — return as single text row
+            parsed = _parse_text(text)
+            if isinstance(parsed, list):
+                return parsed
+            if isinstance(parsed, dict):
+                return [parsed]
+
+            # 3. Fallback — plain text
             return [{"content": text}]
 
     return []
+
+
+@contextlib.asynccontextmanager
+async def _streamable_http_transport(url: str, headers: dict[str, str] | None = None):
+    """Wrap streamablehttp_client to yield only (read_stream, write_stream)."""
+    from mcp.client.streamable_http import streamablehttp_client
+    async with streamablehttp_client(url=url, headers=headers) as (read, write, _session_id):
+        yield read, write
 
 
 def _get_transport(transport_config: dict[str, Any]):
@@ -117,8 +156,7 @@ def _get_transport(transport_config: dict[str, Any]):
             headers=transport_config.get("headers"),
         )
     elif transport_type == "streamable_http":
-        from mcp.client.streamable_http import streamablehttp_client
-        return streamablehttp_client(
+        return _streamable_http_transport(
             url=transport_config["url"],
             headers=transport_config.get("headers"),
         )
