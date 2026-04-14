@@ -396,6 +396,7 @@ class SyncEngine:
                 progress="log",
                 pipelines_dir=pipelines_dir,
             )
+            self._clear_pending_packages(pipeline, _pipeline_name)
             _skipped = False
             _last_emsg = ""
             try:
@@ -504,6 +505,7 @@ class SyncEngine:
                 progress="log",
                 pipelines_dir=pipelines_dir,
             )
+            self._clear_pending_packages(pipeline, pipeline_name)
             tables_done = 0
             _load_info = None
             try:
@@ -529,6 +531,7 @@ class SyncEngine:
                         progress="log",
                         pipelines_dir=pipelines_dir,
                     )
+                    self._clear_pending_packages(res_pipeline, resource_pipeline_name)
                     try:
                         for _attempt in range(5):
                             try:
@@ -597,6 +600,23 @@ class SyncEngine:
             pool.shutdown(wait=True, cancel_futures=True)
 
         return _first_load_info, _tables_done
+
+    def _clear_pending_packages(self, pipeline: Any, pipeline_name: str) -> None:
+        """Drop stale extracted/normalized packages left behind by prior failed runs."""
+        try:
+            extracted = list(pipeline.list_extracted_load_packages())
+            normalized = list(pipeline.list_normalized_load_packages())
+        except Exception:
+            return
+
+        if not extracted and not normalized:
+            return
+
+        pending_count = len(extracted) + len(normalized)
+        self._log(
+            f"clearing {pending_count} pending package(s) for pipeline {pipeline_name}"
+        )
+        pipeline.drop_pending_packages()
 
     # ------------------------------------------------------------------
     # Pipeline state persistence (incremental sync support)
@@ -880,4 +900,3 @@ class SyncEngine:
             f"compact: {compacted}/{len(to_compact)} tables done "
             f"({time.monotonic() - _t_par:.1f}s parallel)"
         )
-

@@ -504,15 +504,39 @@ def get_source(
     for param in entry.credentials:
         value = credentials.get(param.name) or credentials.get(param.cli_flag.lstrip("-").replace("-", "_"))
         if not value:
-            for config_key in ("api_key", "token", "connection_string", "password", "secret_key"):
+            for config_key in (
+                "api_key",
+                "token",
+                "access_token",
+                "connection_string",
+                "password",
+                "secret_key",
+            ):
                 if config_key in credentials:
                     value = credentials[config_key]
                     break
         if value:
             kwargs[param.name] = value
 
-    # Handle graphql config if present
-    if hasattr(entry, 'graphql_config') and entry.graphql_config:
+    # GraphQL connectors declare user-facing credential fields in YAML
+    # (for example `api_key`), but the shared graphql_source expects `token`.
+    if entry.graphql_config:
+        if "token" not in kwargs:
+            for key in ("token", "access_token", "api_key", "secret_key"):
+                value = kwargs.get(key) or credentials.get(key)
+                if value:
+                    kwargs["token"] = value
+                    break
+        if "token" not in kwargs:
+            for param in entry.credentials:
+                value = kwargs.get(param.name)
+                if value:
+                    kwargs["token"] = value
+                    break
+        for param in entry.credentials:
+            if param.name != "token":
+                kwargs.pop(param.name, None)
+        kwargs.pop("access_token", None)
         kwargs["endpoint"] = entry.graphql_config["endpoint"]
         kwargs["resources"] = entry.graphql_config["resources"]
         if "auth_prefix" in entry.graphql_config:

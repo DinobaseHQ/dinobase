@@ -101,7 +101,7 @@ resources:
   - name: projects
     query: |
       query($cursor: String) {
-        projects(first: 100, after: $cursor) {
+        projects(first: 50, after: $cursor) {
           nodes {
             id
             name
@@ -125,7 +125,6 @@ resources:
             teams     { nodes { id name key } }
             members   { nodes { id name email } }
             lead      { id name email }
-            milestone { id name }
           }
           pageInfo {
             hasNextPage
@@ -246,7 +245,7 @@ resources:
             completedAt
             autoArchivedAt
             progress
-            completedProgress
+            currentProgress
             scopeHistory
             issueCountHistory
             completedIssueCountHistory
