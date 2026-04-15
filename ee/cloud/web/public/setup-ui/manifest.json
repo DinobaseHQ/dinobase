@@ -1,5 +1,15 @@
 {
   "manifest_version": 1,
-  "updated_at": "2026-04-13T00:00:00Z",
-  "releases": []
+  "updated_at": "2026-04-15T17:51:31Z",
+  "releases": [
+    {
+      "ui_version": "1.0.0",
+      "github_repo": "DinobaseHQ/dinobase",
+      "github_tag": "setup-ui-v1.0.0",
+      "asset_name": "dinobase-setup-ui-1.0.0.tar.gz",
+      "sha256": "0eeebd4b5c6b1949c5fb0d78be771e551fcd005210e46b5bc031118b738cc514",
+      "min_backend": "0.2.5",
+      "max_backend": null
+    }
+  ]
 }
