@@ -151,13 +151,13 @@ if "error" in result:
     print(result["error"])
 ```
 
-#### `engine.list_sources()`
+#### `engine.list_connectors()`
 
-List all sources with tables and stats.
+List all connectors with tables and stats.
 
 ```python
-info = engine.list_sources()
-# {"sources": [{"name": "stripe", "tables": [...], "table_count": 4, ...}]}
+info = engine.list_connectors()
+# {"connectors": [{"name": "stripe", "tables": [...], "table_count": 4, ...}]}
 ```
 
 #### `engine.describe_table(table_ref)`
@@ -173,7 +173,7 @@ desc = engine.describe_table("stripe.customers")
 
 ## MutationEngine
 
-Handles writes back to source systems via SQL.
+Handles writes back to upstream systems via SQL.
 
 ```python
 from dinobase.db import DinobaseDB
@@ -244,7 +244,7 @@ pending = engine.list_pending()
 
 ## SyncEngine
 
-Syncs a single source using dlt.
+Syncs a single connector using dlt.
 
 ```python
 from dinobase.db import DinobaseDB
@@ -288,7 +288,7 @@ scheduler = SyncScheduler(db, default_interval="1h", max_workers=10)
 
 #### `scheduler.sync_all_due()`
 
-Sync all sources that are due. Returns list of result dicts.
+Sync all connectors that are due. Returns list of result dicts.
 
 ```python
 results = scheduler.sync_all_due()
@@ -318,3 +318,81 @@ scheduler.stop()
 #### `scheduler.stop()`
 
 Stop the background sync loop.
+
+---
+
+## MCP Client
+
+Sync Python API for calling tools on connected MCP servers. Uses the same connector configs as `dinobase sync` and `dinobase mcp call`.
+
+```python
+from dinobase.mcp import call, tools, servers, search, instructions
+```
+
+### `call(ref, **kwargs)`
+
+Call an MCP tool by `server.tool` reference. Keyword arguments are passed as tool arguments.
+
+```python
+from dinobase.mcp import call
+
+# No arguments
+result = call("posthog_mcp.dashboards-get-all")
+
+# With arguments
+result = call("posthog_mcp.dashboard-get", id=1118504)
+```
+
+**Returns** a dict with:
+
+| Key | Description |
+|-----|-------------|
+| `content` | List of content blocks (`{"type": "text", "text": "..."}`) |
+| `structuredContent` | Parsed structured output, if the server provides it |
+| `isError` | `True` if the tool returned an error |
+
+### `tools(server)`
+
+List all tools on an MCP server with full schemas.
+
+```python
+from dinobase.mcp import tools
+
+tool_list = tools("posthog_mcp")
+# [{"name": "list_projects", "description": "...", "inputSchema": {...}}, ...]
+```
+
+### `servers()`
+
+List all connected MCP servers (those with a `transport:` in their connector YAML).
+
+```python
+from dinobase.mcp import servers
+
+svrs = servers()
+# [{"name": "posthog_mcp", "description": "...", "transport": "stdio", "tools": 12, "tool_names": [...]}, ...]
+```
+
+### `search(pattern)`
+
+Regex search tool names and descriptions across all connected MCP servers.
+
+```python
+from dinobase.mcp import search
+
+matches = search("dashboard")
+# [{"server": "posthog_mcp", "tool": "dashboards-get-all", "description": "..."}, ...]
+
+matches = search("list.*")
+```
+
+### `instructions(server)`
+
+Get a server's name, version, and usage instructions.
+
+```python
+from dinobase.mcp import instructions
+
+info = instructions("posthog_mcp")
+# {"name": "PostHog MCP", "version": "1.0.0", "instructions": "..."}
+```

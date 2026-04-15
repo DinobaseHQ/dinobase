@@ -1,21 +1,21 @@
 ---
 title: Syncing & Scheduling
-description: Sync data from API sources -- one-time, scheduled, or as a background daemon.
+description: Sync data from API connectors -- one-time, scheduled, or as a background daemon.
 ---
 
-API sources (SaaS tools, databases) need to sync their data into Dinobase. File sources (parquet, CSV) skip syncing entirely -- DuckDB reads them at query time.
+API connectors (SaaS tools, databases, MCP servers) need to sync their data into Dinobase. File connectors (parquet, CSV) skip syncing entirely -- DuckDB reads them at query time.
 
 ## One-time sync
 
 ```bash
-# Sync all sources
+# Sync all connectors
 dinobase sync
 
-# Sync one source
+# Sync one connector
 dinobase sync stripe
 ```
 
-Output shows progress per source:
+Output shows progress per connector:
 
 ```
   stripe: synced 4 tables (12,450 rows)
@@ -29,7 +29,7 @@ Done. 7 tables, 20,770 rows total.
 Run Dinobase as a daemon that syncs on configured intervals:
 
 ```bash
-# Default: check every minute, sync sources every 1 hour
+# Default: check every minute, sync connectors every 1 hour
 dinobase sync --schedule
 
 # Custom interval
@@ -41,15 +41,15 @@ dinobase sync --schedule --max-workers 20
 
 The scheduler:
 
-- Checks which sources are due for a sync every 60 seconds
-- Syncs due sources concurrently (up to `--max-workers` at a time)
-- Respects per-source intervals set during `dinobase add`
-- Catches errors per-source without crashing
+- Checks which connectors are due for a sync every 60 seconds
+- Syncs due connectors concurrently (up to `--max-workers` at a time)
+- Respects per-connector intervals set during `dinobase add`
+- Catches errors per-connector without crashing
 - Logs everything to stderr
 
-### Per-source intervals
+### Per-connector intervals
 
-Each source can have its own sync interval:
+Each connector can have its own sync interval:
 
 ```bash
 dinobase add stripe --api-key ... --sync-interval 15m
@@ -73,20 +73,20 @@ This starts the MCP server and a background sync thread. Agents always query fre
 
 ## Concurrent syncing
 
-Sources sync in parallel using a thread pool. Each source gets its own dlt pipeline and database connection to avoid conflicts.
+Connectors sync in parallel using a thread pool. Each connector gets its own dlt pipeline and database connection to avoid conflicts.
 
 ```bash
-# Up to 20 sources syncing at once
+# Up to 20 connectors syncing at once
 dinobase sync --max-workers 20
 ```
 
-Default is 10 concurrent workers. Increase for many sources; decrease if you hit API rate limits.
+Default is 10 concurrent workers. Increase for many connectors; decrease if you hit API rate limits.
 
 ## What happens during sync
 
-1. **dlt pipeline runs** -- fetches data from the source API, handles pagination and rate limiting
+1. **dlt pipeline runs** -- fetches data from the upstream API, handles pagination and rate limiting
 2. **Data writes to parquet** -- stored in `~/.dinobase/` as parquet files
-3. **Metadata extraction** -- column descriptions fetched from source API (Stripe OpenAPI, HubSpot Properties API, Postgres catalog)
+3. **Metadata extraction** -- column descriptions fetched from the upstream API (Stripe OpenAPI, HubSpot Properties API, Postgres catalog)
 4. **Annotations stored** -- metadata saved to `_dinobase.columns` table
 5. **Sync logged** -- start time, end time, status, table/row counts recorded in `_dinobase.sync_log`
 
@@ -111,17 +111,17 @@ dinobase query "
 
 ## Freshness thresholds
 
-Each source has a freshness threshold -- the maximum age before data is considered stale. The `list_sources` MCP tool and `dinobase status` show freshness for each source.
+Each connector has a freshness threshold -- the maximum age before data is considered stale. The `list_connectors` MCP tool and `dinobase status` show freshness for each connector.
 
 **Defaults:**
 
-| Source category | Default threshold |
+| Connector category | Default threshold |
 |----------------|-------------------|
 | SaaS APIs (Stripe, HubSpot, etc.) | `1h` |
 | Databases (Postgres, MySQL, etc.) | `6h` |
-| File sources (parquet, CSV) | never stale |
+| File connectors (parquet, CSV) | never stale |
 
-**Override per source:**
+**Override per connector:**
 
 ```bash
 dinobase add stripe --api-key ... --freshness 30m
@@ -137,13 +137,15 @@ sources:
     freshness_threshold: 30m
 ```
 
-## Refreshing stale sources
+(The config key remains `sources:` for backwards compatibility.)
 
-Use `dinobase refresh` to re-sync stale sources:
+## Refreshing stale connectors
+
+Use `dinobase refresh` to re-sync stale connectors:
 
 ```bash
-dinobase refresh stripe          # refresh one source
-dinobase refresh --stale         # refresh all stale sources
+dinobase refresh stripe          # refresh one connector
+dinobase refresh --stale         # refresh all stale connectors
 dinobase refresh --stale --pretty
 ```
 
@@ -156,7 +158,7 @@ Agent: refresh("stripe")
 
 ## Live fetch for single records
 
-When data is stale and the agent queries a single record by primary key, Dinobase automatically calls the source API instead of returning stale parquet data. This is fully transparent -- the agent just writes SQL.
+When data is stale and the agent queries a single record by primary key, Dinobase automatically calls the upstream API instead of returning stale parquet data. This is fully transparent -- the agent just writes SQL.
 
 ```sql
 -- If intercom data is stale, this triggers GET /contacts/12345 on the Intercom API
@@ -175,23 +177,23 @@ The response includes `"_freshness": "live"` so the agent knows it got real-time
 ```
 
 **When live fetch triggers:**
-- Source data is stale (exceeds freshness threshold)
+- Connector data is stale (exceeds freshness threshold)
 - Query is a simple `SELECT ... FROM schema.table WHERE id = 'value'`
-- The source has a YAML config in `sources/configs/`
+- The connector has a YAML config in `sources/configs/`
 
 **When it does NOT trigger:**
 - Data is fresh (normal parquet query)
 - Query has JOINs, multiple conditions, or aggregations
-- Source has no YAML config (e.g., custom dlt sources)
+- Connector has no YAML config (e.g., custom dlt sources)
 - API call fails (graceful fallback to parquet)
 
-This covers 55 sources with YAML configs including Intercom, Chargebee, Linear, Amplitude, and more.
+This covers 55 connectors with YAML configs including Intercom, Chargebee, Linear, Amplitude, and more.
 
-## File sources skip sync
+## File connectors skip sync
 
-File sources (parquet, CSV) create DuckDB views that read files at query time. They never appear in `dinobase sync` output:
+File connectors (parquet, CSV) create DuckDB views that read files at query time. They never appear in `dinobase sync` output:
 
 ```bash
 dinobase add parquet --path ./data/ --name analytics  # instant, no sync
-dinobase sync  # skips analytics, only syncs API sources
+dinobase sync  # skips analytics, only syncs API connectors
 ```

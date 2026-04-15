@@ -27,7 +27,7 @@ curl -o ~/.openclaw/skills/dinobase/SKILL.md \
 
 ## Setup
 
-Once the skill is installed, set up your data sources. You can either tell your agent:
+Once the skill is installed, set up your connectors. You can either tell your agent:
 
 > "Initialize Dinobase and connect my Stripe account with API key sk_test_..."
 
@@ -40,7 +40,7 @@ dinobase add hubspot --api-key pat-...
 dinobase sync
 ```
 
-See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
+See [Connectors](/docs/guides/connecting-sources/) for the full list of 100+ supported connectors, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
 ## Usage
 
@@ -50,7 +50,7 @@ Ask your OpenClaw agent data questions that span multiple tools:
 
 The agent will:
 
-1. Run `dinobase info` to see available sources and tables
+1. Run `dinobase info` to see available connectors and tables
 2. Run `dinobase describe` on relevant tables to understand schemas
 3. Write and execute SQL via `dinobase query`
 4. Format and present the results
@@ -68,18 +68,18 @@ This is the same interface used by Claude Code, Aider, and other shell-capable a
 | Action | Command |
 |--------|---------|
 | See available data | `dinobase info` |
-| Check source freshness | `dinobase status` |
+| Check connector freshness | `dinobase status` |
 | Describe a table | `dinobase describe stripe.customers` |
 | Run SQL queries | `dinobase query "SELECT ..."` |
-| Cross-source joins | SQL JOIN across schemas |
+| Cross-connector joins | SQL JOIN across schemas |
 | Write data back | `dinobase query "UPDATE ..."` + `dinobase confirm` |
 | Refresh stale data | `dinobase refresh stripe` |
 
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [CLI Reference](/docs/reference/cli/) — All commands and flags

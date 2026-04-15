@@ -1,9 +1,9 @@
 ---
-title: Cloud Storage Sources
+title: Cloud Storage Connectors
 description: Sync files incrementally from S3, GCS, Azure Blob Storage, and SFTP.
 ---
 
-Cloud storage sources use dlt's filesystem connector to sync files incrementally. Unlike [file sources](/docs/sources/files/) which read at query time, these copy data locally and support incremental loading.
+Cloud storage connectors use dlt's filesystem connector to sync files incrementally. Unlike [file connectors](/docs/connectors/files/) which read at query time, these copy data locally and support incremental loading.
 
 ## Amazon S3
 
@@ -54,7 +54,7 @@ dinobase add sftp --url sftp://host/path/ --username user --password ...
 
 ## Syncing
 
-Cloud storage sources require syncing:
+Cloud storage connectors require syncing:
 
 ```bash
 dinobase sync          # sync all
@@ -63,15 +63,15 @@ dinobase sync s3       # sync just S3
 
 dlt handles incremental loading -- only new or changed files are downloaded on subsequent syncs.
 
-## When to use cloud storage vs file sources
+## When to use cloud storage vs file connectors
 
-Use **cloud storage sources** when:
+Use **cloud storage connectors** when:
 
 - Files are added incrementally (new files appear over time)
 - You want data cached locally for faster queries
 - You need sync scheduling
 
-Use **file sources** (`dinobase add parquet --path s3://...`) when:
+Use **file connectors** (`dinobase add parquet --path s3://...`) when:
 
 - You want zero-copy reads (data stays in cloud)
 - Files don't change often

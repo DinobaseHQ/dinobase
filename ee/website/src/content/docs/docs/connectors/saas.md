@@ -1,13 +1,13 @@
 ---
-title: SaaS API Sources
+title: SaaS API Connectors
 description: Connect Stripe, HubSpot, Salesforce, Linear, and 60+ other SaaS tools to Dinobase.
 ---
 
-SaaS sources connect to cloud services via API keys or OAuth tokens. Data is synced using [dlt](https://dlthub.com/) verified sources, REST API connectors, and GraphQL connectors.
+SaaS connectors connect to cloud services via API keys or OAuth tokens. Data is synced using [dlt](https://dlthub.com/) verified sources, REST API connectors, and GraphQL connectors.
 
 ## CRM & Sales
 
-### HubSpot
+### <img src="/logos/hubspot.svg" class="connector-logo" alt="" />HubSpot
 
 Contacts, companies, deals, tickets.
 
@@ -21,7 +21,7 @@ dinobase add hubspot --api-key pat-na1-...
 
 **Metadata:** Descriptions, enum options, and custom properties via the HubSpot Properties API.
 
-### HubSpot Marketing
+### <img src="/logos/hubspot_marketing.svg" class="connector-logo" alt="" />HubSpot Marketing
 
 Marketing contacts, companies, deals (via REST API connector).
 
@@ -33,7 +33,7 @@ dinobase add hubspot_marketing --api-key pat-na1-...
 |--------|---------|
 | `--api-key` | `HUBSPOT_MARKETING_API_KEY` |
 
-### Salesforce
+### <img src="/logos/salesforce.svg" class="connector-logo" alt="" />Salesforce
 
 Full Salesforce CRM data.
 
@@ -61,7 +61,7 @@ dinobase add pipedrive --api-key ...
 |--------|---------|
 | `--api-key` | `PIPEDRIVE_API_KEY` |
 
-### Close
+### <img src="/logos/close.svg" class="connector-logo" alt="" />Close
 
 Leads, contacts, opportunities.
 
@@ -101,7 +101,7 @@ dinobase add attio --api-key ...
 
 ## Payments & Billing
 
-### Stripe
+### <img src="/logos/stripe.svg" class="connector-logo" alt="" />Stripe
 
 Customers, subscriptions, charges, invoices.
 
@@ -115,7 +115,7 @@ dinobase add stripe --api-key sk_live_...
 
 **Metadata:** Full field descriptions, types, enums, and `unix-time` format hints from Stripe's OpenAPI spec.
 
-### Paddle
+### <img src="/logos/paddle.svg" class="connector-logo" alt="" />Paddle
 
 Customers, subscriptions, transactions.
 
@@ -152,7 +152,7 @@ dinobase add recurly --api-key ...
 |--------|---------|
 | `--api-key` | `RECURLY_API_KEY` |
 
-### Lemon Squeezy
+### <img src="/logos/lemon_squeezy.svg" class="connector-logo" alt="" />Lemon Squeezy
 
 Products, orders, subscriptions.
 
@@ -168,7 +168,7 @@ dinobase add lemon_squeezy --api-key ...
 
 ## Developer Tools
 
-### GitHub
+### <img src="/logos/github.svg" class="connector-logo" alt="" />GitHub
 
 Repos, issues, PRs, reactions, stargazers.
 
@@ -180,7 +180,7 @@ dinobase add github --token ghp_...
 |--------|---------|
 | `--token` | `GITHUB_TOKEN` |
 
-### GitLab
+### <img src="/logos/gitlab.svg" class="connector-logo" alt="" />GitLab
 
 Projects, issues, merge requests.
 
@@ -192,7 +192,7 @@ dinobase add gitlab --token glpat-...
 |--------|---------|
 | `--token` | `GITLAB_TOKEN` |
 
-### Jira
+### <img src="/logos/jira.svg" class="connector-logo" alt="" />Jira
 
 Issues, projects, users.
 
@@ -206,7 +206,7 @@ dinobase add jira --subdomain mycompany --email user@example.com --api-token ...
 | `--email` | `JIRA_EMAIL` | Account email |
 | `--api-token` | `JIRA_API_TOKEN` | API token |
 
-### Bitbucket
+### <img src="/logos/bitbucket.svg" class="connector-logo" alt="" />Bitbucket
 
 Repositories, pull requests.
 
@@ -219,7 +219,7 @@ dinobase add bitbucket --username user --app-password ...
 | `--username` | `BITBUCKET_USERNAME` |
 | `--app-password` | `BITBUCKET_APP_PASSWORD` |
 
-### Sentry
+### <img src="/logos/sentry.svg" class="connector-logo" alt="" />Sentry
 
 Issues, events, projects.
 
@@ -231,7 +231,7 @@ dinobase add sentry --token ...
 |--------|---------|
 | `--token` | `SENTRY_TOKEN` |
 
-### Linear
+### <img src="/logos/linear.svg" class="connector-logo" alt="" />Linear
 
 Issues, projects, teams, users, labels, cycles, comments. Uses GraphQL with Relay pagination.
 
@@ -247,7 +247,7 @@ dinobase add linear --api-key lin_api_...
 
 ## Infrastructure & Monitoring
 
-### PagerDuty
+### <img src="/logos/pagerduty.svg" class="connector-logo" alt="" />PagerDuty
 
 Incidents, services, users.
 
@@ -259,7 +259,7 @@ dinobase add pagerduty --token ...
 |--------|---------|
 | `--token` | `PAGERDUTY_TOKEN` |
 
-### OpsGenie
+### <img src="/logos/opsgenie.svg" class="connector-logo" alt="" />OpsGenie
 
 Alerts, incidents, users.
 
@@ -271,7 +271,7 @@ dinobase add opsgenie --api-key ...
 |--------|---------|
 | `--api-key` | `OPSGENIE_API_KEY` |
 
-### Statuspage
+### <img src="/logos/statuspage.svg" class="connector-logo" alt="" />Statuspage
 
 Pages, incidents, components.
 
@@ -283,7 +283,7 @@ dinobase add statuspage --api-key ...
 |--------|---------|
 | `--api-key` | `STATUSPAGE_API_KEY` |
 
-### Datadog
+### <img src="/logos/datadog.svg" class="connector-logo" alt="" />Datadog
 
 Monitors, dashboards, logs.
 
@@ -296,7 +296,7 @@ dinobase add datadog --api-key ... --app-key ...
 | `--api-key` | `DATADOG_API_KEY` |
 | `--app-key` | `DATADOG_APP_KEY` |
 
-### New Relic
+### <img src="/logos/newrelic.svg" class="connector-logo" alt="" />New Relic
 
 Applications, deployments, alerts.
 
@@ -308,7 +308,7 @@ dinobase add newrelic --api-key ...
 |--------|---------|
 | `--api-key` | `NEWRELIC_API_KEY` |
 
-### Cloudflare
+### <img src="/logos/cloudflare.svg" class="connector-logo" alt="" />Cloudflare
 
 Zones, DNS records, analytics.
 
@@ -320,7 +320,7 @@ dinobase add cloudflare --api-key ...
 |--------|---------|
 | `--api-key` | `CLOUDFLARE_API_KEY` |
 
-### Vercel
+### <img src="/logos/vercel.svg" class="connector-logo" alt="" />Vercel
 
 Projects, deployments, domains.
 
@@ -332,7 +332,7 @@ dinobase add vercel --token ...
 |--------|---------|
 | `--token` | `VERCEL_TOKEN` |
 
-### Netlify
+### <img src="/logos/netlify.svg" class="connector-logo" alt="" />Netlify
 
 Sites, deploys, forms.
 
@@ -348,7 +348,7 @@ dinobase add netlify --token ...
 
 ## Communication
 
-### Slack
+### <img src="/logos/slack.svg" class="connector-logo" alt="" />Slack
 
 Channels, messages, users.
 
@@ -360,7 +360,7 @@ dinobase add slack --token xoxb-...
 |--------|---------|
 | `--token` | `SLACK_TOKEN` |
 
-### Discord
+### <img src="/logos/discord.svg" class="connector-logo" alt="" />Discord
 
 Guilds, channels, messages.
 
@@ -372,7 +372,7 @@ dinobase add discord --token ...
 |--------|---------|
 | `--token` | `DISCORD_TOKEN` |
 
-### Twilio
+### <img src="/logos/twilio.svg" class="connector-logo" alt="" />Twilio
 
 Messages, calls, accounts.
 
@@ -385,7 +385,7 @@ dinobase add twilio --account-sid AC... --auth-token ...
 | `--account-sid` | `TWILIO_ACCOUNT_SID` |
 | `--auth-token` | `TWILIO_AUTH_TOKEN` |
 
-### SendGrid
+### <img src="/logos/sendgrid.svg" class="connector-logo" alt="" />SendGrid
 
 Contacts, campaigns, stats.
 
@@ -397,7 +397,7 @@ dinobase add sendgrid --token ...
 |--------|---------|
 | `--token` | `SENDGRID_API_KEY` |
 
-### Mailchimp
+### <img src="/logos/mailchimp.svg" class="connector-logo" alt="" />Mailchimp
 
 Lists, campaigns, members.
 
@@ -425,7 +425,7 @@ dinobase add front --token ...
 
 ## Support & Success
 
-### Zendesk
+### <img src="/logos/zendesk.svg" class="connector-logo" alt="" />Zendesk
 
 Tickets, users, organizations.
 
@@ -437,7 +437,7 @@ dinobase add zendesk --token ...
 |--------|---------|
 | `--token` | `ZENDESK_TOKEN` |
 
-### Intercom
+### <img src="/logos/intercom.svg" class="connector-logo" alt="" />Intercom
 
 Contacts, conversations, companies.
 
@@ -462,7 +462,7 @@ dinobase add freshdesk --api-key ... --domain mycompany
 | `--api-key` | `FRESHDESK_API_KEY` |
 | `--domain` | `FRESHDESK_DOMAIN` |
 
-### HelpScout
+### <img src="/logos/helpscout.svg" class="connector-logo" alt="" />HelpScout
 
 Conversations, customers, mailboxes.
 
@@ -474,7 +474,7 @@ dinobase add helpscout --api-key ...
 |--------|---------|
 | `--api-key` | `HELPSCOUT_API_KEY` |
 
-### Customer.io
+### <img src="/logos/customerio.svg" class="connector-logo" alt="" />Customer.io
 
 Customers, segments, campaigns.
 
@@ -498,7 +498,7 @@ dinobase add vitally --api-key ...
 |--------|---------|
 | `--api-key` | `VITALLY_API_KEY` |
 
-### Gainsight
+### <img src="/logos/gainsight.svg" class="connector-logo" alt="" />Gainsight
 
 Companies, relationships, CTAs.
 
@@ -514,7 +514,7 @@ dinobase add gainsight --api-key ...
 
 ## E-commerce
 
-### Shopify
+### <img src="/logos/shopify.svg" class="connector-logo" alt="" />Shopify
 
 Orders, products, customers.
 
@@ -527,7 +527,7 @@ dinobase add shopify --api-key shppa_... --shop-url myshop.myshopify.com
 | `--api-key` | `SHOPIFY_API_KEY` | Private app password |
 | `--shop-url` | `SHOPIFY_SHOP_URL` | Shop URL |
 
-### WooCommerce
+### <img src="/logos/woocommerce.svg" class="connector-logo" alt="" />WooCommerce
 
 Orders, products, customers.
 
@@ -541,7 +541,7 @@ dinobase add woocommerce --consumer-key ... --consumer-secret ... --url https://
 | `--consumer-secret` | `WOOCOMMERCE_CONSUMER_SECRET` |
 | `--url` | `WOOCOMMERCE_URL` |
 
-### BigCommerce
+### <img src="/logos/bigcommerce.svg" class="connector-logo" alt="" />BigCommerce
 
 Orders, products, customers.
 
@@ -554,7 +554,7 @@ dinobase add bigcommerce --access-token ... --store-hash ...
 | `--access-token` | `BIGCOMMERCE_ACCESS_TOKEN` |
 | `--store-hash` | `BIGCOMMERCE_STORE_HASH` |
 
-### Square
+### <img src="/logos/square.svg" class="connector-logo" alt="" />Square
 
 Payments, orders, customers.
 
@@ -570,7 +570,7 @@ dinobase add square --access-token ...
 
 ## Project Management
 
-### Asana
+### <img src="/logos/asana.svg" class="connector-logo" alt="" />Asana
 
 Workspaces, projects, tasks.
 
@@ -584,7 +584,7 @@ dinobase add asana --token ...
 
 Requires: `pip install asana`
 
-### ClickUp
+### <img src="/logos/clickup.svg" class="connector-logo" alt="" />ClickUp
 
 Spaces, lists, tasks.
 
@@ -608,7 +608,7 @@ dinobase add monday --api-key ...
 |--------|---------|
 | `--api-key` | `MONDAY_API_KEY` |
 
-### Trello
+### <img src="/logos/trello.svg" class="connector-logo" alt="" />Trello
 
 Boards, lists, cards.
 
@@ -621,7 +621,7 @@ dinobase add trello --api-key ... --token ...
 | `--api-key` | `TRELLO_API_KEY` |
 | `--token` | `TRELLO_TOKEN` |
 
-### Todoist
+### <img src="/logos/todoist.svg" class="connector-logo" alt="" />Todoist
 
 Projects, tasks, comments.
 
@@ -637,7 +637,7 @@ dinobase add todoist --api-key ...
 
 ## Marketing & Analytics
 
-### Facebook Ads
+### <img src="/logos/facebook_ads.svg" class="connector-logo" alt="" />Facebook Ads
 
 Campaigns, ad sets, ads, insights.
 
@@ -652,7 +652,7 @@ dinobase add facebook_ads --token ... --account-id act_123
 
 Requires: `pip install facebook_business`
 
-### Google Analytics
+### <img src="/logos/google_analytics.svg" class="connector-logo" alt="" />Google Analytics
 
 Google Analytics 4 data.
 
@@ -667,7 +667,7 @@ dinobase add google_analytics --property-id 123456 --credentials-file ./sa.json
 
 Requires: `pip install google-analytics-data`
 
-### Google Ads
+### <img src="/logos/google_ads.svg" class="connector-logo" alt="" />Google Ads
 
 Campaigns, ad groups, ads, keywords.
 
@@ -681,7 +681,7 @@ dinobase add google_ads --credentials-file ./sa.json
 
 Requires: `pip install google-ads`
 
-### Mixpanel
+### <img src="/logos/mixpanel.svg" class="connector-logo" alt="" />Mixpanel
 
 Events, funnels, retention.
 
@@ -693,7 +693,7 @@ dinobase add mixpanel --api-secret ...
 |--------|---------|
 | `--api-secret` | `MIXPANEL_API_SECRET` |
 
-### PostHog
+### <img src="/logos/posthog.svg" class="connector-logo" alt="" />PostHog
 
 Events, persons, feature flags, cohorts, insights.
 
@@ -706,7 +706,7 @@ dinobase add posthog --api-key ... --project-id ...
 | `--api-key` | `POSTHOG_API_KEY` |
 | `--project-id` | `POSTHOG_PROJECT_ID` |
 
-### Segment
+### <img src="/logos/segment.svg" class="connector-logo" alt="" />Segment
 
 Sources, events, users.
 
@@ -718,7 +718,7 @@ dinobase add segment --token ...
 |--------|---------|
 | `--token` | `SEGMENT_TOKEN` |
 
-### Plausible
+### <img src="/logos/plausible.svg" class="connector-logo" alt="" />Plausible
 
 Sites, stats, pages.
 
@@ -730,7 +730,7 @@ dinobase add plausible --api-key ...
 |--------|---------|
 | `--api-key` | `PLAUSIBLE_API_KEY` |
 
-### Matomo
+### <img src="/logos/matomo.svg" class="connector-logo" alt="" />Matomo
 
 Visits, reports.
 
@@ -743,7 +743,7 @@ dinobase add matomo --token ... --url https://matomo.example.com
 | `--token` | `MATOMO_TOKEN` |
 | `--url` | `MATOMO_URL` |
 
-### Bing Webmaster
+### <img src="/logos/bing_webmaster.svg" class="connector-logo" alt="" />Bing Webmaster
 
 Page stats, query stats.
 
@@ -759,7 +759,7 @@ dinobase add bing_webmaster --api-key ...
 
 ## HR & Recruiting
 
-### Personio
+### <img src="/logos/personio.svg" class="connector-logo" alt="" />Personio
 
 Employees, absences, attendances.
 
@@ -772,7 +772,7 @@ dinobase add personio --client-id ... --client-secret ...
 | `--client-id` | `PERSONIO_CLIENT_ID` |
 | `--client-secret` | `PERSONIO_CLIENT_SECRET` |
 
-### BambooHR
+### <img src="/logos/bamboohr.svg" class="connector-logo" alt="" />BambooHR
 
 Employees, time off, reports.
 
@@ -785,7 +785,7 @@ dinobase add bamboohr --api-key ... --subdomain mycompany
 | `--api-key` | `BAMBOOHR_API_KEY` |
 | `--subdomain` | `BAMBOOHR_SUBDOMAIN` |
 
-### Greenhouse
+### <img src="/logos/greenhouse.svg" class="connector-logo" alt="" />Greenhouse
 
 Jobs, candidates, applications.
 
@@ -809,7 +809,7 @@ dinobase add lever --api-key ...
 |--------|---------|
 | `--api-key` | `LEVER_API_KEY` |
 
-### Workable
+### <img src="/logos/workable.svg" class="connector-logo" alt="" />Workable
 
 Jobs, candidates, activities.
 
@@ -822,7 +822,7 @@ dinobase add workable --token ... --subdomain mycompany
 | `--token` | `WORKABLE_TOKEN` |
 | `--subdomain` | `WORKABLE_SUBDOMAIN` |
 
-### Gusto
+### <img src="/logos/gusto.svg" class="connector-logo" alt="" />Gusto
 
 Employees, payrolls, companies.
 
@@ -850,7 +850,7 @@ dinobase add deel --api-key ...
 
 ## Finance
 
-### QuickBooks
+### <img src="/logos/quickbooks.svg" class="connector-logo" alt="" />QuickBooks
 
 Invoices, customers, accounts.
 
@@ -862,7 +862,7 @@ dinobase add quickbooks --access-token ...
 |--------|---------|
 | `--access-token` | `QUICKBOOKS_ACCESS_TOKEN` |
 
-### Xero
+### <img src="/logos/xero.svg" class="connector-logo" alt="" />Xero
 
 Invoices, contacts, accounts.
 
@@ -874,7 +874,7 @@ dinobase add xero --access-token ...
 |--------|---------|
 | `--access-token` | `XERO_ACCESS_TOKEN` |
 
-### Brex
+### <img src="/logos/brex.svg" class="connector-logo" alt="" />Brex
 
 Transactions, accounts, cards.
 
@@ -886,7 +886,7 @@ dinobase add brex --api-key ...
 |--------|---------|
 | `--api-key` | `BREX_API_KEY` |
 
-### Mercury
+### <img src="/logos/mercury.svg" class="connector-logo" alt="" />Mercury
 
 Transactions, accounts.
 
@@ -902,7 +902,7 @@ dinobase add mercury --api-key ...
 
 ## Productivity
 
-### Notion
+### <img src="/logos/notion.svg" class="connector-logo" alt="" />Notion
 
 Notion databases.
 
@@ -914,7 +914,7 @@ dinobase add notion --api-key secret_...
 |--------|---------|
 | `--api-key` | `NOTION_API_KEY` |
 
-### Airtable
+### <img src="/logos/airtable.svg" class="connector-logo" alt="" />Airtable
 
 Bases and tables.
 
@@ -928,7 +928,7 @@ dinobase add airtable --token pat...
 
 Requires: `pip install pyairtable`
 
-### Google Sheets
+### <img src="/logos/google_sheets.svg" class="connector-logo" alt="" />Google Sheets
 
 ```bash
 dinobase add google_sheets --credentials-file ./service-account.json
@@ -944,7 +944,7 @@ Requires: `pip install google-api-python-client`
 
 ## Content & CMS
 
-### Strapi
+### <img src="/logos/strapi.svg" class="connector-logo" alt="" />Strapi
 
 Strapi CMS content.
 
@@ -957,7 +957,7 @@ dinobase add strapi --api-key ... --domain cms.example.com
 | `--api-key` | `STRAPI_API_KEY` |
 | `--domain` | `STRAPI_DOMAIN` |
 
-### Contentful
+### <img src="/logos/contentful.svg" class="connector-logo" alt="" />Contentful
 
 Entries, assets, content types.
 
@@ -970,7 +970,7 @@ dinobase add contentful --access-token ... --space-id ...
 | `--access-token` | `CONTENTFUL_ACCESS_TOKEN` |
 | `--space-id` | `CONTENTFUL_SPACE_ID` |
 
-### Sanity
+### <img src="/logos/sanity.svg" class="connector-logo" alt="" />Sanity
 
 Documents, assets.
 
@@ -983,7 +983,7 @@ dinobase add sanity --token ... --project-id ...
 | `--token` | `SANITY_TOKEN` |
 | `--project-id` | `SANITY_PROJECT_ID` |
 
-### WordPress
+### <img src="/logos/wordpress.svg" class="connector-logo" alt="" />WordPress
 
 Posts, pages, users.
 
@@ -1001,7 +1001,7 @@ dinobase add wordpress --url https://mysite.com --username ... --app-password ..
 
 ## Design
 
-### Figma
+### <img src="/logos/figma.svg" class="connector-logo" alt="" />Figma
 
 Files, projects, comments.
 
@@ -1017,7 +1017,7 @@ dinobase add figma --token ...
 
 ## Video
 
-### Mux
+### <img src="/logos/mux.svg" class="connector-logo" alt="" />Mux
 
 Video assets, views.
 
@@ -1034,7 +1034,7 @@ dinobase add mux --access-token ... --secret-key ...
 
 ## Data & Streaming
 
-### MongoDB
+### <img src="/logos/mongodb.svg" class="connector-logo" alt="" />MongoDB
 
 ```bash
 dinobase add mongodb --connection-string mongodb://...
@@ -1046,7 +1046,7 @@ dinobase add mongodb --connection-string mongodb://...
 
 Requires: `pip install pymongo`
 
-### Kafka
+### <img src="/logos/kafka.svg" class="connector-logo" alt="" />Kafka
 
 ```bash
 dinobase add kafka --servers broker1:9092,broker2:9092
@@ -1058,7 +1058,7 @@ dinobase add kafka --servers broker1:9092,broker2:9092
 
 Requires: `pip install confluent_kafka`
 
-### Kinesis
+### <img src="/logos/kinesis.svg" class="connector-logo" alt="" />Kinesis
 
 ```bash
 dinobase add kinesis --stream my-stream --access-key ... --secret-key ...

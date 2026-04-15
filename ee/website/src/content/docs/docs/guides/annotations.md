@@ -7,10 +7,10 @@ Agents need to understand data, not just query it. Dinobase builds a **semantic 
 
 ## How it works
 
-When you sync a source, Dinobase automatically:
+When you sync a connector, Dinobase automatically:
 
 1. Loads data via dlt
-2. Fetches column-level metadata from the source API (descriptions, enum values, format hints)
+2. Fetches column-level metadata from the upstream API (descriptions, enum values, format hints)
 3. Detects foreign-key relationships from column name patterns (`*_id` → matching table)
 4. If `ANTHROPIC_API_KEY` is set, runs a background Claude agent to fill remaining gaps with table descriptions, column docs, and PII flags
 5. Stores everything in `_dinobase.{tables,columns,relationships,metadata}` and surfaces it through `describe`
@@ -45,7 +45,7 @@ Claude audits what's already annotated, then fills only the gaps:
 - PII flags on email, name, phone, IP, and user-identifying fields
 - Any relationships the heuristic missed
 
-Already-annotated sources are skipped automatically — re-syncing the same source doesn't re-annotate.
+Already-annotated connectors are skipped automatically — re-syncing the same connector doesn't re-annotate.
 
 The daemon uses a built-in agent loop that calls the Anthropic API directly — no `claude` CLI required. This makes it work equally in local dev, Docker containers, and cloud workers.
 
@@ -95,9 +95,9 @@ dinobase annotate '[
 
 Run `dinobase annotate --input-schema` to see the full JSON schema.
 
-## Source-specific metadata (from API)
+## Connector-specific metadata (from API)
 
-Dinobase also fetches structured metadata from source APIs at sync time:
+Dinobase also fetches structured metadata from upstream APIs at sync time:
 
 ### Stripe
 

@@ -1,9 +1,9 @@
 ---
 title: MCP Tools Reference
-description: Detailed reference for the seven MCP tools exposed by Dinobase's MCP server.
+description: Detailed reference for the eight MCP tools exposed by Dinobase's MCP server.
 ---
 
-The Dinobase MCP server exposes seven tools to agents.
+The Dinobase MCP server exposes eight tools to agents.
 
 ## `query`
 
@@ -49,7 +49,7 @@ Execute a SQL query against the database.
 }
 ```
 
-Responses include a `_freshness` field: `"synced"` for parquet data, `"live"` when the record was fetched directly from the source API (happens automatically for single-record lookups on stale sources).
+Responses include a `_freshness` field: `"synced"` for parquet data, `"live"` when the record was fetched directly from the upstream API (happens automatically for single-record lookups on stale connectors).
 
 **Truncated (more rows than `max_rows`):**
 
@@ -74,9 +74,9 @@ Responses include a `_freshness` field: `"synced"` for parquet data, `"live"` wh
 
 ---
 
-## `list_sources`
+## `list_connectors`
 
-List all connected data sources with their tables, row counts, and last sync time.
+List all configured connectors with their tables, row counts, and last sync time.
 
 ### Parameters
 
@@ -86,7 +86,7 @@ None.
 
 ```json
 {
-  "sources": [
+  "connectors": [
     {
       "name": "stripe",
       "tables": [
@@ -106,7 +106,7 @@ None.
 }
 ```
 
-Freshness fields (`age`, `freshness_threshold`, `is_stale`) are included for API sources. File sources (parquet, CSV) omit these since they read live data.
+Freshness fields (`age`, `freshness_threshold`, `is_stale`) are included for API connectors. File connectors (parquet, CSV) omit these since they read live data.
 
 ---
 
@@ -247,13 +247,13 @@ Cancel a pending mutation without executing it.
 
 ## `refresh`
 
-Re-sync a source to get fresh data. Use when data is stale before running queries.
+Re-sync a connector to get fresh data. Use when data is stale before running queries.
 
 ### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `source` | string | Yes | Name of the source to re-sync (e.g., `stripe`, `hubspot`) |
+| `source` | string | Yes | Name of the connector to re-sync (e.g., `stripe`, `hubspot`). The parameter is kept as `source` for backwards compatibility. |
 
 ### Response
 
@@ -272,6 +272,70 @@ Re-sync a source to get fresh data. Use when data is stale before running querie
     "is_stale": false
   }
 }
+```
+
+---
+
+---
+
+## `exec_code`
+
+Execute a Python script with full access to Dinobase internals and the MCP client API. Use this for complex data processing, calling MCP tools on connected servers, or anything easier in code than SQL.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `code` | string | Yes | Python code to execute. Set `result = ...` to capture output. |
+
+### Available imports
+
+The following are available without any setup:
+
+```python
+from dinobase.mcp import call, tools, servers, search, instructions
+from dinobase.db import DinobaseDB
+from dinobase.query.engine import QueryEngine
+```
+
+### Response
+
+Returns the value of the `result` variable if set, serialized as JSON. If `result` is not set, returns `{"status": "ok"}`. Errors are returned as `{"error": "ExceptionType: message"}`.
+
+### Examples
+
+**Call an MCP tool on a connected server:**
+
+```python
+from dinobase.mcp import call
+
+result = call("posthog_mcp.dashboards-get-all")
+```
+
+**Call a tool with arguments:**
+
+```python
+from dinobase.mcp import call
+
+result = call("posthog_mcp.dashboard-get", id=1118504)
+```
+
+**Process data with Python before returning:**
+
+```python
+from dinobase.mcp import call
+
+raw = call("posthog_mcp.dashboards-get-all")
+names = [r["name"] for r in raw.get("structuredContent", {}).get("results", [])]
+result = names
+```
+
+**Discover what tools are available:**
+
+```python
+from dinobase.mcp import servers, search
+
+result = search("dashboard")
 ```
 
 ---

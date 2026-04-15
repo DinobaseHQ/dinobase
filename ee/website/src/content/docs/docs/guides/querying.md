@@ -1,6 +1,6 @@
 ---
 title: Querying Data
-description: SQL patterns for cross-source queries, joins, aggregations, and working with DuckDB.
+description: SQL patterns for cross-connector queries, joins, aggregations, and working with DuckDB.
 ---
 
 Dinobase uses [DuckDB](https://duckdb.org/) as its query engine. All queries use DuckDB SQL syntax, which is PostgreSQL-compatible with extra analytical functions.
@@ -40,11 +40,11 @@ Agents use the `query` tool:
 }
 ```
 
-## Cross-source joins
+## Cross-connector joins
 
-The core power of Dinobase. Join tables from different sources on shared columns:
+The core power of Dinobase. Join tables from different connectors on shared columns:
 
-### Two-source join
+### Two-connector join
 
 ```sql
 SELECT s.email, s.name, h.company
@@ -52,7 +52,7 @@ FROM stripe.customers s
 JOIN hubspot.contacts h ON s.email = h.email
 ```
 
-### Three-source join
+### Three-connector join
 
 ```sql
 SELECT
@@ -73,16 +73,16 @@ Use `dinobase describe` to find columns that work as join keys. Dinobase annotat
 
 ```bash
 dinobase describe stripe.customers --pretty
-# Look for: email (marked as "Potential join key across sources")
+# Look for: email (marked as "Potential join key across connectors")
 ```
 
 Common join patterns:
 
-| Column | Sources | Notes |
+| Column | Connectors | Notes |
 |--------|---------|-------|
-| `email` | Most sources | Best cross-source join key |
-| `*_id` | Within a source | Foreign keys (e.g., `contact_id`) |
-| `domain` | CRM sources | Company matching |
+| `email` | Most connectors | Best cross-connector join key |
+| `*_id` | Within a connector | Foreign keys (e.g., `contact_id`) |
+| `domain` | CRM connectors | Company matching |
 
 ## Aggregations
 
@@ -105,7 +105,7 @@ ORDER BY total DESC
 
 ## Finding unmatched records
 
-Use `LEFT JOIN` to find data in one source but not another:
+Use `LEFT JOIN` to find data in one connector but not another:
 
 ```sql
 -- Stripe customers without a HubSpot contact

@@ -16,7 +16,7 @@ dinobase add stripe --api-key sk_test_...
 dinobase sync
 ```
 
-See [Getting Started](/docs/getting-started/) for a full walkthrough, [Connecting Sources](/docs/guides/connecting-sources/) for the 100+ supported sources, and [Cloud Storage Backend](/docs/guides/cloud-storage-backend/) for team/remote setups.
+See [Getting Started](/docs/getting-started/) for a full walkthrough, [Connectors](/docs/guides/connecting-sources/) for the 100+ supported connectors, and [Cloud Storage Backend](/docs/guides/cloud-storage-backend/) for team/remote setups.
 
 ## Starting the server
 
@@ -24,7 +24,7 @@ See [Getting Started](/docs/getting-started/) for a full walkthrough, [Connectin
 dinobase serve
 ```
 
-The server uses stdio transport and exposes seven tools: `query`, `list_sources`, `describe`, `confirm`, `confirm_batch`, `cancel`, and `refresh`.
+The server uses stdio transport and exposes eight tools: `query`, `list_connectors`, `describe`, `confirm`, `confirm_batch`, `cancel`, `refresh`, and `exec_code`.
 
 ### With background sync
 
@@ -80,21 +80,21 @@ When the MCP server starts, it provides dynamic instructions based on what data 
 
 ```
 You have access to a Dinobase database -- business data synced from
-multiple sources into a single SQL database (DuckDB dialect).
+multiple connectors into a single SQL database (DuckDB dialect).
 
-Connected sources:
+Connected connectors:
   stripe: customers, subscriptions, charges, invoices (12,450 rows total)
   hubspot: contacts, companies, deals (8,320 rows total)
 
 How to work with this database:
-1. Use list_sources to see what data is available
+1. Use list_connectors to see what data is available
 2. Use describe on a table to see columns, types, annotations, and sample data
 3. Use query to run SQL (DuckDB dialect, reference tables as schema.table)
 ```
 
 ### Typical agent workflow
 
-1. Agent calls `list_sources` to see what's available
+1. Agent calls `list_connectors` to see what's available
 2. Agent calls `describe` on relevant tables to understand columns and types
 3. Agent writes and executes SQL via `query`
 4. For mutations (UPDATE/INSERT), `query` returns a preview -- agent calls `confirm` to execute
@@ -121,8 +121,8 @@ For shell-capable agents, the CLI is more token-efficient. For tool-calling agen
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [MCP Tools Reference](/docs/reference/mcp-tools/) — Detailed tool schemas

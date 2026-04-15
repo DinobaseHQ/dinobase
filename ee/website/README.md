@@ -1,49 +1,37 @@
-# Starlight Starter Kit: Basics
+# dinobase website
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Marketing site and documentation for [dinobase](https://github.com/DinobaseHQ/dinobase) — the SQL query layer for agent stacks. Dinobase connects 100+ business data sources behind a unified DuckDB interface, so agents write SQL and cross-connector `JOIN`s work natively. In benchmarks across 11 LLMs: **91% accuracy vs 35% for bare MCP tools, 3x faster, 16x cheaper per correct answer.**
 
-```
-npm create astro@latest -- --template starlight
-```
+Built with [Astro](https://astro.build) and [Starlight](https://starlight.astro.build).
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
+## Project structure
 
 ```
 .
-├── public/
+├── public/                 static assets (og image, install.sh, logos)
 ├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+│   ├── assets/             images referenced from content
+│   ├── components/         landing Astro components
+│   ├── content/docs/       guides, reference, integrations, connectors
+│   ├── pages/index.astro   landing page
+│   └── styles/
+├── astro.config.mjs        Starlight sidebar + site config
+└── package.json
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+Docs live under `src/content/docs/` and are routed by file name. Sidebar order is configured in `astro.config.mjs`.
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+## Commands
 
-Static assets, like favicons, can be placed in the `public/` directory.
+All commands run from `ee/website/`:
 
-## 🧞 Commands
+| Command           | Action                                       |
+| :---------------- | :------------------------------------------- |
+| `npm install`     | Install dependencies                         |
+| `npm run dev`     | Start local dev server at `localhost:4321`   |
+| `npm run build`   | Build production site to `./dist/`           |
+| `npm run preview` | Preview the production build locally         |
 
-All commands are run from the root of the project, from a terminal:
+## Editing docs
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+When adding or changing a user-facing feature in dinobase, update the relevant page(s) under `src/content/docs/`. If no existing page covers the feature, create one in the appropriate subdirectory (`guides/`, `reference/`, `connectors/`, `integrations/`) and add it to the sidebar in `astro.config.mjs`.

@@ -13,6 +13,41 @@ description: All environment variables recognized by Dinobase.
 | `DINOBASE_AUTO_ANNOTATE` | `true` | Set to `false` to disable automatic semantic layer building after sync. |
 | `DINOBASE_TELEMETRY` | `true` | Set to `false` to disable anonymous usage telemetry. |
 
+## Setup GUI (`dinobase setup`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DINOBASE_SETUP_UI_OFFLINE` | *(unset)* | Set to `1` to pin the setup GUI to the copy bundled in the installed wheel — skips the network fetch entirely. |
+| `DINOBASE_SETUP_UI_DIR` | *(unset)* | Serve the setup GUI directly from this directory instead of fetching it. Development use only. |
+| `DINOBASE_SETUP_UI_MANIFEST_URL` | `https://app.dinobase.ai/setup-ui/manifest.json` | Override the redirect manifest URL for staging or self-hosted distribution. |
+| `DINOBASE_SETUP_UI_REPO` | `DinobaseHQ/dinobase` | Override the GitHub repo used to resolve release download URLs. |
+
+## OAuth proxy (self-hosted cloud API)
+
+Only relevant to operators running their own Dinobase cloud API. The proxy exposes one public callback URL per provider — register that URL with the OAuth app on the provider's side:
+
+```
+{DINOBASE_BASE_URL}/oauth/callback/{provider}
+```
+
+For example, with `DINOBASE_BASE_URL=https://api.dinobase.cloud`, register `https://api.dinobase.cloud/oauth/callback/airtable` as the redirect URI in the Airtable developer portal. The client's local `http://localhost:<port>/callback` is sealed into the OAuth `state` parameter and never seen by the provider, so you only need to register a single stable URL per provider regardless of how many end users connect.
+
+**PKCE**: providers that mandate PKCE (e.g., Airtable) are handled transparently — the proxy generates the `code_verifier` server-side, seals it into the state blob, and uses it during the token exchange. The verifier never leaves the proxy in cleartext and the client code doesn't need to know about PKCE.
+
+**Tenant-subdomain providers** (Shopify, Zendesk, WooCommerce): pass `subdomain=<tenant>` as a query parameter when starting the flow. The proxy substitutes it into the provider's authorization and token URLs, and carries the value through the sealed state so token refresh works too. Refresh requests for these providers must also include `subdomain` in the body.
+
+**Trello**: removed. Trello uses OAuth 1.0a, which is incompatible with this proxy. Use a Trello API token connector instead.
+
+**Credential persistence**: when the user is signed in to Dinobase Cloud, the setup GUI uploads OAuth tokens to the cloud API where they are Fernet-encrypted at rest and scoped to the user account — so they sync across machines. When signed out, credentials are written to the local `~/.dinobase/config.yaml` instead and must be re-authorized on each new machine.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DINOBASE_BASE_URL` | `http://localhost:{DINOBASE_PORT}` | Public URL of the cloud API. Used to compute the OAuth callback URL registered with providers. Must be reachable from the OAuth provider (i.e., publicly resolvable in production). |
+| `DINOBASE_ENCRYPTION_KEY` | *(required)* | Fernet key used both to encrypt stored credentials and to seal the OAuth `state` parameter during provider redirects. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `DINOBASE_OAUTH_PROXY_URL` | *(unset)* | Client-side override used by `dinobase auth` / setup-ui to reach a standalone proxy. Defaults to `{DINOBASE_CLOUD_URL}/oauth`. |
+| `DINOBASE_OAUTH_{PROVIDER}_CLIENT_ID` | *(none)* | OAuth client ID for each provider (e.g., `DINOBASE_OAUTH_AIRTABLE_CLIENT_ID`). |
+| `DINOBASE_OAUTH_{PROVIDER}_CLIENT_SECRET` | *(none)* | OAuth client secret for each provider. |
+
 ## Cloud storage credentials
 
 Set these when using `--storage` or `DINOBASE_STORAGE_URL` for cloud-backed storage.
@@ -41,13 +76,13 @@ Set these when using `--storage` or `DINOBASE_STORAGE_URL` for cloud-backed stor
 | `AZURE_STORAGE_ACCOUNT_NAME` | Azure storage account name (alternative) |
 | `AZURE_STORAGE_ACCOUNT_KEY` | Azure storage account key (alternative) |
 
-## Source credentials
+## Connector credentials
 
-Dinobase checks these environment variables when adding sources. Set them to avoid passing credentials on the command line.
+Dinobase checks these environment variables when adding connectors. Set them to avoid passing credentials on the command line.
 
 ### SaaS APIs
 
-| Variable | Source |
+| Variable | Connector |
 |----------|--------|
 | `STRIPE_SECRET_KEY` | Stripe |
 | `HUBSPOT_API_KEY` | HubSpot |
@@ -157,13 +192,13 @@ Dinobase checks these environment variables when adding sources. Set them to avo
 
 ### Databases
 
-| Variable | Source |
+| Variable | Connector |
 |----------|--------|
-| `DATABASE_URL` | All database sources (PostgreSQL, MySQL, etc.) |
+| `DATABASE_URL` | All database connectors (PostgreSQL, MySQL, etc.) |
 
 ### Cloud storage
 
-| Variable | Source |
+| Variable | Connector |
 |----------|--------|
 | `S3_BUCKET_URL` | Amazon S3 |
 | `AWS_ACCESS_KEY_ID` | Amazon S3, Kinesis |
@@ -178,7 +213,7 @@ Dinobase checks these environment variables when adding sources. Set them to avo
 
 ### Data streams
 
-| Variable | Source |
+| Variable | Connector |
 |----------|--------|
 | `MONGODB_URL` | MongoDB |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka |

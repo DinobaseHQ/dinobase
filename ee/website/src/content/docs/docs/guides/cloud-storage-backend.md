@@ -14,7 +14,7 @@ By default, Dinobase stores everything locally in `~/.dinobase/`. With cloud sto
 In cloud mode, Dinobase uses an **in-memory DuckDB** instance that reads data directly from cloud parquet files:
 
 ```
-Source API --> dlt sync --> s3://bucket/dinobase/data/{source}/{table}/*.parquet
+Upstream API --> dlt sync --> s3://bucket/dinobase/data/{connector}/{table}/*.parquet
                                         |
                            DuckDB (in-memory) reads via views
                                         |
@@ -81,7 +81,7 @@ dinobase init --storage s3://my-bucket/dinobase/
 Once initialized, all commands work the same way:
 
 ```bash
-# Add sources
+# Add connectors
 dinobase add stripe --api-key sk_test_...
 
 # Sync writes parquet directly to cloud storage
@@ -125,7 +125,7 @@ s3://my-bucket/dinobase/
       schemas/...
   _locks/                         # Distributed sync locks
     stripe.json
-  data/                           # Synced source data
+  data/                           # Synced connector data
     stripe/
       customers/_compacted.parquet
       charges/_compacted.parquet
@@ -137,20 +137,20 @@ s3://my-bucket/dinobase/
 
 Pipeline state is persisted to cloud storage between syncs. This means:
 
-- The first sync loads all data from the source API
+- The first sync loads all data from the upstream API
 - Subsequent syncs only load new/changed records (incremental)
 - State survives server restarts and container redeployments
 
-State is stored in `_state/dinobase_{source_name}/` as small JSON files.
+State is stored in `_state/dinobase_{connector_name}/` as small JSON files.
 
 ## Distributed locking
 
-When multiple processes share the same cloud bucket (e.g., multiple containers, cron jobs), Dinobase uses a lock file to prevent concurrent syncs of the same source:
+When multiple processes share the same cloud bucket (e.g., multiple containers, cron jobs), Dinobase uses a lock file to prevent concurrent syncs of the same connector:
 
-- Before syncing, a lock file is written to `_locks/{source_name}.json`
+- Before syncing, a lock file is written to `_locks/{connector_name}.json`
 - If another process holds the lock, the sync is skipped with a `"skipped"` status
 - Locks have a TTL (default 10 minutes) — stale locks from crashed processes are automatically overwritten
-- Different sources lock independently, so `stripe` and `hubspot` can sync concurrently
+- Different connectors lock independently, so `stripe` and `hubspot` can sync concurrently
 
 ## Parquet compaction
 
@@ -160,7 +160,7 @@ After each sync, Dinobase automatically compacts parquet files. Multiple load fi
 
 Mutations (UPDATE/INSERT) work the same as in local mode. The `_live_*` staging tables live in-memory and overlay the cloud parquet data. When you confirm a mutation:
 
-1. The change is written to the source API (e.g., Stripe, HubSpot)
+1. The change is written to the upstream API (e.g., Stripe, HubSpot)
 2. The row is stored in an in-memory staging table for immediate read-after-write consistency
 3. On the next sync, staging is cleared and the fresh data is written to cloud parquet
 

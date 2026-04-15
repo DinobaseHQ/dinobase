@@ -1,3 +1,6 @@
+# synced from assets/connector-logos via `npm run sync:logos`
+public/logos/
+
 # build output
 dist/
 # generated types

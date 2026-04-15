@@ -5,17 +5,17 @@ description: The agent-first database. Connect your business data. Let AI agents
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Dinobase is the SQL query layer for agent stacks. It connects 100+ business data sources and makes them queryable via a unified DuckDB interface — agents write SQL, cross-source JOINs work natively.
+Dinobase is the SQL query layer for agent stacks. It connects 100+ business data connectors and makes them queryable via a unified DuckDB interface — agents write SQL, cross-connector JOINs work natively.
 
-Agent stacks built on per-source tool calls have a structural gap: agents can't `JOIN` across APIs, have no semantic context to interpret field values, and receive paginated JSON that fills context windows. Dinobase fills that gap. In [benchmarks across 11 LLMs](/docs/project/benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
+Agent stacks built on per-connector tool calls have a structural gap: agents can't `JOIN` across APIs, have no semantic context to interpret field values, and receive paginated JSON that fills context windows. Dinobase fills that gap. In [benchmarks across 11 LLMs](/docs/project/benchmarks/): **91% accuracy vs 35%, 3x faster, 16x cheaper per correct answer.**
 
 ## Why Dinobase
 
 <CardGrid>
   <Card title="Connect in minutes" icon="puzzle">
-    Add Stripe, HubSpot, Postgres, or parquet files with one command. 100+ sources supported.
+    Add Stripe, HubSpot, Postgres, or parquet files with one command. 100+ connectors supported.
   </Card>
-  <Card title="Cross-source queries" icon="magnifier">
+  <Card title="Cross-connector queries" icon="magnifier">
     JOIN Stripe customers with HubSpot deals with product analytics. Questions that required a data team now have instant answers.
   </Card>
   <Card title="Semantic layer" icon="information">
@@ -24,11 +24,14 @@ Agent stacks built on per-source tool calls have a structural gap: agents can't 
   <Card title="Accurate answers" icon="approve-check">
     Semantic context + complete data = 91% query accuracy vs 35% for bare MCP tools, across 10+ LLMs.
   </Card>
+  <Card title="MCP server proxy" icon="forward-slash">
+    Connect any MCP server as a connector. Read-only tools are auto-discovered and synced as SQL tables. Call any tool directly from the CLI, Python API, or via `exec_code` from an agent.
+  </Card>
 </CardGrid>
 
 ## Next steps
 
-- [Getting Started](/docs/getting-started/) — install, connect your first source, run your first query
+- [Getting Started](/docs/getting-started/) — install, connect your first connector, run your first query
 - [Semantic Layer](/docs/guides/annotations/) — auto-annotation, relationship graphs, PII detection
-- [Connecting Sources](/docs/guides/connecting-sources/) — all 100+ supported source types
+- [Connectors](/docs/guides/connecting-sources/) — all 100+ supported connector types
 - [MCP Integration](/docs/integrations/mcp/) — use Dinobase with Claude, Cursor, and other agents

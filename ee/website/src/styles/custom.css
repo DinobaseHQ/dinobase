@@ -120,10 +120,26 @@ tbody tr:not(:last-child) {
 	border-bottom: 1px solid #283420;
 }
 
+th,
+td {
+	padding-inline: 1rem;
+}
+
 th {
 	font-family: 'DM Mono', monospace;
 	font-size: 0.8rem;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 	color: #6b7060;
+}
+
+/* ─── Connector logo (docs/connectors/*) ───────────────────────────────────── */
+.connector-logo {
+	display: inline-block;
+	width: 1.15em;
+	height: 1.15em;
+	vertical-align: -0.15em;
+	margin-right: 0.45em;
+	object-fit: contain;
+	border-radius: 2px;
 }

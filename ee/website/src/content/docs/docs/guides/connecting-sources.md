@@ -1,15 +1,17 @@
 ---
-title: Connecting Sources
-description: How to add SaaS APIs, databases, and file sources to Dinobase.
+title: Connectors
+description: How to add SaaS APIs, databases, files, MCP servers, and custom REST connectors to Dinobase.
 ---
 
-Dinobase supports three categories of data sources.
+A **connector** is anything Dinobase can read from (and often write back to): a SaaS API, a database, a file path, an MCP server, or a custom REST endpoint. Each connector becomes a schema in DuckDB.
 
 | Category | Examples | Sync needed? | Storage |
 |----------|----------|-------------|---------|
 | **SaaS APIs** | Stripe, HubSpot, GitHub | Yes | dlt syncs to parquet |
 | **Databases** | PostgreSQL, MySQL, Snowflake | Yes | dlt syncs to parquet |
-| **File sources** | Parquet, CSV, S3, GCS | No | DuckDB reads files directly |
+| **Files** | Parquet, CSV, S3, GCS | No | DuckDB reads files directly |
+| **MCP servers** | Any stdio/SSE/HTTP MCP server | Yes | Tool output cached as JSON views |
+| **Custom REST** | Any REST API via local YAML config | Yes/live | dlt fetches, cached as JSON views |
 
 ## The `add` command
 
@@ -33,7 +35,7 @@ dinobase add stripe
 
 ### Custom naming
 
-By default, the source name matches the type. Use `--name` for multiple instances:
+By default, the connector name matches the type. Use `--name` for multiple instances:
 
 ```bash
 dinobase add stripe --api-key sk_live_... --name stripe_prod
@@ -44,7 +46,7 @@ Creates separate schemas: `stripe_prod.*` and `stripe_test.*`.
 
 ### Sync intervals
 
-Set per-source intervals (used with `dinobase sync --schedule`):
+Set per-connector intervals (used with `dinobase sync --schedule`):
 
 ```bash
 dinobase add stripe --api-key sk_live_... --sync-interval 30m
@@ -53,7 +55,7 @@ dinobase add hubspot --api-key pat-... --sync-interval 1h
 
 Supported formats: `30s`, `5m`, `1h`, `6h`, `1d`.
 
-## SaaS API sources
+## SaaS API connectors
 
 Powered by [dlt](https://dlthub.com/) verified sources and REST API connectors.
 
@@ -65,9 +67,9 @@ dinobase sync
 
 After syncing, data is stored as parquet and queryable as `stripe.*`, `hubspot.*`, etc.
 
-See [SaaS APIs reference](/docs/sources/saas/) for all supported services.
+See [SaaS APIs reference](/docs/connectors/saas/) for all supported services.
 
-## Database sources
+## Database connectors
 
 Connect via connection string (SQLAlchemy-compatible):
 
@@ -78,9 +80,9 @@ dinobase add snowflake --connection-string snowflake://user:pass@account/db/sche
 dinobase add sqlite --path /path/to/database.db
 ```
 
-See [Databases reference](/docs/sources/databases/) for all supported databases.
+See [Databases reference](/docs/connectors/databases/) for all supported databases.
 
-## File sources
+## File connectors
 
 No sync needed. DuckDB reads files at query time through views.
 
@@ -110,90 +112,49 @@ dinobase add parquet --path gs://bucket/data/ --name warehouse
 
 Each file becomes a table named after its filename: `events.parquet` becomes the `events` table.
 
-See [File Sources reference](/docs/sources/files/) for more details.
+See [Files reference](/docs/connectors/files/) for more details.
 
-## Custom connectors
+## Custom REST connectors
 
-Connect any REST API endpoint by creating a local YAML config. Data is fetched via dlt (handles auth, pagination) and cached as JSON files that DuckDB queries via `read_json_auto()`.
-
-### Quick start
+Connect any REST API endpoint by writing a local YAML config. Data is fetched via dlt (handles auth, pagination) and cached as JSON files that DuckDB queries via `read_json_auto()`.
 
 ```bash
-# Scaffold a connector
 dinobase connector create posthog_flags \
   --url "https://app.posthog.com/api/" \
   --endpoint "projects/123/feature_flags/" \
   --data-selector results
-
-# Add credentials
 dinobase add posthog_flags --api-key phx_xxx
-
-# Query (auto-fetches on first access in live mode)
 dinobase query "SELECT name, active FROM posthog_flags.feature_flags"
 ```
 
-### Connector YAML format
+See the full [Custom REST Connectors reference](/docs/connectors/custom-rest/) for the YAML format, auth types, fetch modes, and connector management commands.
 
-Configs live at `~/.dinobase/connectors/<name>.yaml` and use the same format as built-in connectors:
+## MCP server connectors
 
-```yaml
-name: posthog_flags
-description: "PostHog feature flags"
-mode: live  # live | sync | auto
-
-credentials:
-  - name: api_key
-    flag: "--api-key"
-    env: POSTHOG_API_KEY
-    secret: true
-
-client:
-  base_url: "https://app.posthog.com/api/"
-  auth:
-    type: bearer
-    token: "{api_key}"
-  paginator:
-    type: json_link
-    next_url_path: "next"
-
-resource_defaults:
-  primary_key: id
-  endpoint:
-    data_selector: "results"
-
-resources:
-  - name: feature_flags
-    endpoint:
-      path: projects/12345/feature_flags/
-```
-
-### Fetch modes
-
-| Mode | Behavior |
-|------|----------|
-| `live` | Auto-fetches when queried and data is missing or stale |
-| `sync` | Only fetches on `dinobase sync` or `dinobase refresh` |
-| `auto` (default) | `live` if no paginator, `sync` if paginator is defined |
-
-### Managing connectors
+Connect any MCP server (stdio, SSE, or streamable HTTP) as a connector. Dinobase auto-discovers read-only tools and syncs their output as SQL tables. For writes or parameterized calls, use `dinobase mcp call` or the Python API.
 
 ```bash
-dinobase connector list --pretty    # List all local connectors
-dinobase connector validate my_api  # Check YAML for errors
-dinobase connector edit my_api      # Open in $EDITOR
-dinobase refresh my_api             # Re-fetch data
+dinobase connector create posthog_mcp \
+  --transport stdio \
+  --command "npx -y @posthog/mcp-server"
+dinobase sync posthog_mcp
+dinobase query "SELECT * FROM posthog_mcp.list_projects LIMIT 10"
 ```
 
-## Viewing configured sources
+See the full [MCP Server Connectors reference](/docs/connectors/mcp/) for the YAML format, tool-selection rules, and direct tool-call examples (CLI + Python).
+
+---
+
+## Viewing configured connectors
 
 ```bash
-# List all available source types
-dinobase sources
+# List all available connector types
+dinobase connectors
 
 # See what's actually connected and loaded
 dinobase status --pretty
 ```
 
-## Removing a source
+## Removing a connector
 
-Edit `~/.dinobase/config.yaml` directly to remove a source entry. Data stays in DuckDB until overwritten.
+Edit `~/.dinobase/config.yaml` directly to remove a connector entry. Data stays in DuckDB until overwritten.

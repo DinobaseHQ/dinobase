@@ -34,7 +34,7 @@ tests/
   test_cli.py              # CLI commands: init, add, sync, query, status
   test_mcp.py              # MCP server: tools, instructions
   test_yaml_source.py      # YAML-to-dlt translation, pagination, auth
-  test_write_client.py     # Write-back to source APIs
+  test_write_client.py     # Write-back to upstream APIs
 ```
 
 ### Key fixtures
@@ -44,7 +44,7 @@ tests/
 - Stripe: customers, subscriptions, charges, invoices
 - HubSpot: contacts, companies, deals
 - Metadata extracted from Stripe's OpenAPI spec
-- ~200 people with ~80% email overlap for cross-source join testing
+- ~200 people with ~80% email overlap for cross-connector join testing
 
 ## Sample data
 
@@ -107,11 +107,11 @@ dinobase/
   pyproject.toml         # Package config
 ```
 
-## Adding a new source
+## Adding a new connector
 
-The preferred way to add sources is via YAML files in `dinobase/sync/sources/configs/`. No Python code needed.
+The preferred way to add connectors is via YAML files in `dinobase/sync/sources/configs/`. No Python code needed.
 
-### YAML REST API source
+### YAML REST API connector
 
 Create a new file like `dinobase/sync/sources/configs/myservice.yaml`:
 
@@ -143,7 +143,7 @@ resources:
       data_selector: data
 ```
 
-### YAML GraphQL source
+### YAML GraphQL connector
 
 ```yaml
 name: myservice

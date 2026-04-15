@@ -3,11 +3,14 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
+    "predev": "npm run sync:logos",
     "dev": "astro dev",
     "start": "astro dev",
+    "prebuild": "npm run sync:logos",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "sync:logos": "rsync -a ../../assets/connector-logos/ public/logos/"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.38.2",

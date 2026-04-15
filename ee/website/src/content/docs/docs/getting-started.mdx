@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install Dinobase, connect your first source, and run your first cross-source query.
+description: Install Dinobase, connect your first connector, and run your first cross-connector query.
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -57,9 +57,9 @@ export DINOBASE_DIR=/path/to/my/dinobase
 ```
 :::
 
-## Connect a source
+## Add a connector
 
-### File sources (instant)
+### File connectors (instant)
 
 The fastest way to start -- no sync, no API keys:
 
@@ -97,18 +97,49 @@ dinobase sync
 If you skip CLI flags, Dinobase checks environment variables then prompts interactively.
 :::
 
-### See all available sources
+### MCP servers
+
+Connect any MCP server as a connector. Dinobase discovers the server's read-only tools and syncs their output as SQL tables:
 
 ```bash
-dinobase sources --available --pretty
+# stdio (local process)
+dinobase connector create posthog_mcp \
+  --transport stdio \
+  --command "npx -y @posthog/mcp-server"
+dinobase sync posthog_mcp
+
+# SSE or streamable HTTP
+dinobase connector create my_server \
+  --transport sse \
+  --url "https://server/sse"
 ```
 
-Lists all 100+ supported sources grouped by category (SaaS APIs, databases, cloud storage, files). See [Connecting Sources](/docs/guides/connecting-sources/) for full details and [Sources Reference](/docs/sources/overview/) for the complete list.
+After syncing, query the data like any other connector:
+
+```bash
+dinobase query "SELECT * FROM posthog_mcp.list_projects LIMIT 10"
+```
+
+To call tools directly (for writes or tools with required arguments):
+
+```bash
+dinobase mcp call posthog_mcp.dashboard-get '{"id": 1118504}'
+```
+
+See [MCP Server Connectors](/docs/connectors/mcp/) for full details.
+
+### See all available connectors
+
+```bash
+dinobase connectors --available --pretty
+```
+
+Lists all 100+ supported connectors grouped by category (SaaS APIs, databases, cloud storage, files). See [Connectors](/docs/guides/connecting-sources/) for full details and [Connectors Reference](/docs/connectors/overview/) for the complete list.
 
 ## Explore your data
 
 ```bash
-# What sources are connected?
+# What connectors are configured?
 dinobase status --pretty
 
 # Inspect a table's columns and types
@@ -128,7 +159,7 @@ stripe.customers (180 rows)
   delinquent  BOOLEAN   -- Whether the customer has an overdue invoice.
 ```
 
-Column descriptions come from source APIs -- Stripe's OpenAPI spec, HubSpot's Properties API, Postgres column comments. See [Schema Annotations](/docs/guides/annotations/) for how to add your own.
+Column descriptions come from upstream APIs -- Stripe's OpenAPI spec, HubSpot's Properties API, Postgres column comments. See [Schema Annotations](/docs/guides/annotations/) for how to add your own.
 
 ## Run a query
 
@@ -136,7 +167,7 @@ Column descriptions come from source APIs -- Stripe's OpenAPI spec, HubSpot's Pr
 dinobase query "SELECT COUNT(*) FROM stripe.customers" --pretty
 ```
 
-Cross-source join:
+Cross-connector join:
 
 ```bash
 dinobase query "
@@ -202,7 +233,7 @@ Dinobase integrates with many AI frameworks. See the full list of [integrations]
 
 ## Keep data fresh
 
-Set freshness thresholds and sync intervals per source:
+Set freshness thresholds and sync intervals per connector:
 
 ```bash
 dinobase add stripe --api-key ... --freshness 30m --sync-interval 15m
@@ -236,11 +267,11 @@ dinobase query "SELECT COUNT(*) FROM demo.customers" --pretty
 
 ## Next steps
 
-- [Connecting Sources](/docs/guides/connecting-sources/) -- all source types in detail
+- [Connectors](/docs/guides/connecting-sources/) -- all connector types in detail
 - [Querying Data](/docs/guides/querying/) -- SQL patterns, joins, aggregations
 - [Syncing & Scheduling](/docs/guides/syncing/) -- freshness, live fetch, daemon mode
 - [Schema Annotations](/docs/guides/annotations/) -- add context for AI agents
-- [Mutations](/docs/guides/mutations/) -- write data back to source APIs
+- [Mutations](/docs/guides/mutations/) -- write data back to upstream APIs
 - [MCP Integration](/docs/integrations/mcp/) -- how the MCP server works
-- [Sources Reference](/docs/sources/overview/) -- full list of 100+ sources
+- [Connectors Reference](/docs/connectors/overview/) -- full list of 100+ connectors
 - [CLI Reference](/docs/reference/cli/) -- all commands and flags

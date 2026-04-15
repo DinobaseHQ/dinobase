@@ -30,22 +30,41 @@ dinobase init --storage az://container/dinobase/ # Azure
 
 ---
 
-## `dinobase add <type>`
+## `dinobase setup`
 
-Add a data source.
+Launch a local browser GUI for adding connectors (SaaS APIs, databases,
+files, MCP servers, and custom REST). See the [Setup GUI guide](/docs/guides/setup-ui/) for details.
 
 ```bash
-dinobase add <source_type> [OPTIONS]
+dinobase setup [OPTIONS]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--name` | Custom name for the source (defaults to type) |
-| `--path` | Path to files (parquet/csv sources only) |
+| `--port` | Bind a specific port (default: random) |
+| `--no-browser` | Print the URL but don't open a browser |
+
+Binds to `127.0.0.1` only, opens a browser tab, and blocks until you press
+Ctrl+C or click **Quit setup** in the GUI.
+
+---
+
+## `dinobase add <type>`
+
+Add a connector.
+
+```bash
+dinobase add <connector_type> [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--name` | Custom name for the connector (defaults to type) |
+| `--path` | Path to files (parquet/csv connectors only) |
 | `--sync-interval` | Sync interval (e.g., `30m`, `1h`, `6h`) |
 | `--freshness` | Freshness threshold (e.g., `1h`, `30m`). Defaults: 1h for SaaS, 6h for databases |
 
-Source-specific flags (e.g., `--api-key`, `--connection-string`) are passed through.
+Connector-specific flags (e.g., `--api-key`, `--connection-string`) are passed through.
 
 ```bash
 dinobase add stripe --api-key sk_live_...
@@ -56,29 +75,29 @@ dinobase add postgres --connection-string postgresql://... --name prod --sync-in
 
 ---
 
-## `dinobase sources`
+## `dinobase connectors`
 
-List connected data sources, or all available source types.
+List configured connectors, or all available connector types. The deprecated alias `dinobase sources` still works and prints a deprecation notice.
 
 ```bash
-dinobase sources [OPTIONS]
+dinobase connectors [OPTIONS]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--available` | Show all available source types (not just connected) |
+| `--available` | Show all available connector types (not just configured) |
 | `--pretty` | Human-readable output |
 
-By default shows only your connected sources. Use `--available` to see all 100+ supported source types grouped by category.
+By default shows only your configured connectors. Use `--available` to see all 100+ supported connector types grouped by category.
 
 ---
 
-## `dinobase sync [source]`
+## `dinobase sync [connector]`
 
-Sync data from connected sources.
+Sync data from configured connectors.
 
 ```bash
-dinobase sync [SOURCE_NAME] [OPTIONS]
+dinobase sync [CONNECTOR_NAME] [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -88,40 +107,40 @@ dinobase sync [SOURCE_NAME] [OPTIONS]
 | `--max-workers` | `10` | Max concurrent syncs |
 
 ```bash
-dinobase sync                              # all sources, once
-dinobase sync stripe                       # one source
+dinobase sync                              # all connectors, once
+dinobase sync stripe                       # one connector
 dinobase sync --schedule --interval 30m    # daemon mode
 ```
 
 ---
 
-## `dinobase refresh [source]`
+## `dinobase refresh [connector]`
 
-Re-sync sources to get fresh data.
+Re-sync connectors to get fresh data.
 
 ```bash
-dinobase refresh [SOURCE_NAME] [OPTIONS]
+dinobase refresh [CONNECTOR_NAME] [OPTIONS]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--stale` | Refresh only sources that exceed their freshness threshold |
+| `--stale` | Refresh only connectors that exceed their freshness threshold |
 | `--pretty` | Human-readable output |
 
 ```bash
-dinobase refresh                 # refresh all sources
-dinobase refresh stripe          # refresh one source
-dinobase refresh --stale         # refresh only stale sources
+dinobase refresh                 # refresh all connectors
+dinobase refresh stripe          # refresh one connector
+dinobase refresh --stale         # refresh only stale connectors
 dinobase refresh --stale --pretty
 ```
 
-Without arguments, refreshes all non-file sources. Use `--stale` to only refresh sources past their freshness threshold.
+Without arguments, refreshes all non-file connectors. Use `--stale` to only refresh connectors past their freshness threshold.
 
 ---
 
 ## `dinobase status`
 
-Show status of all sources.
+Show status of all connectors.
 
 ```bash
 dinobase status [OPTIONS]
@@ -231,18 +250,18 @@ dinobase cancel <mutation_id>
 
 ## `dinobase auth <type>`
 
-Connect a source via OAuth (browser-based authorization).
+Connect a connector via OAuth (browser-based authorization).
 
 ```bash
-dinobase auth <source_type> [OPTIONS]
+dinobase auth <connector_type> [OPTIONS]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--name` | Custom name for the source (defaults to type) |
+| `--name` | Custom name for the connector (defaults to type) |
 | `--proxy-url` | OAuth proxy URL (or set `DINOBASE_OAUTH_PROXY_URL`) |
 
-Opens your browser to authorize Dinobase to access the source. Tokens are stored locally and refreshed automatically on sync.
+Opens your browser to authorize Dinobase to access the upstream service. Tokens are stored locally and refreshed automatically on sync.
 
 ```bash
 dinobase auth hubspot
@@ -276,6 +295,63 @@ dinobase mcp-config cursor         # Cursor only
 
 ---
 
+## `dinobase mcp`
+
+Interact with connected MCP servers. MCP server data is automatically synced into DuckDB tables (schema: server name, table: tool name), so prefer `dinobase query` for reads. Use `mcp call` for tools that need arguments or for write operations.
+
+### `dinobase mcp servers`
+
+List all connected MCP servers with their tool counts.
+
+```bash
+dinobase mcp servers [--pretty]
+```
+
+### `dinobase mcp instructions <server>`
+
+Show a server's info and usage instructions.
+
+```bash
+dinobase mcp instructions <server> [--pretty]
+
+dinobase mcp instructions posthog_mcp
+```
+
+### `dinobase mcp info <server>[.tool]`
+
+List all tools on a server, or show the full schema (parameters, types) for one tool.
+
+```bash
+dinobase mcp info <server>[.tool] [--pretty]
+
+dinobase mcp info posthog_mcp           # list all tools
+dinobase mcp info posthog_mcp.list_projects  # show one tool's schema
+```
+
+### `dinobase mcp search "<pattern>"`
+
+Regex search tool names and descriptions across all connected MCP servers.
+
+```bash
+dinobase mcp search "<pattern>" [--pretty]
+
+dinobase mcp search "dashboard"
+dinobase mcp search "list.*"
+```
+
+### `dinobase mcp call <server.tool> [args_json]`
+
+Call a tool on a connected MCP server with optional JSON arguments.
+
+```bash
+dinobase mcp call <server.tool> ['{"arg": "value"}'] [--pretty]
+
+dinobase mcp call posthog_mcp.list_projects
+dinobase mcp call posthog_mcp.dashboard-get '{"id": 1118504}'
+```
+
+---
+
 ## `dinobase connector create <name>`
 
 Scaffold a local custom connector YAML config.
@@ -283,6 +359,8 @@ Scaffold a local custom connector YAML config.
 ```bash
 dinobase connector create <name> [OPTIONS]
 ```
+
+**REST connector options:**
 
 | Option | Description |
 |--------|-------------|
@@ -292,7 +370,34 @@ dinobase connector create <name> [OPTIONS]
 | `--data-selector` | JSON path to data array (default: `$` for root) |
 | `--mode` | Fetch mode: `live`, `sync`, `auto` (default: `auto`) |
 
-Creates `~/.dinobase/connectors/<name>.yaml`. See [Custom Connectors](/docs/guides/connecting-sources/#custom-connectors).
+**MCP connector options:**
+
+| Option | Description |
+|--------|-------------|
+| `--transport` | MCP transport type: `stdio`, `sse`, `streamable_http` |
+| `--command` | Full command string for stdio transport (e.g., `npx -y @modelcontextprotocol/server-filesystem /data`) |
+| `--url` | Server URL for `sse` and `streamable_http` transports |
+| `--mode` | Fetch mode: `live`, `sync` (default: `live`) |
+
+Creates `~/.dinobase/connectors/<name>.yaml`. See [Custom REST Connectors](/docs/connectors/custom-rest/) and [MCP Server Connectors](/docs/connectors/mcp/).
+
+```bash
+# REST connector
+dinobase connector create posthog_flags \
+  --url "https://app.posthog.com/api/" \
+  --endpoint "projects/123/feature_flags/" \
+  --data-selector results
+
+# MCP connector (stdio)
+dinobase connector create posthog_mcp \
+  --transport stdio \
+  --command "npx -y @posthog/mcp-server"
+
+# MCP connector (SSE)
+dinobase connector create my_server \
+  --transport sse \
+  --url "https://server/sse"
+```
 
 ---
 

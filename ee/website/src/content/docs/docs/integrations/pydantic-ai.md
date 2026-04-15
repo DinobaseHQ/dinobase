@@ -3,7 +3,7 @@ title: Pydantic AI
 description: Use Dinobase tools in Pydantic AI agents to query business data with type safety.
 ---
 
-Dinobase provides a [Pydantic AI](https://ai.pydantic.dev) toolset that lets your agents query business data from 100+ sources with full type safety and dependency injection.
+Dinobase provides a [Pydantic AI](https://ai.pydantic.dev) toolset that lets your agents query business data from 100+ connectors with full type safety and dependency injection.
 
 ## Install
 
@@ -11,7 +11,7 @@ Dinobase provides a [Pydantic AI](https://ai.pydantic.dev) toolset that lets you
 pip install "dinobase[pydantic-ai]"
 ```
 
-Set up your data sources:
+Set up your connectors:
 
 ```bash
 dinobase init
@@ -20,7 +20,7 @@ dinobase add hubspot --api-key pat-...
 dinobase sync
 ```
 
-See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
+See [Connectors](/docs/guides/connecting-sources/) for the full list of 100+ supported connectors, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
 ## Quick Start
 
@@ -63,8 +63,8 @@ The `dinobase_tools` toolset provides four tools:
 |------|-------------|
 | `dinobase_query` | Execute SQL queries (DuckDB dialect) |
 | `dinobase_describe` | Get table schema, types, and sample data |
-| `dinobase_list_sources` | List connected sources with freshness status |
-| `dinobase_refresh` | Re-sync a stale data source |
+| `dinobase_list_connectors` | List configured connectors with freshness status |
+| `dinobase_refresh` | Re-sync a stale connector |
 
 All tools use `RunContext[DinobaseDeps]` for type-safe dependency injection. The `DinobaseDeps` dataclass lazily initializes the Dinobase `QueryEngine`.
 
@@ -74,9 +74,9 @@ Tools wrap Dinobase's Python API via Pydantic AI's `FunctionToolset`. Dependenci
 
 The typical agent workflow:
 
-1. `dinobase_list_sources` — discover available data
+1. `dinobase_list_connectors` — discover available data
 2. `dinobase_describe` — understand table schemas
-3. `dinobase_query` — run cross-source SQL queries
+3. `dinobase_query` — run cross-connector SQL queries
 4. Present and analyze results
 
 ## Example
@@ -91,8 +91,8 @@ python examples/analyst.py "Which deals closed this quarter?"
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [Python API Reference](/docs/reference/python-api/) — QueryEngine and SyncEngine

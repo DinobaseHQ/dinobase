@@ -11,7 +11,7 @@ Dinobase integrates with [Codex](https://openai.com/codex) via CLI. Once connect
 curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex
 ```
 
-Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.codex/AGENTS.md`. Then connect your data sources:
+Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.codex/AGENTS.md`. Then add your connectors:
 
 ```bash
 dinobase add stripe --api-key sk_test_...
@@ -19,7 +19,7 @@ dinobase add hubspot --api-key pat-...
 dinobase sync
 ```
 
-See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
+See [Connectors](/docs/guides/connecting-sources/) for the full list of 100+ supported connectors, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
 Codex can run shell commands directly, so no MCP configuration is needed. Just ask questions about your data and Codex will run `dinobase info`, `dinobase describe stripe.customers`, and `dinobase query "SELECT ..."` to answer them.
 
@@ -42,18 +42,18 @@ If you prefer MCP, run `dinobase mcp-config codex` to get the JSON config, then 
 
 | Command | Description |
 |---------|-------------|
-| `dinobase info` | Database overview — sources, tables, row counts |
+| `dinobase info` | Database overview — connectors, tables, row counts |
 | `dinobase describe <table>` | Table schema, column types, and sample data |
 | `dinobase query "<sql>"` | Execute SQL queries (DuckDB dialect) |
-| `dinobase refresh [source]` | Re-sync a data source to get fresh data |
+| `dinobase refresh [connector]` | Re-sync a connector to get fresh data |
 | `dinobase confirm <id>` | Execute a pending mutation |
 | `dinobase cancel <id>` | Cancel a pending mutation |
 
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [MCP Integration](/docs/integrations/mcp/) — How the MCP server works

@@ -12,7 +12,7 @@ npm install @mastra/core @mastra/mcp @ai-sdk/anthropic zod
 pip install dinobase
 ```
 
-Set up your data sources:
+Set up your connectors:
 
 ```bash
 dinobase init
@@ -21,7 +21,7 @@ dinobase add hubspot --api-key pat-...
 dinobase sync
 ```
 
-See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
+See [Connectors](/docs/guides/connecting-sources/) for the full list of 100+ supported connectors, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ const mcp = new MCPClient({
   },
 });
 
-// All 7 Dinobase tools discovered automatically
+// All 8 Dinobase tools discovered automatically
 const agent = new Agent({
   id: "data-analyst",
   name: "Data Analyst",
@@ -60,7 +60,7 @@ await mcp.disconnect();
 
 ## How It Works
 
-Mastra's `MCPClient` spawns the Dinobase MCP server as a subprocess (`dinobase serve`) and communicates via stdio. All 7 Dinobase MCP tools are discovered automatically and made available to the agent.
+Mastra's `MCPClient` spawns the Dinobase MCP server as a subprocess (`dinobase serve`) and communicates via stdio. All 8 Dinobase MCP tools are discovered automatically and made available to the agent.
 
 This is the same MCP server used by [Claude Desktop](/docs/integrations/claude-desktop/) and [Vercel AI SDK](/docs/integrations/vercel-ai/) — same tools, same data, different framework.
 
@@ -72,8 +72,8 @@ Via MCP, the agent gets access to:
 |------|-------------|
 | `query` | Execute SQL queries (DuckDB dialect) |
 | `describe` | Get table schema, types, and sample data |
-| `list_sources` | List connected sources with freshness status |
-| `refresh` | Re-sync a stale data source |
+| `list_connectors` | List configured connectors with freshness status |
+| `refresh` | Re-sync a stale connector |
 | `confirm` | Execute a pending mutation (write-back) |
 | `confirm_batch` | Execute multiple pending mutations |
 | `cancel` | Cancel a pending mutation |
@@ -123,8 +123,8 @@ const mcp = new MCPClient({
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [MCP Integration](/docs/integrations/mcp/) — How the MCP server works

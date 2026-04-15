@@ -1,13 +1,13 @@
 ---
 title: Benchmark
-description: How Dinobase SQL compares to per-source MCP tools across 11 LLMs on accuracy, cost, and speed.
+description: How Dinobase SQL compares to per-connector MCP tools across 11 LLMs on accuracy, cost, and speed.
 ---
 
-We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 75 business questions. Same models, same data, same questions — only the data access method differs.
+We benchmarked Dinobase SQL against per-connector MCP tools across 11 LLMs and 75 business questions. Same models, same data, same questions — only the data access method differs.
 
 ## Results
 
-| Metric | Dinobase (SQL) | Per-Source MCP |
+| Metric | Dinobase (SQL) | Per-Connector MCP |
 |--------|---------------|---------------|
 | **Accuracy** | **91%** | 35% |
 | **Avg latency** | **34s** | 106s |
@@ -17,9 +17,9 @@ We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 75 b
 
 ## Why the gap
 
-**No cross-source joins.** Per-source MCP tools expose one tool per table. Questions that span two SaaS tools — "which customers have open HubSpot deals and failed Stripe charges?" — require an agent to manually correlate two JSON responses. This is error-prone and frequently exceeds context limits. With Dinobase, the agent writes one SQL `JOIN`.
+**No cross-connector joins.** Per-connector MCP tools expose one tool per table. Questions that span two SaaS tools — "which customers have open HubSpot deals and failed Stripe charges?" — require an agent to manually correlate two JSON responses. This is error-prone and frequently exceeds context limits. With Dinobase, the agent writes one SQL `JOIN`.
 
-**No semantic metadata.** MCP tools return raw data with no column descriptions. Without knowing what fields mean, agents misinterpret units, formulas, and aggregations — producing systematically wrong answers. Dinobase attaches column descriptions extracted from source API schemas.
+**No semantic metadata.** MCP tools return raw data with no column descriptions. Without knowing what fields mean, agents misinterpret units, formulas, and aggregations — producing systematically wrong answers. Dinobase attaches column descriptions extracted from upstream API schemas.
 
 **Pagination overhead.** Counting 1,000 records over MCP requires 10 round trips. SQL returns a single aggregate. The latency difference is primarily from models that make many MCP calls before running out of turns or context.
 
@@ -41,7 +41,7 @@ We benchmarked Dinobase SQL against per-source MCP tools across 11 LLMs and 75 b
 
 ## Methodology
 
-- **75 questions** across 3 tiers: simple (single-source counts/filters), semantic (MRR, win rate, CSAT — requires domain knowledge), and cross-source (e.g. require joining HubSpot and Stripe data)
+- **75 questions** across 3 tiers: simple (single-connector counts/filters), semantic (MRR, win rate, CSAT — requires domain knowledge), and cross-connector (e.g. require joining HubSpot and Stripe data)
 - **Scoring**: deterministic for ~60% of questions (regex number extraction with tolerance), LLM-as-judge (Claude Haiku 4.5) for the rest
 - **Cost per correct answer**: total API cost divided by number of correct answers — this penalizes approaches that spend tokens on wrong answers
 - **Total benchmark cost**: $29.44 across all 11 models via OpenRouter

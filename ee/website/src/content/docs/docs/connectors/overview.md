@@ -1,9 +1,9 @@
 ---
-title: Sources Overview
-description: All data sources supported by Dinobase -- SaaS APIs, databases, file sources, and cloud storage.
+title: Connectors Overview
+description: All connectors supported by Dinobase -- SaaS APIs, databases, files, cloud storage, and MCP servers.
 ---
 
-Dinobase connects to 101 data sources across four categories.
+Dinobase connects to 101 connectors across four built-in categories (plus custom REST and MCP servers).
 
 ## Categories
 
@@ -13,29 +13,41 @@ Connect to business tools via API keys. Data is synced to parquet using [dlt](ht
 
 CRMs, billing, support, dev tools, communication, e-commerce, marketing, HR, project management, and more.
 
-[Full list &rarr;](/docs/sources/saas/)
+[Full list &rarr;](/docs/connectors/saas/)
 
 ### Databases
 
 Connect via SQLAlchemy connection strings. Supports 16 databases: PostgreSQL, MySQL, Snowflake, BigQuery, and more.
 
-[Full list &rarr;](/docs/sources/databases/)
+[Full list &rarr;](/docs/connectors/databases/)
 
-### File sources
+### Files
 
 Point at parquet or CSV files (local or remote). No sync needed -- DuckDB reads at query time.
 
-[Details &rarr;](/docs/sources/files/)
+[Details &rarr;](/docs/connectors/files/)
 
 ### Cloud storage
 
 Sync files incrementally from S3, GCS, Azure Blob, or SFTP.
 
-[Details &rarr;](/docs/sources/cloud-storage/)
+[Details &rarr;](/docs/connectors/cloud-storage/)
+
+### MCP servers
+
+Connect any MCP server (stdio, SSE, or streamable HTTP). Dinobase auto-discovers read-only tools and syncs their output as SQL tables.
+
+[Details &rarr;](/docs/connectors/mcp/)
+
+### Custom REST
+
+Any REST API via a local YAML config. Handles auth, pagination, and live or scheduled fetching.
+
+[Details &rarr;](/docs/connectors/custom-rest/)
 
 ## Quick reference
 
-| Category | Sources |
+| Category | Connectors |
 |----------|---------|
 | **CRM & Sales** | Salesforce, HubSpot, Pipedrive, Attio, Close, Copper |
 | **Billing & Payments** | Stripe, Paddle, Chargebee, Recurly, Lemon Squeezy |
@@ -57,4 +69,4 @@ Sync files incrementally from S3, GCS, Azure Blob, or SFTP.
 | **Video** | Mux |
 | **Files** | Parquet, CSV (local or S3 -- read at query time, no sync needed) |
 
-Run `dinobase sources --pretty` to see the complete list with descriptions.
+Run `dinobase connectors --pretty` to see the complete list with descriptions.

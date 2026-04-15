@@ -1,11 +1,11 @@
 ---
-title: File Sources
-description: Use parquet and CSV files as data sources -- local files, S3, or GCS with zero sync.
+title: File Connectors
+description: Use parquet and CSV files as connectors -- local files, S3, or GCS with zero sync.
 ---
 
-File sources are the simplest way to get data into Dinobase. No sync needed -- DuckDB reads files directly at query time through views.
+File connectors are the simplest way to get data into Dinobase. No sync needed -- DuckDB reads files directly at query time through views.
 
-## Adding file sources
+## Adding file connectors
 
 ### Parquet files
 
@@ -38,7 +38,7 @@ dinobase add csv --path ./data/customers.csv --name customers
 
 ## How it works
 
-When you add a file source, Dinobase:
+When you add a file connector, Dinobase:
 
 1. Creates a schema with the name you provide
 2. Scans the path for matching files
@@ -78,7 +78,7 @@ For S3, DuckDB uses your AWS credentials from the environment (`AWS_ACCESS_KEY_I
 
 ## Schema annotations
 
-File sources get basic metadata inferred from column names:
+File connectors get basic metadata inferred from column names:
 
 - `id` columns are marked as primary keys
 - `*_id` columns are annotated as foreign keys
@@ -91,7 +91,7 @@ dinobase describe analytics.events --pretty
 
 ## No sync needed
 
-File sources never appear in `dinobase sync` output. They are always read at query time, so the data is always current:
+File connectors never appear in `dinobase sync` output. They are always read at query time, so the data is always current:
 
 ```bash
 # Update the file
@@ -101,9 +101,9 @@ cp new_data.parquet ./data/events.parquet
 dinobase query "SELECT COUNT(*) FROM analytics.events"
 ```
 
-## When to use file sources vs cloud storage sync
+## When to use file connectors vs cloud storage sync
 
-| | File sources | Cloud storage sync |
+| | File connectors | Cloud storage sync |
 |--|-------------|-------------------|
 | **Command** | `dinobase add parquet --path ...` | `dinobase add s3 --bucket-url ...` |
 | **Sync** | None -- reads at query time | dlt syncs incrementally |

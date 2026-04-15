@@ -2,8 +2,7 @@
 # Dinobase installer — https://dinobase.ai
 # Usage:
 #   curl -fsSL https://dinobase.ai/install.sh | bash
-#   curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code
-#   curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor
+#   curl -fsSL https://dinobase.ai/install.sh | bash -s -- --no-setup
 set -eu
 
 PACKAGE="dinobase"
@@ -168,23 +167,22 @@ main() {
     ensure_on_path
     verify
 
-    # Auto-initialize
-    if command -v "$PACKAGE" >/dev/null 2>&1; then
-        printf "\n"
-        info "Initializing Dinobase..."
-        if sh -c 'exec 0</dev/tty' 2>/dev/null; then
-            "$PACKAGE" init < /dev/tty || true
-        else
-            "$PACKAGE" init || true
-        fi
-    fi
+    # Launch the browser-based setup UI (opt out with --no-setup).
+    RUN_SETUP=1
+    for arg in "$@"; do
+        case "$arg" in
+            --no-setup|--skip-setup) RUN_SETUP=0 ;;
+        esac
+    done
 
-    # Install agent config if specified
-    AGENT="${1:-}"
-    if [ -n "$AGENT" ] && command -v "$PACKAGE" >/dev/null 2>&1; then
+    if [ "$RUN_SETUP" -eq 1 ] && command -v "$PACKAGE" >/dev/null 2>&1; then
         printf "\n"
-        info "Setting up $AGENT..."
-        "$PACKAGE" install "$AGENT" || true
+        info "Launching Dinobase setup..."
+        printf "  Opens a browser window to connect sources and finish setup.\n"
+        printf "  Press Ctrl+C to quit the setup server.\n\n"
+        "$PACKAGE" setup || true
+    else
+        printf "\n  Next: run ${BOLD}%s setup${RESET} to connect your data sources.\n" "$PACKAGE"
     fi
 
     printf "\n  Docs: https://dinobase.ai/docs\n\n"

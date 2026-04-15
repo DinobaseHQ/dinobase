@@ -1,9 +1,9 @@
 ---
 title: Mutations
-description: Reverse ETL via SQL — write data back to source systems with UPDATE and INSERT, using a preview/confirm flow to prevent accidental changes.
+description: Reverse ETL via SQL — write data back to upstream systems with UPDATE and INSERT, using a preview/confirm flow to prevent accidental changes.
 ---
 
-Dinobase mutations are the SQL interface to reverse ETL — write data back to source systems via UPDATE and INSERT. Every mutation uses a preview/confirm flow to prevent accidental changes.
+Dinobase mutations are the SQL interface to reverse ETL — write data back to upstream systems via UPDATE and INSERT. Every mutation uses a preview/confirm flow to prevent accidental changes.
 
 ## How it works
 
@@ -16,7 +16,7 @@ UPDATE stripe...       "2 rows affected"     confirm(id)          Stripe API cal
 2. Engine parses the SQL, counts affected rows, generates a per-row diff
 3. Returns a preview with a `mutation_id` -- nothing is executed yet
 4. Agent reviews the preview and calls `confirm` with the `mutation_id`
-5. Engine calls the source API (write-back) AND updates local data
+5. Engine calls the connector's upstream API (write-back) AND updates local data
 
 ## Supported operations
 
@@ -97,7 +97,7 @@ This returns multiple `mutation_id` values. Confirm all at once with `confirm_ba
 Nothing executes until confirmed. The preview shows exactly what will change:
 
 - Per-row diffs (`old value → new value`)
-- Which source API will be called
+- Which upstream API will be called
 - Number of affected rows
 
 ### Row limit
@@ -127,10 +127,10 @@ dinobase query "
 
 When a mutation is confirmed, Dinobase:
 
-1. **Calls the source API** -- e.g., updates the Stripe customer via Stripe's API
+1. **Calls the upstream API** -- e.g., updates the Stripe customer via Stripe's API
 2. **Updates local data** -- writes to a staging table for read-after-write consistency
 
-Write-back requires the source to have write endpoints defined in its YAML config. Sources without write configs still update local data.
+Write-back requires the connector to have write endpoints defined in its YAML config. Connectors without write configs still update local data.
 
 ### Per-row API calls
 
@@ -149,7 +149,7 @@ For UPDATE operations, each affected row gets its own API call. Results are trac
 
 ### Bulk endpoints
 
-Some sources support bulk operations. When a write endpoint is marked as `bulk: true`, rows are batched into fewer API calls.
+Some connectors support bulk operations. When a write endpoint is marked as `bulk: true`, rows are batched into fewer API calls.
 
 ## Multi-statement mutations
 

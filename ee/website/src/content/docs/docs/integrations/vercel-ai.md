@@ -12,7 +12,7 @@ npm install ai @ai-sdk/anthropic @ai-sdk/mcp
 pip install dinobase
 ```
 
-Set up Dinobase with your data sources:
+Set up Dinobase with your connectors:
 
 ```bash
 dinobase init
@@ -20,7 +20,7 @@ dinobase add stripe --api-key sk_test_...
 dinobase sync
 ```
 
-See [Connecting Sources](/docs/guides/connecting-sources/) for the full list of 100+ supported sources, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
+See [Connectors](/docs/guides/connecting-sources/) for the full list of 100+ supported connectors, and [Syncing & Scheduling](/docs/guides/syncing/) for background sync options.
 
 ## Next.js API Route
 
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 }
 ```
 
-The AI SDK automatically discovers all 7 Dinobase MCP tools.
+The AI SDK automatically discovers all 8 Dinobase MCP tools.
 
 ## Node.js Script
 
@@ -95,9 +95,9 @@ The MCP server exposes these tools to the AI model:
 |------|-------------|
 | `query` | Execute SQL queries (DuckDB dialect) |
 | `describe` | Get table schema, column types, and sample data |
-| `list_sources` | List all connected sources with row counts and freshness |
-| `refresh` | Re-sync a data source to get fresh data |
-| `confirm` | Execute a pending mutation (write-back to source API) |
+| `list_connectors` | List all configured connectors with row counts and freshness |
+| `refresh` | Re-sync a connector to get fresh data |
+| `confirm` | Execute a pending mutation (write-back to upstream API) |
 | `confirm_batch` | Execute multiple pending mutations |
 | `cancel` | Cancel a pending mutation |
 
@@ -118,13 +118,13 @@ const dinobase = await createMCPClient({
 
 - `Experimental_StdioMCPTransport` runs in Node.js only (not edge runtime or browser)
 - Always close the MCP client when done to clean up the subprocess
-- The model sees dynamic instructions computed from your actual database state — it knows what sources and tables are available
+- The model sees dynamic instructions computed from your actual database state — it knows what connectors and tables are available
 
 ## Next steps
 
 - [Getting Started](/docs/getting-started/) — Full setup walkthrough
-- [Connecting Sources](/docs/guides/connecting-sources/) — Add your business data
-- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-source joins
+- [Connectors](/docs/guides/connecting-sources/) — Add your business data
+- [Querying Data](/docs/guides/querying/) — SQL patterns and cross-connector joins
 - [Syncing & Scheduling](/docs/guides/syncing/) — Keep data fresh
 - [Schema Annotations](/docs/guides/annotations/) — Add context for AI agents
 - [MCP Integration](/docs/integrations/mcp/) — How the MCP server works

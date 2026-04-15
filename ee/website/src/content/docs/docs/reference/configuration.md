@@ -9,7 +9,7 @@ Dinobase stores everything in `~/.dinobase/` by default:
 
 ```
 ~/.dinobase/
-  config.yaml        # Source configuration
+  config.yaml        # Connector configuration
   dinobase.duckdb    # DuckDB database (metadata + synced data)
   connectors/        # User-defined local connector YAML configs
   cache/             # Cached JSON data from local connectors
@@ -59,22 +59,24 @@ sources:
 |-------|----------|-------------|
 | `storage.url` | No | Cloud storage URL (e.g., `s3://bucket/dinobase/`, `gs://bucket/dinobase/`, `az://container/dinobase/`). When set, data is stored in cloud storage instead of locally. Can also be set via `DINOBASE_STORAGE_URL` env var. |
 
-**Per source:**
+**Per connector:**
+
+(The YAML key remains `sources:` for backwards compatibility, but each entry configures a connector.)
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `type` | Yes | Source type (e.g., `stripe`, `postgres`, `parquet`) |
-| `credentials` | Yes | Source-specific credentials |
+| `type` | Yes | Connector type (e.g., `stripe`, `postgres`, `parquet`) |
+| `credentials` | Yes | Connector-specific credentials |
 | `sync_interval` | No | How often to sync (e.g., `30m`, `1h`) |
-| `freshness_threshold` | No | Max age before data is considered stale (e.g., `1h`, `30m`). Defaults: `1h` for SaaS APIs, `6h` for databases. File sources are never stale. |
+| `freshness_threshold` | No | Max age before data is considered stale (e.g., `1h`, `30m`). Defaults: `1h` for SaaS APIs, `6h` for databases. File connectors are never stale. |
 
-**Credential keys vary by source type:**
+**Credential keys vary by connector type:**
 
-| Source type | Credential keys |
+| Connector type | Credential keys |
 |------------|----------------|
 | SaaS APIs | `api_key`, `token`, etc. |
 | Databases | `connection_string` |
-| File sources | `path`, `format` |
+| File connectors | `path`, `format` |
 
 ### Editing manually
 
@@ -82,8 +84,8 @@ You can edit `config.yaml` directly to:
 
 - Change credentials
 - Update sync intervals
-- Remove sources
-- Add sources manually
+- Remove connectors
+- Add connectors manually
 
 Changes take effect on the next `dinobase sync` or `dinobase serve`.
 
@@ -105,7 +107,7 @@ In local mode, `dinobase.duckdb` contains:
 
 ### User data schemas
 
-Each source gets its own schema (e.g., `stripe`, `hubspot`). Tables within contain synced data or views over files.
+Each connector gets its own schema (e.g., `stripe`, `hubspot`). Tables within contain synced data or views over files.
 
 ### Metadata schema (`_dinobase`)
 
@@ -116,8 +118,8 @@ Internal tables for tracking sync state and column annotations:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Auto-increment primary key |
-| `source_name` | VARCHAR | Source name |
-| `source_type` | VARCHAR | Source type |
+| `source_name` | VARCHAR | Connector name |
+| `source_type` | VARCHAR | Connector type |
 | `started_at` | TIMESTAMP | Sync start time |
 | `finished_at` | TIMESTAMP | Sync end time |
 | `status` | VARCHAR | `running`, `success`, or `error` |
@@ -129,7 +131,7 @@ Internal tables for tracking sync state and column annotations:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `source_name` | VARCHAR | Source name |
+| `source_name` | VARCHAR | Connector name |
 | `schema_name` | VARCHAR | Schema name |
 | `table_name` | VARCHAR | Table name |
 | `row_count` | BIGINT | Row count at last sync |
@@ -139,7 +141,7 @@ Internal tables for tracking sync state and column annotations:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `source_name` | VARCHAR | Source name |
+| `source_name` | VARCHAR | Connector name |
 | `schema_name` | VARCHAR | Schema name |
 | `table_name` | VARCHAR | Table name |
 | `column_name` | VARCHAR | Column name |
