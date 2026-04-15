@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: release-setup-ui
@@ -122,16 +123,17 @@ jobs:
           manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
           PY
 
-      - name: Commit manifest update
-        env:
-          UI_VERSION: ${{ steps.build.outputs.ui_version }}
-        run: |
-          git config user.name "dinobase-release-bot"
-          git config user.email "release-bot@dinobase.ai"
-          git add ee/cloud/web/public/setup-ui/manifest.json
-          if git diff --cached --quiet; then
-            echo "Manifest unchanged, nothing to commit."
-            exit 0
-          fi
-          git commit -m "chore(setup-ui): publish v$UI_VERSION [skip ci]"
-          git push origin HEAD:main
+      - name: Open PR with manifest update
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: setup-ui/publish-v${{ steps.build.outputs.ui_version }}
+          base: main
+          commit-message: "chore(setup-ui): publish v${{ steps.build.outputs.ui_version }}"
+          title: "chore(setup-ui): publish v${{ steps.build.outputs.ui_version }}"
+          body: |
+            Automated manifest update for setup UI v${{ steps.build.outputs.ui_version }}.
+
+            Release: https://github.com/DinobaseHQ/dinobase/releases/tag/${{ steps.build.outputs.tag }}
+          sign-commits: true
+          delete-branch: true
