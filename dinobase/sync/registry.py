@@ -148,8 +148,13 @@ def _load_yaml_api_configs(apis_dir: Path | None = None) -> None:
 
             if cfg.get("type") == "graphql":
                 _load_yaml_graphql(cfg)
-            else:
+            elif "client" in cfg:
                 _load_yaml_rest_api(cfg)
+            else:
+                # New-schema config (top-level auth_methods/endpoints); not handled
+                # by this eager loader. Skipped silently — build_dlt_source handles
+                # it lazily when the source is actually used.
+                continue
         except Exception as e:
             import sys
             print(f"[dinobase] Warning: skipping {yaml_path.name}: {e}", file=sys.stderr)
