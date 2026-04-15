@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "sync:logos": "rsync -a ../../assets/connector-logos/ public/logos/"
+    "sync:logos": "node -e \"require('fs').cpSync('../../assets/connector-logos','public/logos',{recursive:true})\""
   },
   "dependencies": {
     "@astrojs/starlight": "^0.38.2",
