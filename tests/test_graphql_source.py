@@ -148,6 +148,22 @@ class TestGraphqlSource:
         assert rows == []
 
     @patch("dinobase.sync.sources.graphql.requests.post")
+    def test_singleton_object_response(self, mock_post):
+        """A singleton object at data_path is wrapped into a single-row result."""
+        mock_post.return_value = _mock_response({
+            "data": {"viewer": {"id": "usr_1", "name": "Alice"}}
+        })
+
+        resources_cfg = [{
+            "name": "viewer",
+            "query": "query { viewer { id name } }",
+            "data_path": "data.viewer",
+        }]
+        source = graphql_source("https://example.com/graphql", "tok", resources_cfg)
+        rows = list(list(source.resources.values())[0])
+        assert rows == [{"id": "usr_1", "name": "Alice"}]
+
+    @patch("dinobase.sync.sources.graphql.requests.post")
     def test_auth_prefix(self, mock_post):
         """Custom auth_prefix is used in the Authorization header."""
         mock_post.return_value = _mock_response({
@@ -162,6 +178,24 @@ class TestGraphqlSource:
         graphql_source("https://example.com/graphql", "mykey", resources_cfg, auth_prefix="")
         # Force iteration to trigger the POST
         source = graphql_source("https://example.com/graphql", "mykey", resources_cfg, auth_prefix="")
+        list(list(source.resources.values())[0])
+
+        headers = mock_post.call_args[1]["headers"]
+        assert headers["Authorization"] == "mykey"
+
+    @patch("dinobase.sync.sources.graphql.requests.post")
+    def test_api_key_alias(self, mock_post):
+        """graphql_source accepts api_key as an alias for token."""
+        mock_post.return_value = _mock_response({
+            "data": {"items": {"nodes": []}}
+        })
+
+        resources_cfg = [{
+            "name": "items",
+            "query": "query { items { nodes { id } } }",
+            "data_path": "data.items.nodes",
+        }]
+        source = graphql_source("https://example.com/graphql", resources=resources_cfg, api_key="mykey", auth_prefix="")
         list(list(source.resources.values())[0])
 
         headers = mock_post.call_args[1]["headers"]
@@ -197,4 +231,45 @@ class TestLinearRegistration:
         for res in entry.graphql_config["resources"]:
             assert "query" in res, f"Resource {res['name']} missing query"
             assert "data_path" in res, f"Resource {res['name']} missing data_path"
+            # cursor_path is optional for singleton resources (e.g., viewer)
+
+    @patch("dinobase.sync.sources.graphql.requests.post")
+    def test_get_source_maps_api_key_to_graphql_token(self, mock_post):
+        from dinobase.sync.sources import get_source
+
+        mock_post.return_value = _mock_response({
+            "data": {
+                "issues": {
+                    "nodes": [],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        })
+
+        source = get_source("linear", {"api_key": "lin_api_test"}, resource_names=["issues"])
+        rows = list(source.resources["issues"])
+
+        assert rows == []
+        headers = mock_post.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "lin_api_test"
+
+    @patch("dinobase.sync.sources.graphql.requests.post")
+    def test_get_source_maps_access_token_to_graphql_token(self, mock_post):
+        from dinobase.sync.sources import get_source
+
+        mock_post.return_value = _mock_response({
+            "data": {
+                "issues": {
+                    "nodes": [],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        })
+
+        source = get_source("linear", {"access_token": "oauth_token_test"}, resource_names=["issues"])
+        rows = list(source.resources["issues"])
+
+        assert rows == []
+        headers = mock_post.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "oauth_token_test"
             # cursor_path is optional for singleton resources (e.g., viewer)

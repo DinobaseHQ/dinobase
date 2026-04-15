@@ -58,6 +58,10 @@ def _paginate(
             raise RuntimeError(f"GraphQL errors: {msgs}")
 
         nodes = _traverse(body, data_path)
+        if nodes is None:
+            break
+        if isinstance(nodes, dict):
+            nodes = [nodes]
         if not nodes:
             break
 
@@ -101,19 +105,29 @@ def _make_resource(
 @dlt.source
 def graphql_source(
     endpoint: str,
-    token: str,
-    resources: list[dict[str, Any]],
+    token: str | None = None,
+    resources: list[dict[str, Any]] | None = None,
     auth_prefix: str = "Bearer ",
+    api_key: str | None = None,
+    access_token: str | None = None,
 ) -> Iterable[DltResource]:
     """Generic GraphQL dlt source.
 
     Args:
         endpoint: GraphQL endpoint URL.
-        token: Auth token.
+        token: Auth token. Aliases: ``api_key``, ``access_token``.
         resources: List of resource configs, each with keys:
             name, query, data_path, cursor_path (optional), variables (optional).
         auth_prefix: Prefix for the Authorization header (default "Bearer ").
+        api_key: Alias for ``token``.
+        access_token: Alias for ``token``.
     """
+    token = token or access_token or api_key
+    if not token:
+        raise ValueError("GraphQL source requires a token, api_key, or access_token")
+    if resources is None:
+        raise ValueError("GraphQL source requires resources")
+
     headers = {
         "Authorization": f"{auth_prefix}{token}",
         "Content-Type": "application/json",
