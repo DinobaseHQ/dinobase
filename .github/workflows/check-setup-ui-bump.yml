@@ -1,0 +1,57 @@
+name: Check setup UI version bump
+
+# Any PR that modifies files under `dinobase/setup_server/ui/` must also
+# bump `ui_version` in `ui_meta.json`. This protects main from UI changes
+# that would never produce a release (because the release workflow refuses
+# to overwrite an existing tag).
+
+on:
+  pull_request:
+    paths:
+      - "dinobase/setup_server/ui/**"
+
+permissions:
+  contents: read
+
+jobs:
+  check-bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify ui_version changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          META_FILE="dinobase/setup_server/ui/ui_meta.json"
+
+          # Did any UI files actually change?
+          CHANGED_UI=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'dinobase/setup_server/ui/' || true)
+          if [[ -z "$CHANGED_UI" ]]; then
+            echo "No UI files changed, skipping."
+            exit 0
+          fi
+
+          # If ui_meta.json itself changed, check that ui_version is different.
+          META_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- "$META_FILE" || true)
+          if [[ -z "$META_CHANGED" ]]; then
+            echo "::error::UI files changed but $META_FILE was not touched — bump ui_version to publish a release."
+            exit 1
+          fi
+
+          BASE_VERSION=$(git show "$BASE_SHA:$META_FILE" | python -c "import json,sys; print(json.load(sys.stdin).get('ui_version',''))" || echo "")
+          HEAD_VERSION=$(python -c "import json; print(json.load(open('$META_FILE')).get('ui_version',''))")
+
+          if [[ -z "$HEAD_VERSION" ]]; then
+            echo "::error::$META_FILE missing ui_version on the PR branch."
+            exit 1
+          fi
+          if [[ "$BASE_VERSION" == "$HEAD_VERSION" ]]; then
+            echo "::error::ui_version in $META_FILE must be bumped (still $HEAD_VERSION)."
+            exit 1
+          fi
+
+          echo "OK: ui_version bumped from '$BASE_VERSION' to '$HEAD_VERSION'"

@@ -443,6 +443,28 @@ def login(headless: bool):
 
 
 @cli.command()
+@click.option("--port", type=int, default=0, help="Port to bind (0 = random)")
+@click.option("--no-browser", is_flag=True, help="Don't open a browser window")
+def setup(port: int, no_browser: bool):
+    """Launch the Dinobase setup GUI in your browser.
+
+    Starts a local HTTP server on 127.0.0.1 and opens a browser tab where you
+    can add sources, MCP servers, and custom connectors without editing YAML.
+
+    Examples:
+
+      dinobase setup
+      dinobase setup --port 7777
+      dinobase setup --no-browser
+    """
+    from dinobase.config import init_dinobase
+    from dinobase.setup_server import run_setup_server
+
+    init_dinobase()
+    run_setup_server(port=port, open_browser=not no_browser)
+
+
+@cli.command()
 def logout():
     """Sign out of Dinobase Cloud."""
     from dinobase.config import clear_cloud_credentials, is_cloud_logged_in

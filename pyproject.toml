@@ -35,6 +35,10 @@ dinobase = "dinobase.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dinobase"]
+# The setup GUI's bundled UI assets (HTML/JS) live under dinobase/setup_server/ui/
+# and are shipped as package data automatically because they're inside the
+# `dinobase` package tree.
+artifacts = ["dinobase/setup_server/ui/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

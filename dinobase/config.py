@@ -42,6 +42,11 @@ def get_cache_dir() -> Path:
     return get_dinobase_dir() / "cache"
 
 
+def get_setup_ui_cache_dir() -> Path:
+    """Directory for remotely-fetched setup GUI bundles."""
+    return get_dinobase_dir() / "setup-ui-cache"
+
+
 # ---------------------------------------------------------------------------
 # Cloud storage
 # ---------------------------------------------------------------------------

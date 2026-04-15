@@ -1,0 +1,2786 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Dinobase Setup</title>
+        <!--DINOBASE_TOKEN-->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            @keyframes dino-jump {
+                0%, 100% { transform: translateY(0); }
+                30% { transform: translateY(-24px); }
+                60% { transform: translateY(0); }
+                70% { transform: translateY(-10px); }
+                85% { transform: translateY(0); }
+            }
+            #dino-mascot {
+                position: fixed;
+                bottom: 12px;
+                right: 12px;
+                width: 64px;
+                z-index: 40;
+                line-height: 0;
+            }
+            #dino-mascot img {
+                width: 64px;
+                height: auto;
+                image-rendering: pixelated;
+                opacity: 0.75;
+                transition: opacity 0.2s;
+                display: block;
+            }
+            #dino-mascot:hover img {
+                opacity: 1;
+                animation: dino-jump 0.7s ease-out;
+            }
+            :root {
+                --green: #7abf7a;
+                --green-accent: #4ade80;
+                --bg: #0e1410;
+                --surface: #161d13;
+                --surface-2: #1a2418;
+                --border: #28342090;
+                --border-solid: #283420;
+                --border-light: #3a4a30;
+                --text: #eceae0;
+                --muted: #a8a49a;
+                --dimmed: #6b7060;
+                --red: #c47a6a;
+                --radius: 0.5rem;
+                --mono:
+                    "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+                    monospace;
+                --sans:
+                    "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont,
+                    sans-serif;
+            }
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            html,
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--sans);
+                font-size: 15px;
+                line-height: 1.55;
+            }
+            body::after {
+                content: "";
+                position: fixed;
+                inset: 0;
+                pointer-events: none;
+                z-index: 9999;
+                opacity: 0.03;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+                background-size: 128px;
+            }
+            a {
+                color: var(--green);
+                text-decoration: none;
+                transition: color 0.2s;
+            }
+            a:hover {
+                color: var(--green-accent);
+            }
+
+            button {
+                font: inherit;
+                font-family: var(--sans);
+                padding: 0.5rem 1.1rem;
+                border: 1px solid var(--border-light);
+                background: transparent;
+                border-radius: 999px;
+                cursor: pointer;
+                color: var(--text);
+                transition:
+                    border-color 0.2s,
+                    background 0.2s,
+                    color 0.2s;
+            }
+            button:hover {
+                border-color: var(--green);
+                background: rgba(122, 191, 122, 0.08);
+            }
+            button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            button.primary {
+                background: var(--green);
+                color: #000;
+                border-color: var(--green);
+                font-weight: 700;
+            }
+            button.primary:hover {
+                filter: brightness(1.1);
+                background: var(--green);
+            }
+            button.danger {
+                color: var(--red);
+                border-color: rgba(196, 122, 106, 0.4);
+            }
+            button.danger:hover {
+                background: rgba(196, 122, 106, 0.1);
+                border-color: var(--red);
+            }
+            button.link {
+                border: 0;
+                background: transparent;
+                padding: 4px 6px;
+                color: var(--green);
+            }
+
+            input,
+            select,
+            textarea {
+                font: inherit;
+                font-family: var(--sans);
+                width: 100%;
+                padding: 0.55rem 0.75rem;
+                border: 1px solid var(--border-solid);
+                border-radius: var(--radius);
+                background: rgba(0, 0, 0, 0.35);
+                color: var(--text);
+                transition: border-color 0.2s;
+            }
+            input:focus,
+            select:focus,
+            textarea:focus {
+                outline: none;
+                border-color: var(--green);
+            }
+            input::placeholder,
+            textarea::placeholder {
+                color: var(--dimmed);
+            }
+            textarea {
+                font-family: var(--mono);
+                font-size: 0.8rem;
+            }
+            select {
+                appearance: none;
+                background-image:
+                    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+                background-position:
+                    calc(100% - 18px) 50%,
+                    calc(100% - 13px) 50%;
+                background-size: 5px 5px;
+                background-repeat: no-repeat;
+                padding-right: 2rem;
+            }
+            label {
+                display: block;
+                font-weight: 700;
+                margin-bottom: 6px;
+                font-size: 0.8rem;
+                letter-spacing: 0.02em;
+                color: var(--text);
+            }
+            .field {
+                margin-bottom: 14px;
+            }
+            .field .help {
+                display: none;
+            }
+            .help-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 14px;
+                height: 14px;
+                margin-left: 6px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid var(--border-solid);
+                color: var(--muted);
+                font-size: 10px;
+                font-weight: 700;
+                font-family: var(--mono);
+                cursor: help;
+                position: relative;
+                vertical-align: middle;
+                user-select: none;
+                line-height: 1;
+                text-transform: none;
+                letter-spacing: 0;
+            }
+            .help-icon:hover {
+                background: rgba(255, 255, 255, 0.14);
+                color: var(--text);
+            }
+            .help-tip-floating {
+                display: none;
+                position: fixed;
+                width: 260px;
+                max-width: 80vw;
+                padding: 8px 10px;
+                background: #0e1410;
+                border: 1px solid var(--border-solid);
+                border-radius: 4px;
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+                color: var(--text);
+                font-size: 12px;
+                font-weight: 400;
+                font-family: var(--sans);
+                line-height: 1.45;
+                text-align: left;
+                white-space: normal;
+                pointer-events: none;
+                z-index: 10000;
+                text-transform: none;
+                letter-spacing: 0;
+            }
+            .help-tip-floating.open {
+                display: block;
+            }
+            .help-tip-floating code {
+                font-size: 11px;
+                padding: 0.05em 0.3em;
+            }
+            .muted {
+                color: var(--muted);
+                font-size: 0.875rem;
+            }
+            code {
+                font-family: var(--mono);
+                font-size: 0.825em;
+                background: rgba(122, 191, 122, 0.08);
+                border: 1px solid var(--border-solid);
+                border-radius: 0.25rem;
+                padding: 0.1em 0.35em;
+                color: #a8e6a8;
+            }
+
+            header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1.25rem 2rem;
+                border-bottom: 1px solid var(--border);
+                background: rgba(14, 20, 16, 0.88);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                position: sticky;
+                top: 0;
+                z-index: 50;
+            }
+            header h1 {
+                margin: 0;
+                font-size: 1.1rem;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+            }
+            header h1 img {
+                width: 26px;
+                height: 26px;
+                display: block;
+            }
+            .pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.35rem 0.85rem;
+                border-radius: 999px;
+                border: 1px solid var(--border-light);
+                font-family: var(--mono);
+                font-size: 0.7rem;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--muted);
+                background: rgba(0, 0, 0, 0.25);
+            }
+            .pill .dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--dimmed);
+            }
+            .pill.ok {
+                color: var(--green);
+                border-color: rgba(122, 191, 122, 0.35);
+            }
+            .pill.ok .dot {
+                background: var(--green-accent);
+                box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+            }
+
+            main {
+                max-width: 1100px;
+                margin: 0 auto;
+                padding: 2rem;
+                position: relative;
+                z-index: 1;
+            }
+
+            .cloud-announce {
+                position: relative;
+                margin-bottom: 2.5rem;
+                padding: 1.75rem 2rem 1.85rem;
+                background:
+                    radial-gradient(
+                        ellipse at top right,
+                        rgba(122, 191, 122, 0.1),
+                        transparent 60%
+                    ),
+                    var(--surface);
+                border: 1px solid var(--border-light);
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .cloud-announce::before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 3px;
+                background: linear-gradient(
+                    to bottom,
+                    var(--green-accent),
+                    var(--green) 60%,
+                    transparent
+                );
+            }
+            .cloud-announce-close {
+                position: absolute;
+                top: 0.75rem;
+                right: 0.75rem;
+                width: 1.75rem;
+                height: 1.75rem;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                color: var(--dimmed);
+                font-size: 0.875rem;
+                line-height: 1;
+                cursor: pointer;
+                transition:
+                    color 0.2s,
+                    background 0.2s,
+                    border-color 0.2s;
+            }
+            .cloud-announce-close:hover {
+                color: var(--text);
+                background: rgba(255, 255, 255, 0.04);
+                border-color: var(--border-solid);
+            }
+            .cloud-announce[hidden] {
+                display: none;
+            }
+            .cloud-header-cta {
+                font-size: 0.8rem;
+                font-weight: 700;
+                padding: 0.45rem 1rem;
+                border-radius: 999px;
+                border: 1px solid var(--green);
+                color: var(--green);
+                background: rgba(122, 191, 122, 0.06);
+                cursor: pointer;
+                transition:
+                    background 0.2s,
+                    border-color 0.2s,
+                    color 0.2s;
+            }
+            .cloud-header-cta:hover {
+                background: rgba(122, 191, 122, 0.14);
+                border-color: var(--green-accent);
+                color: var(--green-accent);
+            }
+            .cloud-header-cta[hidden] {
+                display: none;
+            }
+            .cloud-announce-eyebrow {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-family: var(--mono);
+                font-size: 0.65rem;
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+                color: var(--green);
+                margin-bottom: 0.75rem;
+            }
+            .cloud-announce-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--green-accent);
+                box-shadow: 0 0 8px rgba(74, 222, 128, 0.7);
+                animation: cloud-announce-pulse 2.4s ease-in-out infinite;
+            }
+            @keyframes cloud-announce-pulse {
+                0%, 100% {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+                50% {
+                    opacity: 0.5;
+                    transform: scale(0.85);
+                }
+            }
+            .cloud-announce-title {
+                font-size: 1.75rem;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                line-height: 1.1;
+                margin-bottom: 0.5rem;
+                color: var(--text);
+            }
+            .cloud-announce-sub {
+                font-size: 1rem;
+                color: var(--muted);
+                max-width: 640px;
+                margin-bottom: 1.25rem;
+            }
+            .cloud-announce-features {
+                list-style: none;
+                padding: 0;
+                margin: 0 0 1.5rem;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                gap: 0.75rem 1.5rem;
+            }
+            .cloud-announce-features li {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.6rem;
+                font-size: 0.875rem;
+                color: var(--muted);
+                line-height: 1.5;
+            }
+            .cloud-announce-features strong {
+                color: var(--text);
+                font-weight: 700;
+            }
+            .cloud-announce-bullet {
+                color: var(--green);
+                font-size: 0.7rem;
+                line-height: 1.4;
+                margin-top: 0.15rem;
+                flex-shrink: 0;
+            }
+            .cloud-announce-actions {
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                flex-wrap: wrap;
+            }
+            .cloud-announce-note {
+                font-size: 0.75rem;
+                color: var(--dimmed);
+            }
+            @media (max-width: 640px) {
+                .cloud-announce {
+                    padding: 1.5rem 1.25rem;
+                }
+                .cloud-announce-title {
+                    font-size: 1.4rem;
+                }
+            }
+
+            .section-title {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 1rem;
+            }
+            .section-title h2 {
+                margin: 0;
+                font-size: 1.15rem;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+            }
+
+            .card {
+                background: var(--surface);
+                border: 1px solid var(--border-solid);
+                border-radius: var(--radius);
+                padding: 1rem 1.15rem;
+                margin-bottom: 0.65rem;
+                transition: border-color 0.2s;
+            }
+
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 0.75rem;
+            }
+            .source-card {
+                padding: 1rem;
+                cursor: pointer;
+                min-width: 0;
+                transition:
+                    border-color 0.2s,
+                    transform 0.2s,
+                    background 0.2s;
+            }
+            .source-card:hover {
+                border-color: var(--green);
+                background: var(--surface-2);
+                transform: translateY(-1px);
+            }
+            .source-card .head {
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                margin-bottom: 0.5rem;
+            }
+            .logo {
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                border-radius: 6px;
+                background: #6b7280;
+                padding: 5px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+            }
+            .logo img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                filter: brightness(0) invert(1);
+            }
+            .logo-fallback {
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                border-radius: 6px;
+                background: #6b7280;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: var(--mono);
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: #fff;
+                text-transform: uppercase;
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+            }
+            .source-card .name {
+                font-weight: 700;
+                color: var(--text);
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .source-card .desc {
+                color: var(--muted);
+                font-size: 0.8rem;
+                line-height: 1.4;
+                min-height: 34px;
+                overflow-wrap: anywhere;
+            }
+            .source-card .tag {
+                font-family: var(--mono);
+                font-size: 0.65rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                padding: 0.15rem 0.55rem;
+                background: rgba(122, 191, 122, 0.1);
+                color: var(--green);
+                border: 1px solid rgba(122, 191, 122, 0.25);
+                border-radius: 999px;
+                display: inline-block;
+                margin-top: 0.5rem;
+            }
+            .source-card .tag.disabled {
+                background: rgba(107, 112, 96, 0.1);
+                color: var(--dimmed);
+                border-color: var(--border-solid);
+            }
+
+            .coming-soon {
+                background: linear-gradient(
+                    135deg,
+                    rgba(122, 191, 122, 0.04) 0%,
+                    rgba(22, 29, 19, 0.5) 100%
+                );
+                border: 1px dashed var(--border-light);
+                padding: 1rem 1.15rem;
+                border-radius: var(--radius);
+                color: var(--muted);
+                font-size: 0.875rem;
+                margin-bottom: 1rem;
+            }
+            .coming-soon strong {
+                color: var(--green);
+                font-weight: 700;
+            }
+
+            .onboarding-hero {
+                background: linear-gradient(
+                    135deg,
+                    rgba(122, 191, 122, 0.06) 0%,
+                    rgba(22, 29, 19, 0.4) 100%
+                );
+                border: 1px solid var(--border-solid);
+                border-radius: var(--radius);
+                padding: 1.75rem 1.85rem;
+                margin-bottom: 1.25rem;
+            }
+            .onboarding-hero h3 {
+                margin: 0 0 0.4rem 0;
+                font-size: 1.35rem;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                color: var(--text);
+            }
+            .onboarding-hero p.muted {
+                margin: 0;
+                font-size: 0.95rem;
+                max-width: 680px;
+            }
+            .onboarding-section-label {
+                font-family: var(--mono);
+                font-size: 0.7rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin: 1.1rem 0 0.55rem 0;
+            }
+            .onboarding-popular-grid {
+                margin-bottom: 0.25rem;
+            }
+            .onboarding-browse-all {
+                margin: 0.35rem 0 0.25rem 0;
+            }
+            .onboarding-other-ways {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .picker-card {
+                padding: 12px 14px;
+                border: 1px solid var(--border-solid);
+                border-radius: 6px;
+                cursor: pointer;
+                background: rgba(255, 255, 255, 0.02);
+                transition: border-color 0.2s;
+            }
+
+            .installed-source {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+            }
+            .installed-source .meta {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+            }
+            .installed-source .meta .name {
+                font-weight: 700;
+            }
+            .installed-source .meta .type {
+                color: var(--muted);
+                font-size: 0.75rem;
+                font-family: var(--mono);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .modal-backdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(11, 15, 9, 0.75);
+                backdrop-filter: blur(6px);
+                -webkit-backdrop-filter: blur(6px);
+                display: none;
+                align-items: flex-start;
+                justify-content: center;
+                padding: 60px 20px;
+                z-index: 100;
+            }
+            .modal-backdrop.open {
+                display: flex;
+            }
+            .modal {
+                background: var(--surface);
+                border: 1px solid var(--border-solid);
+                border-radius: var(--radius);
+                padding: 1.5rem 1.75rem;
+                width: 100%;
+                max-width: 520px;
+                max-height: calc(100vh - 120px);
+                overflow-y: auto;
+                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+            }
+            .modal h3 {
+                margin: 0 0 0.25rem 0;
+                font-size: 1.2rem;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+            }
+            .modal p.muted {
+                margin-top: 0;
+                margin-bottom: 1rem;
+            }
+            .modal-actions {
+                display: flex;
+                gap: 0.5rem;
+                justify-content: flex-end;
+                margin-top: 1.25rem;
+            }
+
+            .toast {
+                position: fixed;
+                bottom: 1.5rem;
+                right: 1.5rem;
+                background: var(--surface);
+                border: 1px solid var(--border-light);
+                color: var(--text);
+                padding: 0.85rem 1.1rem;
+                border-radius: var(--radius);
+                box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+                max-width: 360px;
+                font-size: 0.875rem;
+                z-index: 200;
+            }
+            .toast.err {
+                border-color: rgba(196, 122, 106, 0.5);
+                color: var(--red);
+            }
+            .toast.ok {
+                border-color: rgba(122, 191, 122, 0.5);
+                color: var(--green-accent);
+            }
+
+            .filter-row {
+                display: flex;
+                gap: 0.5rem;
+                margin-bottom: 1rem;
+                flex-wrap: wrap;
+            }
+            .filter-row input {
+                flex: 1 1 220px;
+                min-width: 180px;
+            }
+            .filter-row select {
+                flex: 0 0 auto;
+                width: auto;
+                min-width: 160px;
+            }
+
+            hr {
+                border: 0;
+                border-top: 1px solid var(--border-solid);
+            }
+
+            ::selection {
+                background: rgba(122, 191, 122, 0.3);
+                color: var(--text);
+            }
+
+            ::-webkit-scrollbar {
+                width: 10px;
+                height: 10px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--border-solid);
+                border-radius: 999px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: var(--border-light);
+            }
+
+            .email-modal {
+                position: fixed;
+                inset: 0;
+                z-index: 200;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 1.5rem;
+                background: rgba(6, 9, 5, 0.82);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                opacity: 0;
+                transition: opacity 0.25s ease-out;
+            }
+            .email-modal.open {
+                display: flex;
+                opacity: 1;
+            }
+            .email-modal-card {
+                position: relative;
+                width: min(460px, 100%);
+                background: var(--surface);
+                border: 1px solid var(--border-light);
+                border-radius: 14px;
+                padding: 2.25rem 2rem 1.75rem;
+                box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+            }
+            .email-modal-close {
+                position: absolute;
+                top: 0.875rem;
+                right: 0.875rem;
+                width: 2rem;
+                height: 2rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: none;
+                color: var(--muted);
+                cursor: pointer;
+                font-size: 1.25rem;
+                line-height: 1;
+                border-radius: 6px;
+                transition: color 0.2s, background 0.2s;
+            }
+            .email-modal-close:hover {
+                color: var(--text);
+                background: rgba(255, 255, 255, 0.04);
+            }
+            .email-modal-eyebrow {
+                font-family: "DM Mono", monospace;
+                font-size: 0.65rem;
+                letter-spacing: 0.2em;
+                text-transform: uppercase;
+                color: var(--green);
+                margin-bottom: 0.75rem;
+            }
+            .email-modal-title {
+                font-size: 1.5rem;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                line-height: 1.15;
+                margin: 0 0 0.5rem 0;
+            }
+            .email-modal-sub {
+                font-size: 0.9375rem;
+                color: var(--muted);
+                line-height: 1.55;
+                margin-bottom: 1.5rem;
+            }
+            .email-modal-form {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+            .email-modal-input {
+                width: 100%;
+                padding: 0.875rem 1rem;
+                background: rgba(0, 0, 0, 0.35);
+                border: 1px solid var(--border-light);
+                border-radius: 8px;
+                color: var(--text);
+                font-size: 1rem;
+                transition: border-color 0.2s, background 0.2s;
+            }
+            .email-modal-input::placeholder {
+                color: var(--dimmed);
+            }
+            .email-modal-input:focus {
+                outline: none;
+                border-color: var(--green);
+                background: rgba(0, 0, 0, 0.5);
+            }
+            .email-modal-input.invalid {
+                border-color: var(--red);
+            }
+            .email-modal-error {
+                font-size: 0.8125rem;
+                color: var(--red);
+                min-height: 1.1em;
+                margin: -0.25rem 0 0 0;
+            }
+            .email-modal-submit {
+                width: 100%;
+                padding: 0.9375rem 1.5rem;
+                background: var(--green);
+                color: #000;
+                font-weight: 700;
+                font-size: 1rem;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: filter 0.2s;
+                margin-top: 0.25rem;
+            }
+            .email-modal-submit:hover {
+                filter: brightness(1.08);
+            }
+            .email-modal-foot {
+                font-size: 0.75rem;
+                color: var(--dimmed);
+                text-align: center;
+                margin-top: 1rem;
+            }
+            .email-modal-view-success {
+                display: none;
+            }
+            .email-modal-card.success .email-modal-view-form {
+                display: none;
+            }
+            .email-modal-card.success .email-modal-view-success {
+                display: block;
+            }
+            .email-modal-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+            .email-modal-action-primary {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.5rem;
+                text-decoration: none;
+            }
+            .email-modal-action-secondary {
+                width: 100%;
+                padding: 0.875rem 1.5rem;
+                background: transparent;
+                color: var(--text);
+                font-weight: 600;
+                font-size: 0.9375rem;
+                border: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+                border-radius: 8px;
+                cursor: pointer;
+                transition:
+                    border-color 0.2s,
+                    background 0.2s,
+                    color 0.2s;
+            }
+            .email-modal-action-secondary:hover {
+                border-color: var(--green);
+                color: var(--green);
+                background: rgba(122, 191, 122, 0.06);
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1><img src="/logo.svg" alt="" /> Dinobase Setup</h1>
+            <div style="display: flex; align-items: center; gap: 0.75rem">
+                <div id="status-pill" class="pill">
+                    <span class="dot"></span
+                    ><span id="status-text">Loading…</span>
+                </div>
+                <button
+                    type="button"
+                    id="cloud-header-cta"
+                    class="cloud-header-cta"
+                    hidden
+                >Join the waitlist</button>
+            </div>
+        </header>
+        <main>
+            <section
+                class="cloud-announce"
+                id="cloud-announce"
+                aria-labelledby="cloud-announce-title"
+            >
+                <button
+                    type="button"
+                    class="cloud-announce-close"
+                    id="cloud-announce-close"
+                    aria-label="Dismiss"
+                >✕</button>
+                <div class="cloud-announce-eyebrow">
+                    <span class="cloud-announce-dot"></span>
+                    Coming soon
+                </div>
+                <h2 id="cloud-announce-title" class="cloud-announce-title">
+                    Dinobase Cloud
+                </h2>
+                <p class="cloud-announce-sub">
+                    Everything in Local, plus managed warehouse, predictive
+                    modeling, and humans-in-the-loop.
+                </p>
+                <ul class="cloud-announce-features">
+                    <li>
+                        <span class="cloud-announce-bullet">◆</span>
+                        <div>Human-in-the-loop semantic review and editing</div>
+                    </li>
+                    <li>
+                        <span class="cloud-announce-bullet">◆</span>
+                        <div>
+                            Predictive layer — agents train models, materialize
+                            predictions as views
+                        </div>
+                    </li>
+                    <li>
+                        <span class="cloud-announce-bullet">◆</span>
+                        <div>
+                            Automated BIs — dashboards, insights, data
+                            exploration
+                        </div>
+                    </li>
+                    <li>
+                        <span class="cloud-announce-bullet">◆</span>
+                        <div>Managed ops, SSO, audit logs</div>
+                    </li>
+                </ul>
+                <div class="cloud-announce-actions">
+                    <button
+                        type="button"
+                        id="cloud-announce-cta"
+                        class="primary"
+                    >Join the waitlist →</button>
+                    <span class="cloud-announce-note">
+                        No spam. We'll reach out when Dinobase Cloud is
+                        available to try out.
+                    </span>
+                </div>
+            </section>
+            <section>
+                <div class="section-title">
+                    <h2>Your connectors</h2>
+                    <div>
+                        <button id="add-connector-btn" class="primary">
+                            + Add connector
+                        </button>
+                    </div>
+                </div>
+                <div id="installed-list"></div>
+            </section>
+        </main>
+        <div id="dino-mascot">
+            <img src="/dino.png" alt="" />
+        </div>
+
+        <div class="modal-backdrop" id="modal">
+            <div class="modal" id="modal-content"></div>
+        </div>
+        <div id="toast" style="display: none" class="toast"></div>
+
+        <div
+            class="email-modal"
+            id="email-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="email-modal-title"
+            aria-hidden="true"
+        >
+            <div class="email-modal-card" id="email-modal-card">
+                <button
+                    type="button"
+                    class="email-modal-close"
+                    id="email-modal-close"
+                    aria-label="Close"
+                >✕</button>
+                <div class="email-modal-view email-modal-view-form">
+                    <p class="email-modal-eyebrow" id="email-modal-eyebrow">Coming soon</p>
+                    <h2 class="email-modal-title" id="email-modal-title">
+                        Join the waitlist
+                    </h2>
+                    <p class="email-modal-sub" id="email-modal-sub">
+                        No spam. We'll reach out when Dinobase Cloud is
+                        available to try out.
+                    </p>
+                    <form class="email-modal-form" id="email-modal-form" novalidate>
+                        <input
+                            type="email"
+                            class="email-modal-input"
+                            id="email-modal-input"
+                            name="email"
+                            placeholder="you@company.com"
+                            autocomplete="email"
+                            required
+                        />
+                        <p class="email-modal-error" id="email-modal-error" aria-live="polite"></p>
+                        <button type="submit" class="email-modal-submit">Continue →</button>
+                    </form>
+                </div>
+                <div class="email-modal-view email-modal-view-success">
+                    <p class="email-modal-eyebrow">You're in</p>
+                    <h2 class="email-modal-title">Thanks — we'll be in touch</h2>
+                    <p class="email-modal-sub">
+                        While you wait, pick your next step:
+                    </p>
+                    <div class="email-modal-actions">
+                        <a
+                            href="https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA"
+                            class="email-modal-submit email-modal-action-primary"
+                            id="email-modal-slack"
+                            target="_blank"
+                            rel="noopener"
+                        >💬 Join the Slack community</a>
+                        <button
+                            type="button"
+                            class="email-modal-action-secondary"
+                            id="email-modal-book"
+                        >Book a 15-min call →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if(typeof namespace === "string"){cal.ns[namespace] = cal.ns[namespace] || api;p(cal.ns[namespace], ar);p(cal, ["initNamespace", namespace]);} else p(cal, ar); return;} p(cal, ar); }; })(window, "https://app.cal.eu/embed/embed.js", "init");
+            Cal("init", "dinobase-15-min-setup", {origin:"https://app.cal.eu"});
+            Cal.ns["dinobase-15-min-setup"]("ui", {"hideEventTypeDetails":false,"layout":"month_view"});
+        </script>
+
+        <script>
+            // ---------------- API client ----------------
+            const tokenFromUrl = new URLSearchParams(location.search).get(
+                "token",
+            );
+            if (tokenFromUrl) {
+                sessionStorage.setItem("dinobase-local-token", tokenFromUrl);
+                history.replaceState({}, "", location.pathname);
+            }
+            const TOKEN =
+                sessionStorage.getItem("dinobase-local-token") ||
+                window.__DINOBASE_TOKEN__;
+
+            async function api(method, path, body) {
+                const opts = {
+                    method,
+                    headers: {
+                        "X-Dinobase-Local-Token": TOKEN,
+                        "Content-Type": "application/json",
+                    },
+                };
+                if (body !== undefined) opts.body = JSON.stringify(body);
+                const res = await fetch(path, opts);
+                if (res.status === 204) return null;
+                const data = await res
+                    .json()
+                    .catch(() => ({ error: "invalid response" }));
+                if (!res.ok)
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                return data;
+            }
+
+            // ---------------- Email modal (book-a-call) ----------------
+            const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            let emailModalSource = null;
+            let emailModalCapturedEmail = null;
+
+            window.openEmailModal = function (source) {
+                emailModalSource = source || null;
+                const modal = document.getElementById("email-modal");
+                const card = document.getElementById("email-modal-card");
+                const input = document.getElementById("email-modal-input");
+                const err = document.getElementById("email-modal-error");
+                const eyebrow = document.getElementById("email-modal-eyebrow");
+                const title = document.getElementById("email-modal-title");
+                const sub = document.getElementById("email-modal-sub");
+                card.classList.remove("success");
+                if (source) {
+                    eyebrow.textContent = "Let's talk";
+                    title.textContent = "Drop your email.";
+                    sub.textContent = `We'll help you connect ${source} live — 15 minutes, no deck.`;
+                } else {
+                    eyebrow.textContent = "Coming soon";
+                    title.textContent = "Join the waitlist";
+                    sub.textContent =
+                        "No spam. We'll reach out when Dinobase Cloud is available to try out.";
+                }
+                err.textContent = "";
+                input.value = "";
+                input.classList.remove("invalid");
+                modal.classList.add("open");
+                modal.setAttribute("aria-hidden", "false");
+                setTimeout(() => input.focus(), 50);
+            };
+
+            function closeEmailModal() {
+                const modal = document.getElementById("email-modal");
+                modal.classList.remove("open");
+                modal.setAttribute("aria-hidden", "true");
+            }
+
+            function openCalBooking() {
+                if (window.Cal && Cal.ns && Cal.ns["dinobase-15-min-setup"]) {
+                    Cal.ns["dinobase-15-min-setup"]("modal", {
+                        calLink: "em-dinobase/dinobase-15-min-setup",
+                        config: {
+                            layout: "month_view",
+                            email: emailModalCapturedEmail || "",
+                            ...(emailModalSource
+                                ? { "metadata[source]": emailModalSource }
+                                : {}),
+                        },
+                    });
+                } else {
+                    toast("Thanks — we'll be in touch.", "ok");
+                }
+            }
+
+            (function wireEmailModal() {
+                const modal = document.getElementById("email-modal");
+                const card = document.getElementById("email-modal-card");
+                const form = document.getElementById("email-modal-form");
+                const input = document.getElementById("email-modal-input");
+                const err = document.getElementById("email-modal-error");
+                document
+                    .getElementById("email-modal-close")
+                    .addEventListener("click", closeEmailModal);
+                modal.addEventListener("click", (e) => {
+                    if (e.target === modal) closeEmailModal();
+                });
+                document.addEventListener("keydown", (e) => {
+                    if (e.key === "Escape" && modal.classList.contains("open")) {
+                        closeEmailModal();
+                    }
+                });
+                form.addEventListener("submit", (e) => {
+                    e.preventDefault();
+                    const email = input.value.trim();
+                    if (!EMAIL_RE.test(email)) {
+                        input.classList.add("invalid");
+                        err.textContent = "Please enter a valid email.";
+                        input.focus();
+                        return;
+                    }
+                    input.classList.remove("invalid");
+                    err.textContent = "";
+                    emailModalCapturedEmail = email;
+                    card.classList.add("success");
+                });
+
+                document
+                    .getElementById("email-modal-slack")
+                    .addEventListener("click", closeEmailModal);
+                document
+                    .getElementById("email-modal-book")
+                    .addEventListener("click", () => {
+                        closeEmailModal();
+                        openCalBooking();
+                    });
+            })();
+
+            // ---------------- Toast ----------------
+            let toastTimer;
+            function toast(msg, kind = "") {
+                const el = document.getElementById("toast");
+                el.textContent = msg;
+                el.className = "toast " + kind;
+                el.style.display = "block";
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    el.style.display = "none";
+                }, 4000);
+            }
+
+            // ---------------- Modal ----------------
+            function attachHelpIcons(root) {
+                root.querySelectorAll(".field > .help").forEach((help) => {
+                    const field = help.parentElement;
+                    const label = field.querySelector("label");
+                    if (!label) return;
+                    const icon = document.createElement("span");
+                    icon.className = "help-icon";
+                    icon.tabIndex = 0;
+                    icon.setAttribute("aria-label", "Help");
+                    icon.textContent = "?";
+                    icon.dataset.tip = help.innerHTML;
+                    label.appendChild(document.createTextNode(" "));
+                    label.appendChild(icon);
+                    help.remove();
+                });
+            }
+            let _helpTipEl = null;
+            function _ensureHelpTip() {
+                if (!_helpTipEl) {
+                    _helpTipEl = document.createElement("div");
+                    _helpTipEl.className = "help-tip-floating";
+                    document.body.appendChild(_helpTipEl);
+                }
+                return _helpTipEl;
+            }
+            function _showHelpTip(icon) {
+                const tip = _ensureHelpTip();
+                tip.innerHTML = icon.dataset.tip || "";
+                tip.classList.add("open");
+                const r = icon.getBoundingClientRect();
+                const tipR = tip.getBoundingClientRect();
+                let top = r.top - tipR.height - 8;
+                if (top < 8) top = r.bottom + 8;
+                let left = r.left + r.width / 2 - tipR.width / 2;
+                if (left < 8) left = 8;
+                if (left + tipR.width > window.innerWidth - 8) {
+                    left = window.innerWidth - tipR.width - 8;
+                }
+                tip.style.top = top + "px";
+                tip.style.left = left + "px";
+            }
+            function _hideHelpTip() {
+                if (_helpTipEl) _helpTipEl.classList.remove("open");
+            }
+            document.addEventListener("mouseover", (e) => {
+                const icon = e.target.closest && e.target.closest(".help-icon");
+                if (icon) _showHelpTip(icon);
+            });
+            document.addEventListener("mouseout", (e) => {
+                const icon = e.target.closest && e.target.closest(".help-icon");
+                if (
+                    icon &&
+                    (!e.relatedTarget || !icon.contains(e.relatedTarget))
+                ) {
+                    _hideHelpTip();
+                }
+            });
+            document.addEventListener("focusin", (e) => {
+                const icon = e.target.closest && e.target.closest(".help-icon");
+                if (icon) _showHelpTip(icon);
+            });
+            document.addEventListener("focusout", (e) => {
+                const icon = e.target.closest && e.target.closest(".help-icon");
+                if (icon) _hideHelpTip();
+            });
+            function openModal(html) {
+                const content = document.getElementById("modal-content");
+                content.innerHTML = html;
+                attachHelpIcons(content);
+                document.getElementById("modal").classList.add("open");
+            }
+            function closeModal() {
+                document.getElementById("modal").classList.remove("open");
+            }
+            document.getElementById("modal").addEventListener("click", (e) => {
+                if (e.target.id === "modal") closeModal();
+            });
+
+            // Native confirm() can be silently suppressed by Chrome in some
+            // contexts (after a navigation, after a previous suppressed dialog,
+            // when the page has lost user-activation, etc). Use an in-page
+            // modal instead so the user always gets a click-target.
+            function confirmModal(
+                message,
+                { confirmLabel = "Confirm", danger = false } = {},
+            ) {
+                return new Promise((resolve) => {
+                    openModal(`
+                        <h3>Confirm</h3>
+                        <p style="margin-top:0;">${esc(message)}</p>
+                        <div class="modal-actions">
+                          <button type="button" id="confirm-no">Cancel</button>
+                          <button type="button" id="confirm-yes" class="${danger ? "danger" : "primary"}">${esc(confirmLabel)}</button>
+                        </div>
+                    `);
+                    const cleanup = (val) => {
+                        closeModal();
+                        resolve(val);
+                    };
+                    document
+                        .getElementById("confirm-yes")
+                        .addEventListener("click", () => cleanup(true));
+                    document
+                        .getElementById("confirm-no")
+                        .addEventListener("click", () => cleanup(false));
+                });
+            }
+
+            // ---------------- State ----------------
+            let REGISTRY = [];
+            let SOURCES_INSTALLED = [];
+            let CONNECTORS = [];
+
+            const POPULAR_SOURCES = [
+                "postgres",
+                "mysql",
+                "google_sheets",
+                "stripe",
+                "hubspot",
+                "notion",
+                "shopify",
+                "slack",
+            ];
+
+            async function refresh() {
+                try {
+                    const [status, reg, inst, conn] = await Promise.all([
+                        api("GET", "/api/local/status"),
+                        api("GET", "/api/local/registry"),
+                        api("GET", "/api/local/sources"),
+                        api("GET", "/api/local/connectors"),
+                    ]);
+                    REGISTRY = reg.sources || [];
+                    SOURCES_INSTALLED = inst.connectors || [];
+                    CONNECTORS = conn.connectors || [];
+                    renderStatusPill(status);
+                    renderInstalled();
+                    populateIndustryFilter();
+                    renderSourceGrid();
+                } catch (e) {
+                    toast("Couldn't reach setup server: " + e.message, "err");
+                }
+            }
+
+            function renderStatusPill(status) {
+                document.getElementById("status-text").textContent =
+                    `Local mode · v${status.version}`;
+                document
+                    .getElementById("status-pill")
+                    .classList.remove("ok");
+            }
+
+            function renderInstalled() {
+                const root = document.getElementById("installed-list");
+                const items = [
+                    ...SOURCES_INSTALLED.map((s) => ({
+                        kind: "source",
+                        data: s,
+                    })),
+                    ...CONNECTORS.map((c) => ({
+                        kind: c.kind === "mcp" ? "mcp" : "rest",
+                        data: c,
+                    })),
+                ];
+                if (items.length === 0) {
+                    renderOnboarding(root);
+                    return;
+                }
+                root.innerHTML = items.map(renderInstalledCard).join("");
+            }
+
+            function renderOnboarding(root) {
+                const popular = POPULAR_SOURCES
+                    .map((slug) => REGISTRY.find((r) => r.name === slug))
+                    .filter(Boolean);
+
+                const choices = [
+                    {
+                        id: "verified",
+                        title: "Verified source",
+                        desc: "Browse 100+ pre-built connectors for SaaS APIs, databases, and file storage.",
+                    },
+                    {
+                        id: "mcp-registry",
+                        title: "MCP from registry",
+                        desc: "Install any of 1,400+ MCP servers listed in the official catalog.",
+                    },
+                    {
+                        id: "mcp-custom",
+                        title: "Custom MCP server",
+                        desc: "Add your own MCP server by command (stdio), SSE URL, or streamable-HTTP URL.",
+                    },
+                    {
+                        id: "rest-custom",
+                        title: "Custom REST connector",
+                        desc: "Point Dinobase at any REST API and generate a YAML connector you can tweak.",
+                    },
+                ];
+
+                const popularHtml = popular.length
+                    ? `
+                        <div class="onboarding-section-label">Popular sources</div>
+                        <div class="grid onboarding-popular-grid">
+                          ${popular
+                              .map(
+                                  (s) => `
+                            <div class="card source-card" data-onboarding-source="${esc(s.name)}">
+                              <div class="head">
+                                ${sourceLogoHtml(s.name)}
+                                <div class="name">${esc(s.name)}</div>
+                              </div>
+                              <div class="desc">${esc((s.description || "").slice(0, 120))}</div>
+                                                </div>`,
+                              )
+                              .join("")}
+                        </div>
+                        <div class="onboarding-browse-all">
+                          <button type="button" class="link" id="onboarding-browse-all-btn">Browse all 100+ connectors →</button>
+                        </div>
+                    `
+                    : "";
+
+                root.innerHTML = `
+                    <div class="onboarding-hero">
+                      <h3>Connect your first data source</h3>
+                      <p class="muted">Dinobase pulls data from the tools you already use — databases, SaaS APIs, spreadsheets — so your agents can query it with SQL or natural language. Pick one to get started.</p>
+                    </div>
+                    ${popularHtml}
+                    <div class="onboarding-section-label">Or pick a different way</div>
+                    <div class="onboarding-other-ways">
+                      ${choices
+                          .map(
+                              (c) => `
+                        <div class="picker-card" data-onboarding-choice="${c.id}">
+                          <div style="font-weight:600;margin-bottom:2px;">${esc(c.title)} →</div>
+                          <div class="muted" style="font-size:13px;">${esc(c.desc)}</div>
+                        </div>`,
+                          )
+                          .join("")}
+                    </div>
+                `;
+
+                root.querySelectorAll("[data-onboarding-source]").forEach(
+                    (card) => {
+                        card.addEventListener("click", () => {
+                            addSourceModal(
+                                card.getAttribute("data-onboarding-source"),
+                            );
+                        });
+                    },
+                );
+                root.querySelectorAll("[data-onboarding-choice]").forEach(
+                    (card) => {
+                        card.addEventListener("mouseenter", () => {
+                            card.style.borderColor = "var(--green)";
+                        });
+                        card.addEventListener("mouseleave", () => {
+                            card.style.borderColor = "var(--border-solid)";
+                        });
+                        card.addEventListener("click", () => {
+                            const choice = card.getAttribute(
+                                "data-onboarding-choice",
+                            );
+                            if (choice === "verified") openVerifiedPicker();
+                            else if (choice === "mcp-registry")
+                                openMcpCatalogBrowser();
+                            else if (choice === "mcp-custom")
+                                openNewMcpModal();
+                            else if (choice === "rest-custom")
+                                openNewRestModal();
+                        });
+                    },
+                );
+                const browseBtn = root.querySelector("#onboarding-browse-all-btn");
+                if (browseBtn) {
+                    browseBtn.addEventListener("click", openVerifiedPicker);
+                }
+            }
+
+            function renderInstalledCard(item) {
+                if (item.kind === "source") {
+                    const s = item.data;
+                    return `
+          <div class="card installed-source">
+            <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 0;">
+              ${sourceLogoHtml(s.type || s.name)}
+              <div class="meta">
+                <span class="name">${esc(s.name)}</span>
+                <span class="type">${esc(s.type || "source")}</span>
+              </div>
+            </div>
+            <button class="danger" data-action="remove-source" data-name="${esc(s.name)}">Disconnect</button>
+          </div>
+        `;
+                }
+                const c = item.data;
+                let kindLabel;
+                let subtitle;
+                if (c.kind === "rest") {
+                    kindLabel = "REST API";
+                    const resources = (c.resources || []).filter(Boolean);
+                    subtitle = c.base_url || "";
+                    if (resources.length)
+                        subtitle +=
+                            (subtitle ? " · " : "") + resources.join(", ");
+                } else if (c.kind === "mcp") {
+                    kindLabel = "MCP server";
+                    const detail = c.transport === "stdio" ? c.command : c.url;
+                    subtitle =
+                        (c.transport || "") + (detail ? " · " + detail : "");
+                } else {
+                    kindLabel = c.kind || "connector";
+                    subtitle = "";
+                }
+                const type = subtitle
+                    ? `${kindLabel} · ${subtitle}`
+                    : kindLabel;
+                const warn = c.parse_error
+                    ? `<span class="type" style="color: var(--red);">parse error</span>`
+                    : "";
+                return `
+        <div class="card installed-source">
+          <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 0;">
+            <div class="logo-fallback">${esc((c.name[0] || "?").toUpperCase())}</div>
+            <div class="meta">
+              <span class="name">${esc(c.name)}</span>
+              <span class="type">${esc(type)}</span>
+              ${c.description ? `<span class="type">${esc(c.description)}</span>` : ""}
+              ${warn}
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button data-action="edit-connector" data-name="${esc(c.name)}">Edit</button>
+            <button class="danger" data-action="delete-connector" data-name="${esc(c.name)}">Delete</button>
+          </div>
+        </div>
+      `;
+            }
+
+            document
+                .getElementById("installed-list")
+                .addEventListener("click", (ev) => {
+                    const btn = ev.target.closest("button[data-action]");
+                    if (!btn) return;
+                    const action = btn.getAttribute("data-action");
+                    const name = btn.getAttribute("data-name") || "";
+                    if (action === "remove-source") removeSource(name);
+                    else if (action === "delete-connector")
+                        deleteConnector(name);
+                    else if (action === "edit-connector") editConnector(name);
+                });
+
+            // Set of source slugs that have a bundled logo. Populated at page load
+            // from window.__DINOBASE_LOGOS__, which the server fills by listing
+            // dinobase/setup_server/ui/logos/*.svg. Sources not in this set fall
+            // back to a monogram instead of 404ing.
+            const LOGOS = new Set(window.__DINOBASE_LOGOS__ || []);
+            const LOGO_COLORS = window.__DINOBASE_LOGO_COLORS__ || {};
+
+            function sourceLogoHtml(name) {
+                const color = LOGO_COLORS[name];
+                const bg = color ? `#${color}` : "#6b7280";
+                if (LOGOS.has(name)) {
+                    return `<div class="logo" style="background:${bg}"><img src="/logos/${encodeURIComponent(name)}.svg" alt="" loading="lazy" /></div>`;
+                }
+                return `<div class="logo-fallback" style="background:${bg}">${esc((name[0] || "?").toUpperCase())}</div>`;
+            }
+
+            // SaaS-only industry classification. Databases and file-storage sources
+            // skip this map and auto-resolve to "Data & Storage" via sourceIndustry().
+            const INDUSTRIES = {
+                // CRM & Sales
+                hubspot: "CRM & Sales",
+                pipedrive: "CRM & Sales",
+                salesforce: "CRM & Sales",
+                attio: "CRM & Sales",
+                close: "CRM & Sales",
+                copper: "CRM & Sales",
+                gainsight: "CRM & Sales",
+                vitally: "CRM & Sales",
+                monday: "CRM & Sales",
+                // Payments & Finance
+                stripe: "Payments & Finance",
+                brex: "Payments & Finance",
+                chargebee: "Payments & Finance",
+                lemon_squeezy: "Payments & Finance",
+                mercury: "Payments & Finance",
+                paddle: "Payments & Finance",
+                quickbooks: "Payments & Finance",
+                recurly: "Payments & Finance",
+                square: "Payments & Finance",
+                xero: "Payments & Finance",
+                // E-commerce
+                shopify: "E-commerce",
+                bigcommerce: "E-commerce",
+                woocommerce: "E-commerce",
+                // Developer Tools
+                jira: "Developer Tools",
+                github: "Developer Tools",
+                gitlab: "Developer Tools",
+                bitbucket: "Developer Tools",
+                linear: "Developer Tools",
+                datadog: "Developer Tools",
+                newrelic: "Developer Tools",
+                sentry: "Developer Tools",
+                pagerduty: "Developer Tools",
+                opsgenie: "Developer Tools",
+                statuspage: "Developer Tools",
+                cloudflare: "Developer Tools",
+                netlify: "Developer Tools",
+                vercel: "Developer Tools",
+                twilio: "Developer Tools",
+                sendgrid: "Developer Tools",
+                // Support & Communication
+                slack: "Support & Communication",
+                zendesk: "Support & Communication",
+                freshdesk: "Support & Communication",
+                intercom: "Support & Communication",
+                discord: "Support & Communication",
+                front: "Support & Communication",
+                helpscout: "Support & Communication",
+                // Productivity
+                notion: "Productivity",
+                airtable: "Productivity",
+                google_sheets: "Productivity",
+                asana: "Productivity",
+                clickup: "Productivity",
+                trello: "Productivity",
+                todoist: "Productivity",
+                figma: "Productivity",
+                // Marketing & Analytics
+                facebook_ads: "Marketing & Analytics",
+                google_analytics: "Marketing & Analytics",
+                google_ads: "Marketing & Analytics",
+                matomo: "Marketing & Analytics",
+                bing_webmaster: "Marketing & Analytics",
+                amplitude: "Marketing & Analytics",
+                mixpanel: "Marketing & Analytics",
+                plausible: "Marketing & Analytics",
+                posthog: "Marketing & Analytics",
+                segment: "Marketing & Analytics",
+                mailchimp: "Marketing & Analytics",
+                customerio: "Marketing & Analytics",
+                hubspot_marketing: "Marketing & Analytics",
+                // HR & People
+                personio: "HR & People",
+                workable: "HR & People",
+                bamboohr: "HR & People",
+                deel: "HR & People",
+                greenhouse: "HR & People",
+                gusto: "HR & People",
+                lever: "HR & People",
+                // Content & CMS
+                strapi: "Content & CMS",
+                contentful: "Content & CMS",
+                sanity: "Content & CMS",
+                wordpress: "Content & CMS",
+                mux: "Content & CMS",
+                // Data & Messaging (SaaS-style — the type filter still shows them as saas)
+                mongodb: "Data & Storage",
+                kafka: "Data & Storage",
+                kinesis: "Data & Storage",
+            };
+
+            function sourceIndustry(s) {
+                if (s.type === "database" || s.type === "file_storage")
+                    return "Data & Storage";
+                return INDUSTRIES[s.name] || "Other";
+            }
+
+            function populateIndustryFilter() {
+                const sel = document.getElementById("industry-filter");
+                if (!sel) return;
+                const current = sel.value;
+                const industries = Array.from(
+                    new Set(
+                        REGISTRY.filter((s) => !s.is_custom).map(
+                            sourceIndustry,
+                        ),
+                    ),
+                ).sort();
+                sel.innerHTML =
+                    '<option value="">All industries</option>' +
+                    industries
+                        .map(
+                            (i) =>
+                                `<option value="${esc(i)}">${esc(i)}</option>`,
+                        )
+                        .join("");
+                if (industries.includes(current)) sel.value = current;
+            }
+
+            function renderSourceGrid() {
+                const grid = document.getElementById("source-grid");
+                if (!grid) return;
+                const q = document
+                    .getElementById("source-filter")
+                    .value.trim()
+                    .toLowerCase();
+                const typeFilter = document.getElementById("type-filter").value;
+                const industryFilter =
+                    document.getElementById("industry-filter").value;
+                const filtered = REGISTRY.filter((s) => {
+                    if (s.is_custom) return false;
+                    if (q) {
+                        const hay = (
+                            s.name +
+                            " " +
+                            (s.description || "")
+                        ).toLowerCase();
+                        if (!hay.includes(q)) return false;
+                    }
+                    if (typeFilter && s.type !== typeFilter) return false;
+                    if (industryFilter && sourceIndustry(s) !== industryFilter)
+                        return false;
+                    return true;
+                });
+                if (filtered.length === 0) {
+                    grid.innerHTML =
+                        '<div class="muted" style="grid-column: 1/-1;">No sources match these filters.</div>';
+                    return;
+                }
+                grid.innerHTML = filtered
+                    .map(
+                        (s) => `
+        <div class="card source-card" onclick="addSourceModal('${esc(s.name)}')">
+          <div class="head">
+            ${sourceLogoHtml(s.name)}
+            <div class="name">${esc(s.name)}</div>
+          </div>
+          <div class="desc">${esc((s.description || "").slice(0, 120))}</div>
+        </div>
+      `,
+                    )
+                    .join("");
+            }
+
+            function esc(s) {
+                return String(s ?? "").replace(
+                    /[&<>"']/g,
+                    (c) =>
+                        ({
+                            "&": "&amp;",
+                            "<": "&lt;",
+                            ">": "&gt;",
+                            '"': "&quot;",
+                            "'": "&#39;",
+                        })[c],
+                );
+            }
+
+            // ---------------- Add source modal ----------------
+            window.addSourceModal = function (type) {
+                const entry = REGISTRY.find((s) => s.name === type);
+                if (!entry) return;
+                const fields = (entry.credentials || [])
+                    .map(
+                        (p) => `
+        <div class="field">
+          <label>${esc(p.prompt || p.name)}${p.secret ? ' <span class="muted">(secret)</span>' : ""}</label>
+          <input name="${esc(p.name)}" type="${p.secret ? "password" : "text"}" autocomplete="off" />
+          ${p.description ? `<span class="help">${esc(p.description)}</span>` : p.secret ? '<span class="help">Stored locally in <code>~/.dinobase/secrets.yaml</code>. Never sent off this machine.</span>' : ""}
+        </div>
+      `,
+                    )
+                    .join("");
+
+                const bookBtn = entry.supports_oauth
+                    ? `
+        <button type="button" class="primary" id="book-call-btn">
+          Let us set up ${esc(entry.name)} for you →
+        </button>
+        <p class="muted" style="font-size:0.8rem;margin-top:0.35rem;">Managed OAuth is in private beta. Book a 15-minute call and we'll wire it up live.</p>
+      `
+                    : "";
+
+                openModal(`
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+          ${sourceLogoHtml(entry.name)}
+          <h3 style="margin: 0;">Add ${esc(entry.name)}</h3>
+        </div>
+        <p class="muted">${esc(entry.description || "")}</p>
+        ${bookBtn}
+        ${bookBtn && fields ? '<hr style="margin: 18px 0;" /><p class="muted">Or enter credentials manually:</p>' : ""}
+        <form id="add-form">
+          <div class="field">
+            <label>Source name</label>
+            <input name="__name" type="text" value="${esc(entry.name)}" required />
+            <span class="help">A short identifier you'll use to reference this source in SQL (e.g. <code>SELECT * FROM ${esc(entry.name)}.users</code>). Lowercase letters, digits, and underscores.</span>
+          </div>
+          ${fields}
+          <div class="modal-actions">
+            <button type="button" id="add-source-back-btn">Back</button>
+            <button type="submit" class="primary">Save</button>
+          </div>
+        </form>
+      `);
+
+                document
+                    .getElementById("add-source-back-btn")
+                    .addEventListener("click", openVerifiedPicker);
+                if (entry.supports_oauth) {
+                    document
+                        .getElementById("book-call-btn")
+                        .addEventListener("click", () =>
+                            openEmailModal(entry.name),
+                        );
+                }
+                document
+                    .getElementById("add-form")
+                    .addEventListener("submit", async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const name = fd.get("__name");
+                        const credentials = {};
+                        for (const p of entry.credentials || []) {
+                            const v = fd.get(p.name);
+                            if (v) credentials[p.name] = v;
+                        }
+                        try {
+                            await api("POST", "/api/local/sources", {
+                                name,
+                                type: entry.name,
+                                credentials,
+                            });
+                            toast(`Added ${name}`, "ok");
+                            closeModal();
+                            await refresh();
+                        } catch (err) {
+                            toast(err.message, "err");
+                        }
+                    });
+            };
+
+            window.closeModal = closeModal;
+
+            window.removeSource = async function (name) {
+                const ok = await confirmModal(`Disconnect ${name}?`, {
+                    confirmLabel: "Disconnect",
+                    danger: true,
+                });
+                if (!ok) return;
+                SOURCES_INSTALLED = SOURCES_INSTALLED.filter(
+                    (s) => s.name !== name,
+                );
+                renderInstalled();
+                try {
+                    await api(
+                        "DELETE",
+                        "/api/local/sources/" + encodeURIComponent(name),
+                    );
+                    toast(`Disconnected ${name}`, "ok");
+                    refresh();
+                } catch (e) {
+                    toast(e.message, "err");
+                    refresh();
+                }
+            };
+
+            document
+                .getElementById("cloud-announce-cta")
+                .addEventListener("click", () => openEmailModal(null));
+
+            (function wireCloudAnnounceDismiss() {
+                const STORAGE_KEY = "dinobase-cloud-announce-dismissed-v1";
+                const el = document.getElementById("cloud-announce");
+                const closeBtn = document.getElementById("cloud-announce-close");
+                const headerCta = document.getElementById("cloud-header-cta");
+                if (!el || !closeBtn || !headerCta) return;
+
+                function setDismissed(dismissed) {
+                    el.hidden = dismissed;
+                    headerCta.hidden = !dismissed;
+                }
+
+                try {
+                    if (localStorage.getItem(STORAGE_KEY) === "1") {
+                        setDismissed(true);
+                    }
+                } catch (_) {
+                    /* localStorage unavailable */
+                }
+
+                closeBtn.addEventListener("click", () => {
+                    setDismissed(true);
+                    try {
+                        localStorage.setItem(STORAGE_KEY, "1");
+                    } catch (_) {
+                        /* ignore */
+                    }
+                });
+
+                headerCta.addEventListener("click", () => openEmailModal(null));
+            })();
+
+            // ---------------- Shutdown on tab close ----------------
+            // Fire-and-forget quit signal when the tab is actually closing.
+            // `fetch` with `keepalive: true` is allowed to outlive the page
+            // and is more reliable than sendBeacon here because it lets us
+            // send the auth header.
+            function sendQuit() {
+                try {
+                    fetch("/api/local/quit", {
+                        method: "POST",
+                        headers: { "X-Dinobase-Local-Token": TOKEN },
+                        keepalive: true,
+                    });
+                } catch (_) {}
+            }
+            window.addEventListener("pagehide", (e) => {
+                if (!e.persisted) sendQuit();
+            });
+
+            // ---------------- Connector edit ----------------
+            let EDIT_STATE = null;
+
+            window.editConnector = async function (name) {
+                let c;
+                try {
+                    c = await api(
+                        "GET",
+                        "/api/local/connectors/" + encodeURIComponent(name),
+                    );
+                } catch (e) {
+                    toast(e.message, "err");
+                    return;
+                }
+                EDIT_STATE = {
+                    connector: c,
+                    mode:
+                        c.kind === "rest" || c.kind === "mcp" ? "form" : "raw",
+                };
+                renderEditModal();
+            };
+
+            function renderEditModal() {
+                const c = EDIT_STATE.connector;
+                const mode = EDIT_STATE.mode;
+                const canForm = c.kind === "rest" || c.kind === "mcp";
+
+                const toggleBtn = canForm
+                    ? `<button type="button" class="link" id="edit-toggle">${mode === "form" ? "Edit raw YAML" : "Use form"}</button>`
+                    : "";
+
+                let bodyHtml;
+                if (mode === "form" && c.kind === "rest") {
+                    bodyHtml = `
+          <div class="field">
+            <label>Base URL</label>
+            <input name="url" value="${esc(c.base_url || "")}" required />
+            <span class="help">The API root, e.g. <code>https://api.stripe.com/v1/</code>.</span>
+          </div>
+          <div class="field">
+            <label>Endpoint path</label>
+            <input name="endpoint" value="${esc(c.endpoint || "")}" />
+            <span class="help">Path appended to the base URL. Becomes the table name.</span>
+          </div>
+          <div class="field">
+            <label>Data selector (JSONPath)</label>
+            <input name="data_selector" value="${esc(c.data_selector || "$")}" />
+            <span class="help">JSONPath to the array of records in the response (<code>$</code> if the response is the array, <code>$.data</code> if it's wrapped).</span>
+          </div>
+          <div class="field">
+            <label>Auth type</label>
+            <select name="auth_type">
+              ${["bearer", "http_basic", "api_key_header"]
+                  .map(
+                      (v) =>
+                          `<option value="${v}"${c.auth_type === v ? " selected" : ""}>${v}</option>`,
+                  )
+                  .join("")}
+            </select>
+            <span class="help">How Dinobase passes credentials to the API. The actual secret is stored separately via <code>dinobase auth</code>.</span>
+          </div>
+          <div class="field">
+            <label>Mode</label>
+            <select name="mode">
+              ${["auto", "live", "sync"]
+                  .map(
+                      (v) =>
+                          `<option value="${v}"${(c.mode || "auto") === v ? " selected" : ""}>${v}</option>`,
+                  )
+                  .join("")}
+            </select>
+            <span class="help"><code>live</code> hits the API on every query, <code>sync</code> caches results in DuckDB on a schedule, <code>auto</code> picks based on data size.</span>
+          </div>
+        `;
+                } else if (mode === "form" && c.kind === "mcp") {
+                    const isStdio = (c.transport || "stdio") === "stdio";
+                    bodyHtml = `
+          <div class="field">
+            <label>Transport</label>
+            <select name="transport" id="edit-mcp-transport">
+              ${["stdio", "sse", "streamable_http"]
+                  .map(
+                      (v) =>
+                          `<option value="${v}"${(c.transport || "stdio") === v ? " selected" : ""}>${v}</option>`,
+                  )
+                  .join("")}
+            </select>
+            <span class="help"><code>stdio</code> spawns a local subprocess; <code>sse</code> and <code>streamable_http</code> connect to a remote URL.</span>
+          </div>
+          <div class="field" id="edit-mcp-command-field" style="${isStdio ? "" : "display:none;"}">
+            <label>Command</label>
+            <input name="command" value="${esc(c.command || "")}" placeholder="npx -y @modelcontextprotocol/server-filesystem /data" />
+            <span class="help">Shell command to launch the server, usually copied from the server's README.</span>
+          </div>
+          <div class="field" id="edit-mcp-url-field" style="${isStdio ? "display:none;" : ""}">
+            <label>URL</label>
+            <input name="url" value="${esc(c.url || "")}" placeholder="http://localhost:8080/sse" />
+            <span class="help">The remote server's MCP endpoint URL.</span>
+          </div>
+          <div class="field">
+            <label>Mode</label>
+            <select name="mode">
+              ${["live", "sync"]
+                  .map(
+                      (v) =>
+                          `<option value="${v}"${(c.mode || "live") === v ? " selected" : ""}>${v}</option>`,
+                  )
+                  .join("")}
+            </select>
+            <span class="help"><code>live</code> calls tools on every query; <code>sync</code> caches read-only tool output in DuckDB on a schedule.</span>
+          </div>
+        `;
+                } else {
+                    bodyHtml = `
+          <div class="field">
+            <textarea name="raw" rows="22" style="font-family: var(--mono); font-size: 12px;" spellcheck="false">${esc(c.raw || "")}</textarea>
+          </div>
+        `;
+                }
+
+                const warn =
+                    mode === "form" && canForm
+                        ? `<p class="muted" style="font-size: 12px;">Saving via the form regenerates the YAML from these fields and overwrites manual edits. Switch to raw YAML to preserve hand-tweaks.</p>`
+                        : "";
+
+                openModal(`
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <h3 style="margin: 0;">Edit ${esc(c.name)}</h3>
+          ${toggleBtn}
+        </div>
+        <p class="muted" style="font-family: var(--mono); font-size: 12px;">${esc(c.path || "")}</p>
+        ${warn}
+        <form id="edit-form">
+          ${bodyHtml}
+          <div class="modal-actions">
+            <button type="button" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="primary">Save</button>
+          </div>
+        </form>
+      `);
+
+                const toggleEl = document.getElementById("edit-toggle");
+                if (toggleEl) {
+                    toggleEl.addEventListener("click", () => {
+                        EDIT_STATE.mode =
+                            EDIT_STATE.mode === "form" ? "raw" : "form";
+                        renderEditModal();
+                    });
+                }
+
+                const transportSel =
+                    document.getElementById("edit-mcp-transport");
+                if (transportSel) {
+                    transportSel.addEventListener("change", () => {
+                        const stdio = transportSel.value === "stdio";
+                        document.getElementById(
+                            "edit-mcp-command-field",
+                        ).style.display = stdio ? "" : "none";
+                        document.getElementById(
+                            "edit-mcp-url-field",
+                        ).style.display = stdio ? "none" : "";
+                    });
+                }
+
+                document
+                    .getElementById("edit-form")
+                    .addEventListener("submit", async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        let payload;
+                        if (EDIT_STATE.mode === "raw") {
+                            payload = { raw: fd.get("raw") };
+                        } else {
+                            payload = { kind: c.kind };
+                            for (const [k, v] of fd.entries()) payload[k] = v;
+                        }
+                        try {
+                            await api(
+                                "PUT",
+                                "/api/local/connectors/" +
+                                    encodeURIComponent(c.name),
+                                payload,
+                            );
+                            toast(`Saved ${c.name}`, "ok");
+                            closeModal();
+                            await refresh();
+                        } catch (err) {
+                            toast(err.message, "err");
+                        }
+                    });
+            }
+
+            window.deleteConnector = async function (name) {
+                const ok = await confirmModal(
+                    `Delete connector ${name}? The YAML file will be removed.`,
+                    { confirmLabel: "Delete", danger: true },
+                );
+                if (!ok) return;
+                CONNECTORS = CONNECTORS.filter((c) => c.name !== name);
+                renderInstalled();
+                try {
+                    await api(
+                        "DELETE",
+                        "/api/local/connectors/" + encodeURIComponent(name),
+                    );
+                    toast(`Deleted ${name}`, "ok");
+                    refresh();
+                } catch (e) {
+                    toast(e.message, "err");
+                    refresh();
+                }
+            };
+
+            // ---------------- REST / MCP wizards ----------------
+            function openNewRestModal() {
+                openModal(`
+        <h3>New REST connector</h3>
+        <p class="muted">Point Dinobase at any REST API. You can edit the generated YAML later.</p>
+        <form id="rest-form">
+          <div class="field">
+            <label>Name</label>
+            <input name="name" required placeholder="my_api" />
+            <span class="help">Local identifier for this connector. You'll query it as <code>SELECT * FROM name.tablename</code>. Lowercase letters, digits, and underscores.</span>
+          </div>
+          <div class="field">
+            <label>Base URL</label>
+            <input name="url" required placeholder="https://api.example.com/" />
+            <span class="help">The API root, e.g. <code>https://api.stripe.com/v1/</code>. Endpoint paths below are appended to this.</span>
+          </div>
+          <div class="field">
+            <label>Endpoint path</label>
+            <input name="endpoint" placeholder="projects/123/items/" />
+            <span class="help">Path to the specific resource to fetch, relative to the base URL. Becomes the table name.</span>
+          </div>
+          <div class="field">
+            <label>Data selector (JSONPath)</label>
+            <input name="data_selector" value="$" />
+            <span class="help">JSONPath into the response that points at the array of records. Use <code>$</code> if the response itself is the array, or e.g. <code>$.data</code> if records are wrapped.</span>
+          </div>
+          <div class="field">
+            <label>Auth type</label>
+            <select name="auth_type">
+              <option value="bearer">bearer</option>
+              <option value="http_basic">http_basic</option>
+              <option value="api_key_header">api_key_header</option>
+            </select>
+            <span class="help"><code>bearer</code> sends <code>Authorization: Bearer …</code>, <code>http_basic</code> uses username/password, <code>api_key_header</code> sends a custom header. Add the actual credentials later via <code>dinobase auth</code>.</span>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="rest-back-btn">Back</button>
+            <button type="submit" class="primary">Create</button>
+          </div>
+        </form>
+      `);
+                document
+                    .getElementById("rest-back-btn")
+                    .addEventListener("click", openAddConnectorPicker);
+                document
+                    .getElementById("rest-form")
+                    .addEventListener("submit", async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const payload = Object.fromEntries(fd);
+                        try {
+                            const r = await api(
+                                "POST",
+                                "/api/local/connectors/rest",
+                                payload,
+                            );
+                            toast(`Created ${r.name}`, "ok");
+                            closeModal();
+                            await refresh();
+                        } catch (err) {
+                            toast(err.message, "err");
+                        }
+                    });
+            }
+
+            function openNewMcpModal() {
+                openModal(`
+        <h3>New MCP server</h3>
+        <p class="muted">Connect any MCP server. Its read-only tools become queryable as SQL tables.</p>
+        <form id="mcp-form">
+          <div class="field">
+            <label>Name</label>
+            <input name="name" required placeholder="my_mcp" />
+            <span class="help">Local identifier for this server. Used as the SQL schema (e.g. <code>SELECT * FROM my_mcp.list_projects</code>).</span>
+          </div>
+          <div class="field">
+            <label>Transport</label>
+            <select name="transport" id="mcp-transport">
+              <option value="stdio">stdio (local process)</option>
+              <option value="sse">sse</option>
+              <option value="streamable_http">streamable_http</option>
+            </select>
+            <span class="help">How Dinobase talks to the server. <code>stdio</code> spawns a local subprocess (most npm/PyPI servers). <code>sse</code> and <code>streamable_http</code> connect to a remote URL.</span>
+          </div>
+          <div class="field" id="mcp-command-field">
+            <label>Command</label>
+            <input name="command" placeholder="npx -y @modelcontextprotocol/server-filesystem /data" />
+            <span class="help">Shell command to launch the server. Usually copied verbatim from the server's README.</span>
+          </div>
+          <div class="field" id="mcp-url-field" style="display:none;">
+            <label>URL</label>
+            <input name="url" placeholder="http://localhost:8080/sse" />
+            <span class="help">The remote server's MCP endpoint URL.</span>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="mcp-back-btn">Back</button>
+            <button type="submit" class="primary">Create</button>
+          </div>
+        </form>
+      `);
+                const transportSel = document.getElementById("mcp-transport");
+                const cmdField = document.getElementById("mcp-command-field");
+                const urlField = document.getElementById("mcp-url-field");
+                transportSel.addEventListener("change", () => {
+                    const stdio = transportSel.value === "stdio";
+                    cmdField.style.display = stdio ? "" : "none";
+                    urlField.style.display = stdio ? "none" : "";
+                });
+                document
+                    .getElementById("mcp-back-btn")
+                    .addEventListener("click", openAddConnectorPicker);
+                document
+                    .getElementById("mcp-form")
+                    .addEventListener("submit", async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const payload = Object.fromEntries(fd);
+                        try {
+                            const r = await api(
+                                "POST",
+                                "/api/local/mcp",
+                                payload,
+                            );
+                            toast(`Created ${r.name}`, "ok");
+                            closeModal();
+                            await refresh();
+                        } catch (err) {
+                            toast(err.message, "err");
+                        }
+                    });
+            }
+
+            // ---------------- Add-connector guided picker ----------------
+            function openAddConnectorPicker() {
+                const choices = [
+                    {
+                        id: "verified",
+                        title: "Verified source",
+                        desc: "Browse 100+ pre-built connectors for SaaS APIs, databases, and file storage — OAuth or API key, all maintained by Dinobase.",
+                    },
+                    {
+                        id: "mcp-registry",
+                        title: "MCP from registry",
+                        desc: "Install any of 1,400+ MCP servers listed in the official modelcontextprotocol/servers catalog.",
+                    },
+                    {
+                        id: "mcp-custom",
+                        title: "Custom MCP server",
+                        desc: "Add your own MCP server by command (stdio), SSE URL, or streamable-HTTP URL.",
+                    },
+                    {
+                        id: "rest-custom",
+                        title: "Custom REST connector",
+                        desc: "Point Dinobase at any REST API and generate a YAML connector you can tweak.",
+                    },
+                ];
+                openModal(`
+                    <h3>Add connector</h3>
+                    <p class="muted">Choose how you'd like to add a new data source.</p>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+                      ${choices
+                          .map(
+                              (c) => `
+                        <div class="picker-card" data-choice="${c.id}"
+                             style="padding:12px 14px;border:1px solid var(--border-solid);border-radius:6px;cursor:pointer;background:rgba(255,255,255,0.02);">
+                          <div style="font-weight:600;margin-bottom:2px;">${esc(c.title)} →</div>
+                          <div class="muted" style="font-size:13px;">${esc(c.desc)}</div>
+                        </div>`,
+                          )
+                          .join("")}
+                    </div>
+                    <div class="modal-actions">
+                      <button type="button" onclick="closeModal()">Cancel</button>
+                    </div>
+                `);
+                document.querySelectorAll(".picker-card").forEach((card) => {
+                    card.addEventListener("mouseenter", () => {
+                        card.style.borderColor = "var(--green)";
+                    });
+                    card.addEventListener("mouseleave", () => {
+                        card.style.borderColor = "var(--border-solid)";
+                    });
+                    card.addEventListener("click", () => {
+                        const choice = card.getAttribute("data-choice");
+                        if (choice === "verified") openVerifiedPicker();
+                        else if (choice === "mcp-registry")
+                            openMcpCatalogBrowser();
+                        else if (choice === "mcp-custom") openNewMcpModal();
+                        else if (choice === "rest-custom") openNewRestModal();
+                    });
+                });
+            }
+
+            function openVerifiedPicker() {
+                openModal(`
+                    <h3>Verified sources</h3>
+                    <p class="muted">Pick a connector maintained by Dinobase. OAuth-enabled entries are marked.</p>
+                    <div class="filter-row" style="margin-bottom:10px;">
+                      <input id="source-filter" type="text" placeholder="Filter sources…" autofocus />
+                      <select id="type-filter" title="Filter by type">
+                        <option value="">All types</option>
+                        <option value="saas">SaaS</option>
+                        <option value="database">Database</option>
+                        <option value="file_storage">File storage</option>
+                      </select>
+                      <select id="industry-filter" title="Filter by industry">
+                        <option value="">All industries</option>
+                      </select>
+                    </div>
+                    <div id="source-grid" class="grid" style="max-height:420px;overflow-y:auto;overflow-x:hidden;padding:0.5rem 0.25rem;"></div>
+                    <div class="modal-actions">
+                      <button type="button" id="verified-back-btn">Back</button>
+                    </div>
+                `);
+                populateIndustryFilter();
+                renderSourceGrid();
+                document
+                    .getElementById("source-filter")
+                    .addEventListener("input", renderSourceGrid);
+                document
+                    .getElementById("type-filter")
+                    .addEventListener("change", renderSourceGrid);
+                document
+                    .getElementById("industry-filter")
+                    .addEventListener("change", renderSourceGrid);
+                document
+                    .getElementById("verified-back-btn")
+                    .addEventListener("click", openAddConnectorPicker);
+            }
+
+            document
+                .getElementById("add-connector-btn")
+                .addEventListener("click", openAddConnectorPicker);
+
+            // ---------------- Browse MCP registry ----------------
+            function escapeHtml(s) {
+                return String(s ?? "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
+            const CATEGORY_LABELS = {
+                reference: "Reference",
+                official: "Official",
+                community: "Community",
+            };
+
+            async function openMcpCatalogBrowser() {
+                const entries = [];
+                let currentQuery = "";
+                let currentCursor = null;
+                let requestSeq = 0;
+                let debounceTimer = null;
+                let loading = false;
+                let filterEl, listEl, countEl;
+
+                function renderEntries() {
+                    if (!entries.length) {
+                        listEl.innerHTML =
+                            '<div class="muted" style="grid-column:1/-1;">No matching servers.</div>';
+                    } else {
+                        listEl.innerHTML = entries
+                            .map(
+                                (e) => `
+                                    <div class="card source-card" data-id="${escapeHtml(e.id)}">
+                                      <div class="head">
+                                        ${sourceLogoHtml(e.name)}
+                                        <div class="name">${escapeHtml(e.name)}</div>
+                                      </div>
+                                      <div class="desc">${escapeHtml((e.description || "").slice(0, 120))}</div>
+                                      <span class="tag${e.category === "community" ? " disabled" : ""}">${escapeHtml(CATEGORY_LABELS[e.category] || e.category || "")}</span>
+                                    </div>`,
+                            )
+                            .join("");
+                        listEl
+                            .querySelectorAll(".source-card")
+                            .forEach((row) => {
+                                row.addEventListener("click", () => {
+                                    const id = row.getAttribute("data-id");
+                                    showDetail(id);
+                                });
+                            });
+                    }
+                    updateStatus();
+                }
+
+                function updateStatus() {
+                    if (loading) {
+                        countEl.textContent = entries.length
+                            ? `${entries.length} loaded — fetching more…`
+                            : "";
+                        return;
+                    }
+                    if (!entries.length) {
+                        countEl.textContent = "";
+                        return;
+                    }
+                    countEl.textContent = currentCursor
+                        ? `${entries.length} loaded — scroll for more.`
+                        : `${entries.length} server${entries.length === 1 ? "" : "s"}.`;
+                }
+
+                function maybeFetchMore() {
+                    if (loading || !currentCursor) return;
+                    const remaining =
+                        listEl.scrollHeight -
+                        listEl.scrollTop -
+                        listEl.clientHeight;
+                    if (remaining < 200) runSearch(true);
+                }
+
+                async function runSearch(append) {
+                    const seq = ++requestSeq;
+                    loading = true;
+                    if (!append) {
+                        entries.length = 0;
+                        currentCursor = null;
+                        listEl.innerHTML =
+                            '<div class="muted" style="grid-column:1/-1;">Searching…</div>';
+                    }
+                    updateStatus();
+                    const params = new URLSearchParams();
+                    if (currentQuery) params.set("q", currentQuery);
+                    if (append && currentCursor)
+                        params.set("cursor", currentCursor);
+                    let r;
+                    try {
+                        r = await api(
+                            "GET",
+                            `/api/local/mcp/catalog?${params.toString()}`,
+                        );
+                    } catch (err) {
+                        if (seq !== requestSeq) return;
+                        loading = false;
+                        listEl.innerHTML = `<div class="muted" style="grid-column:1/-1;">Could not fetch catalog: ${escapeHtml(err.message)}</div>`;
+                        countEl.textContent = "";
+                        return;
+                    }
+                    if (seq !== requestSeq) return;
+                    loading = false;
+                    entries.push(...(r.entries || []));
+                    currentCursor = r.next_cursor || null;
+                    renderEntries();
+                    // If the new results didn't fill the viewport, keep fetching.
+                    if (
+                        currentCursor &&
+                        listEl.scrollHeight <= listEl.clientHeight
+                    ) {
+                        runSearch(true);
+                    }
+                }
+
+                function showList() {
+                    openModal(`
+                        <h3>Browse MCP registry</h3>
+                        <p class="muted">
+                          Catalog from the
+                          <a href="https://registry.modelcontextprotocol.io" target="_blank" rel="noopener">MCP Registry</a>.
+                          Type to search. Click a server to install.
+                        </p>
+                        <div class="filter-row" style="margin-bottom:10px;">
+                          <input id="catalog-filter" type="text" placeholder="Search the registry…" autofocus value="${escapeHtml(currentQuery)}" />
+                        </div>
+                        <div id="catalog-list" class="grid" style="max-height:420px;overflow-y:auto;overflow-x:hidden;padding:0.5rem 0.25rem;"></div>
+                        <div id="catalog-count" class="muted" style="font-size:12px;margin-top:6px;"></div>
+                        <div class="modal-actions">
+                          <button type="button" id="catalog-back-btn">Back</button>
+                        </div>
+                    `);
+                    filterEl = document.getElementById("catalog-filter");
+                    listEl = document.getElementById("catalog-list");
+                    countEl = document.getElementById("catalog-count");
+                    document
+                        .getElementById("catalog-back-btn")
+                        .addEventListener("click", openAddConnectorPicker);
+                    listEl.addEventListener("scroll", maybeFetchMore);
+                    filterEl.addEventListener("input", () => {
+                        clearTimeout(debounceTimer);
+                        debounceTimer = setTimeout(() => {
+                            if (filterEl.value === currentQuery) return;
+                            currentQuery = filterEl.value;
+                            runSearch(false);
+                        }, 250);
+                    });
+                    if (entries.length) {
+                        renderEntries();
+                    } else {
+                        runSearch(false);
+                    }
+                }
+
+                function showDetail(id) {
+                    const entry = entries.find((e) => e.id === id);
+                    if (!entry) {
+                        showList();
+                        return;
+                    }
+                    const knownCommand = !!entry.command;
+                    const categoryLabel =
+                        CATEGORY_LABELS[entry.category] || entry.category || "";
+                    const isCommunity = entry.category === "community";
+                    openModal(`
+                        <h3>${escapeHtml(entry.name)} <span class="muted" style="font-size:12px;text-transform:uppercase;font-weight:normal;">${escapeHtml(categoryLabel)}</span></h3>
+                        <p class="muted" style="font-size:13px;">${escapeHtml(entry.description || "")}</p>
+                        <p><a href="${escapeHtml(entry.homepage || "")}" target="_blank" rel="noopener">View upstream repo ↗</a> — copy the install command from its README.</p>
+                        ${
+                            isCommunity
+                                ? `<div style="background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.35);color:#ffcc80;padding:8px 10px;border-radius:4px;font-size:12px;margin-bottom:8px;">
+                                     Community servers are <strong>untested</strong> and not affiliated with Anthropic. Verify the upstream repo before installing.
+                                   </div>`
+                                : ""
+                        }
+                        <form id="mcp-install-form">
+                          <div class="field">
+                            <label>Connector name</label>
+                            <input name="name" required value="${escapeHtml(entry.id)}" />
+                            <span class="help">Local identifier for this server. Used as the SQL schema and the YAML filename under <code>~/.dinobase/connectors/</code>.</span>
+                          </div>
+                          <div class="field">
+                            <label>Transport</label>
+                            <select name="transport" id="install-transport">
+                              <option value="stdio"${entry.transport === "stdio" ? " selected" : ""}>stdio (local process)</option>
+                              <option value="sse"${entry.transport === "sse" ? " selected" : ""}>sse</option>
+                              <option value="streamable_http"${entry.transport === "streamable_http" ? " selected" : ""}>streamable_http</option>
+                            </select>
+                            <span class="help"><code>stdio</code> spawns a local subprocess; <code>sse</code> and <code>streamable_http</code> connect to a remote URL.</span>
+                          </div>
+                          <div class="field" id="install-command-field">
+                            <label>Command</label>
+                            <input name="command" placeholder="npx -y @owner/package" value="${escapeHtml(entry.command || "")}" />
+                            <span class="help">${knownCommand ? "Pre-filled from the registry. Edit if the server expects extra args (paths, flags)." : "Open the upstream repo above and copy its recommended command here."}</span>
+                          </div>
+                          <div class="field" id="install-url-field" style="display:none;">
+                            <label>URL</label>
+                            <input name="url" placeholder="https://server/mcp" value="${escapeHtml(entry.url || "")}" />
+                            <span class="help">The remote server's MCP endpoint URL.</span>
+                          </div>
+                          <div class="field">
+                            <label>Environment variables (optional)</label>
+                            <div id="env-rows"></div>
+                            <button type="button" id="add-env-btn">+ Add env var</button>
+                            <span class="help">Passed to the subprocess on launch. Use this for API keys and config the server reads from <code>process.env</code>. Check the upstream README for required keys.</span>
+                          </div>
+                          <div class="field" id="ack-field" style="background:rgba(255,167,38,0.08);border:1px solid rgba(255,167,38,0.35);padding:8px 10px;border-radius:4px;">
+                            <label style="display:flex;gap:8px;align-items:flex-start;font-weight:normal;color:#ffcc80;margin:0;">
+                              <input type="checkbox" name="ack" required style="width:auto;flex:0 0 auto;padding:0;margin:3px 0 0 0;" />
+                              <span style="font-size:13px;color:#ffcc80;flex:1;">
+                                I understand this will run the command above as a local subprocess whenever Dinobase connects to this MCP server. Only install servers I trust.
+                              </span>
+                            </label>
+                          </div>
+                          <div class="modal-actions">
+                            <button type="button" id="back-to-list">Back</button>
+                            <button type="submit" class="primary">Install</button>
+                          </div>
+                        </form>
+                    `);
+
+                    const transportSel =
+                        document.getElementById("install-transport");
+                    const cmdField = document.getElementById(
+                        "install-command-field",
+                    );
+                    const urlField =
+                        document.getElementById("install-url-field");
+                    const ackField = document.getElementById("ack-field");
+                    function applyTransport() {
+                        const isStdio = transportSel.value === "stdio";
+                        cmdField.style.display = isStdio ? "" : "none";
+                        urlField.style.display = isStdio ? "none" : "";
+                        ackField.style.display = isStdio ? "" : "none";
+                        ackField.querySelector("input").required = isStdio;
+                    }
+                    transportSel.addEventListener("change", applyTransport);
+                    applyTransport();
+
+                    const envRows = document.getElementById("env-rows");
+                    function addEnvRow(k = "", v = "") {
+                        const row = document.createElement("div");
+                        row.style.cssText =
+                            "display:flex;gap:6px;margin-bottom:4px;";
+                        row.innerHTML = `
+                            <input type="text" class="env-key" placeholder="KEY" value="${escapeHtml(k)}" style="flex:1;" />
+                            <input type="text" class="env-val" placeholder="value" value="${escapeHtml(v)}" style="flex:2;" />
+                            <button type="button" class="env-del">×</button>`;
+                        envRows.appendChild(row);
+                        row.querySelector(".env-del").addEventListener(
+                            "click",
+                            () => row.remove(),
+                        );
+                    }
+                    document
+                        .getElementById("add-env-btn")
+                        .addEventListener("click", () => addEnvRow());
+                    document
+                        .getElementById("back-to-list")
+                        .addEventListener("click", showList);
+
+                    document
+                        .getElementById("mcp-install-form")
+                        .addEventListener("submit", async (e) => {
+                            e.preventDefault();
+                            const fd = new FormData(e.target);
+                            const name = (fd.get("name") || "")
+                                .toString()
+                                .trim();
+                            if (!name) return;
+                            const transport = transportSel.value;
+                            const command = (fd.get("command") || "")
+                                .toString()
+                                .trim();
+                            const url = (fd.get("url") || "").toString().trim();
+                            if (transport === "stdio" && !command) {
+                                toast(
+                                    "Command is required for stdio transport",
+                                    "err",
+                                );
+                                return;
+                            }
+                            if (transport !== "stdio" && !url) {
+                                toast(
+                                    "URL is required for sse / streamable_http",
+                                    "err",
+                                );
+                                return;
+                            }
+                            const env = {};
+                            envRows.querySelectorAll("div").forEach((row) => {
+                                const k = row
+                                    .querySelector(".env-key")
+                                    .value.trim();
+                                const v = row.querySelector(".env-val").value;
+                                if (k) env[k] = v;
+                            });
+                            const payload = {
+                                name,
+                                transport,
+                                command:
+                                    transport === "stdio" ? command : undefined,
+                                url: transport === "stdio" ? undefined : url,
+                            };
+                            if (Object.keys(env).length) payload.env = env;
+                            try {
+                                const r = await api(
+                                    "POST",
+                                    "/api/local/mcp",
+                                    payload,
+                                );
+                                toast(`Installed ${r.name}`, "ok");
+                                closeModal();
+                                await refresh();
+                            } catch (err) {
+                                toast(err.message, "err");
+                            }
+                        });
+                }
+
+                showList();
+            }
+
+            // ---------------- Boot ----------------
+            refresh();
+            // Refresh on focus so external `dinobase add` shows up.
+            window.addEventListener("focus", refresh);
+        </script>
+    </body>
+</html>

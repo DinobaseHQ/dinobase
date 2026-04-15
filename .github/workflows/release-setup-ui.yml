@@ -1,0 +1,137 @@
+name: Release setup UI
+
+# When the setup UI changes on main, publish a GitHub Release holding the
+# tarball and update the cloud redirect manifest. Clients running `dinobase
+# setup` pick up the new release automatically on next launch.
+#
+# To trigger a release: bump `ui_version` in
+# `dinobase/setup_server/ui/ui_meta.json`, then merge a PR that touches any
+# file under `dinobase/setup_server/ui/`. The PR check workflow enforces the
+# version bump.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dinobase/setup_server/ui/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-setup-ui
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build tarball
+        id: build
+        run: |
+          python scripts/publish_setup_ui.py --out-dir dist/setup-ui > /tmp/ui-release.json
+          cat /tmp/ui-release.json
+          UI_VERSION=$(python -c "import json; print(json.load(open('/tmp/ui-release.json'))['ui_version'])")
+          ASSET_NAME=$(python -c "import json; print(json.load(open('/tmp/ui-release.json'))['asset_name'])")
+          TARBALL_PATH=$(python -c "import json; print(json.load(open('/tmp/ui-release.json'))['tarball_path'])")
+          SHA256=$(python -c "import json; print(json.load(open('/tmp/ui-release.json'))['sha256'])")
+          MIN_BACKEND=$(python -c "import json; v=json.load(open('/tmp/ui-release.json'))['min_backend']; print(v if v else '')")
+          MAX_BACKEND=$(python -c "import json; v=json.load(open('/tmp/ui-release.json'))['max_backend']; print(v if v else '')")
+          {
+            echo "ui_version=$UI_VERSION"
+            echo "asset_name=$ASSET_NAME"
+            echo "tarball_path=$TARBALL_PATH"
+            echo "sha256=$SHA256"
+            echo "min_backend=$MIN_BACKEND"
+            echo "max_backend=$MAX_BACKEND"
+            echo "tag=setup-ui-v$UI_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check tag does not already exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.build.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists — bump ui_version in dinobase/setup_server/ui/ui_meta.json"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.build.outputs.tag }}
+          UI_VERSION: ${{ steps.build.outputs.ui_version }}
+          TARBALL_PATH: ${{ steps.build.outputs.tarball_path }}
+        run: |
+          gh release create "$TAG" "$TARBALL_PATH" \
+            --title "Setup UI v$UI_VERSION" \
+            --notes "Automated release of the dinobase setup UI v$UI_VERSION.
+
+          This tarball is fetched at runtime by \`dinobase setup\` via the redirect manifest at https://app.dinobase.ai/setup-ui/manifest.json"
+
+      - name: Update cloud redirect manifest
+        env:
+          UI_VERSION: ${{ steps.build.outputs.ui_version }}
+          ASSET_NAME: ${{ steps.build.outputs.asset_name }}
+          SHA256: ${{ steps.build.outputs.sha256 }}
+          MIN_BACKEND: ${{ steps.build.outputs.min_backend }}
+          MAX_BACKEND: ${{ steps.build.outputs.max_backend }}
+          TAG: ${{ steps.build.outputs.tag }}
+        run: |
+          python <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          manifest_path = Path("ee/cloud/web/public/setup-ui/manifest.json")
+          manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+          if manifest_path.exists():
+              manifest = json.loads(manifest_path.read_text())
+          else:
+              manifest = {"manifest_version": 1, "updated_at": "", "releases": []}
+
+          new_entry = {
+              "ui_version": os.environ["UI_VERSION"],
+              "github_repo": "DinobaseHQ/dinobase",
+              "github_tag": os.environ["TAG"],
+              "asset_name": os.environ["ASSET_NAME"],
+              "sha256": os.environ["SHA256"],
+              "min_backend": os.environ.get("MIN_BACKEND") or None,
+              "max_backend": os.environ.get("MAX_BACKEND") or None,
+          }
+
+          releases = [r for r in manifest.get("releases", []) if r.get("ui_version") != new_entry["ui_version"]]
+          releases.insert(0, new_entry)
+          manifest["releases"] = releases
+          manifest["manifest_version"] = 1
+          manifest["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+
+      - name: Commit manifest update
+        env:
+          UI_VERSION: ${{ steps.build.outputs.ui_version }}
+        run: |
+          git config user.name "dinobase-release-bot"
+          git config user.email "release-bot@dinobase.ai"
+          git add ee/cloud/web/public/setup-ui/manifest.json
+          if git diff --cached --quiet; then
+            echo "Manifest unchanged, nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(setup-ui): publish v$UI_VERSION [skip ci]"
+          git push origin HEAD:main
