@@ -116,4 +116,4 @@ async def info(user: User = Depends(get_current_user)) -> dict[str, str]:
 async def list_tables(user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Return structured schema/table tree for the schema browser."""
     engine, _db = _get_user_engine(user)
-    return engine.list_sources()
+    return engine.list_connectors()

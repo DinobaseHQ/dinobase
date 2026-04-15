@@ -72,8 +72,8 @@ Respond with ONLY a JSON object: {"correct": true/false, "partial": true/false, 
 # Tool definitions — identical to the real MCP server
 DINOBASE_TOOLS: list[dict[str, Any]] = [
     {
-        "name": "list_sources",
-        "description": "List all connected data sources with their tables, row counts, and last sync time.",
+        "name": "list_connectors",
+        "description": "List all connected data connectors with their tables, row counts, and last sync time.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
@@ -131,12 +131,12 @@ class SandboxRunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _get_source_tables(engine) -> list[tuple[str, str]]:
-    """Return (schema, table) pairs from engine.list_sources()."""
-    result = engine.list_sources()
+    """Return (schema, table) pairs from engine.list_connectors()."""
+    result = engine.list_connectors()
     pairs: list[tuple[str, str]] = []
-    for source in result.get("sources", []):
-        schema = source["name"]
-        for table_info in source.get("tables", []):
+    for connector in result.get("connectors", []):
+        schema = connector["name"]
+        for table_info in connector.get("tables", []):
             pairs.append((schema, table_info["name"]))
     return pairs
 
@@ -193,8 +193,8 @@ def _make_mcp_system(source_tables: list[tuple[str, str]]) -> str:
 
 def _handle_dinobase_tool(engine, name: str, tool_input: dict) -> str:
     """Execute a Dinobase tool and return JSON string result."""
-    if name == "list_sources":
-        return json.dumps(engine.list_sources(), default=str)
+    if name == "list_connectors":
+        return json.dumps(engine.list_connectors(), default=str)
     if name == "describe":
         table = tool_input.get("table", "")
         if not table:
@@ -512,9 +512,9 @@ async def get_sandbox_info(user: User = Depends(get_current_user)) -> dict[str, 
     engine, db = _get_seed_engine()
     try:
         source_tables = _get_source_tables(engine)
-        sources_info = engine.list_sources()
+        sources_info = engine.list_connectors()
         return {
-            "sources": sources_info.get("sources", []),
+            "sources": sources_info.get("connectors", []),
             "suggested_questions": _suggest_questions(source_tables),
             "models": sorted(ALLOWED_MODELS),
             "default_model": DEFAULT_MODEL,

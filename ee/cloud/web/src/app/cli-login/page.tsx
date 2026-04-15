@@ -4,11 +4,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase";
 import { Nav } from "@/components/Nav";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import posthog from "posthog-js";
-
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
-const WEBSITE_URL = process.env.NEXT_PUBLIC_WEBSITE_URL ?? "https://dinobase.ai";
+import { useEffect, useState } from "react";
 
 function CLILoginInner() {
   const supabase = createClient();
@@ -21,18 +17,6 @@ function CLILoginInner() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
-  const posthogReady = useRef(false);
-
-  // Initialize PostHog once on mount (client-only)
-  useEffect(() => {
-    if (POSTHOG_KEY && !posthogReady.current) {
-      posthog.init(POSTHOG_KEY, {
-        api_host: "https://f.dinobase.ai",
-        person_profiles: "identified_only",
-      });
-      posthogReady.current = true;
-    }
-  }, []);
 
   // Check if already logged in — redirect to CLI immediately
   useEffect(() => {
@@ -55,32 +39,6 @@ function CLILoginInner() {
     return () => subscription.unsubscribe();
   }, []);
 
-  function checkEarlyAccess(userEmail: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!POSTHOG_KEY) {
-        resolve(false);
-        return;
-      }
-
-      let settled = false;
-      const settle = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(value);
-      };
-
-      // Fail closed after 3 seconds if PostHog doesn't respond
-      const timer = setTimeout(() => settle(false), 3000);
-
-      posthog.identify(userEmail, { email: userEmail });
-      posthog.reloadFeatureFlags();
-      posthog.onFeatureFlags(() => {
-        settle(posthog.isFeatureEnabled("early_access") === true);
-      });
-    });
-  }
-
   async function redirectToCLI() {
     if (!callback) return;
     setRedirecting(true);
@@ -90,25 +48,28 @@ function CLILoginInner() {
     } = await supabase.auth.getSession();
     if (!session) return;
 
-    const userEmail = session.user.email || "";
-    const hasAccess = await checkEarlyAccess(userEmail);
-
-    if (!hasAccess) {
-      window.location.href = `${WEBSITE_URL}/waitlist`;
-      return;
-    }
-
-    // Send tokens back to the CLI's local callback server
+    // Send tokens back to the CLI's local callback server. The webapp
+    // dashboard is gated separately by `early_access` in middleware.ts;
+    // CLI login must always complete so that source OAuth works even for
+    // users who are still on the waitlist for webapp access.
     const params = new URLSearchParams({
       access_token: session.access_token,
       refresh_token: session.refresh_token || "",
       expires_at: String(session.expires_at || 0),
       user_id: session.user.id,
-      email: userEmail,
+      email: session.user.email || "",
       state: state || "",
     });
 
     window.location.href = `${callback}?${params.toString()}`;
+  }
+
+  // Route Supabase back through /auth/callback (which exchanges the PKCE
+  // code for a session) and have it forward to /cli-login afterwards via
+  // its `next` param, preserving the CLI's callback URL and state.
+  function authCallbackUrl(): string {
+    const next = `/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`;
+    return `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
   }
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -116,9 +77,7 @@ function CLILoginInner() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`,
-      },
+      options: { emailRedirectTo: authCallbackUrl() },
     });
     setLoading(false);
     if (error) {
@@ -131,18 +90,14 @@ function CLILoginInner() {
   async function handleGitHub() {
     await supabase.auth.signInWithOAuth({
       provider: "github",
-      options: {
-        redirectTo: `${window.location.origin}/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`,
-      },
+      options: { redirectTo: authCallbackUrl() },
     });
   }
 
   async function handleGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/cli-login?callback=${encodeURIComponent(callback || "")}&state=${encodeURIComponent(state || "")}`,
-      },
+      options: { redirectTo: authCallbackUrl() },
     });
   }
 

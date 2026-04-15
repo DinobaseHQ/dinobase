@@ -23,6 +23,14 @@ class OAuthProvider:
     scopes: list[str] = field(default_factory=list)
     # Some providers need extra params on the authorize request
     extra_authorize_params: dict[str, str] = field(default_factory=dict)
+    # True for providers that require (or strongly prefer) PKCE S256 — the proxy
+    # generates a code_verifier server-side and carries it through the flow.
+    requires_pkce: bool = False
+    # If set, the authorization_url/token_url contain a "{<placeholder>}" token
+    # that must be filled in with a tenant-specific value supplied at /auth time
+    # via the `subdomain` query param. Examples: Shopify uses "shop",
+    # Zendesk uses "subdomain".
+    subdomain_placeholder: str | None = None
 
 
 PROVIDERS: dict[str, OAuthProvider] = {}
@@ -164,6 +172,7 @@ _register(OAuthProvider(
     authorization_url="https://{subdomain}.zendesk.com/oauth/authorizations/new",
     token_url="https://{subdomain}.zendesk.com/oauth/tokens",
     scopes=["read", "tickets:read", "users:read"],
+    subdomain_placeholder="subdomain",
 ))
 
 _register(OAuthProvider(
@@ -188,6 +197,7 @@ _register(OAuthProvider(
     authorization_url="https://airtable.com/oauth2/v1/authorize",
     token_url="https://airtable.com/oauth2/v1/token",
     scopes=["data.records:read", "schema.bases:read"],
+    requires_pkce=True,  # Airtable OAuth 2.0 mandates PKCE (S256).
 ))
 
 _register(OAuthProvider(
@@ -215,12 +225,8 @@ _register(OAuthProvider(
     scopes=["data:read"],
 ))
 
-_register(OAuthProvider(
-    name="trello",
-    authorization_url="https://trello.com/1/authorize",
-    token_url="https://trello.com/1/OAuthGetAccessToken",
-    scopes=["read"],
-))
+# Trello uses OAuth 1.0a (request_token/access_token), which is incompatible
+# with this OAuth 2.0 proxy. Use an API token-based connector instead.
 
 # ---------------------------------------------------------------------------
 # E-commerce
@@ -231,6 +237,7 @@ _register(OAuthProvider(
     authorization_url="https://{shop}.myshopify.com/admin/oauth/authorize",
     token_url="https://{shop}.myshopify.com/admin/oauth/access_token",
     scopes=["read_products", "read_orders", "read_customers"],
+    subdomain_placeholder="shop",
 ))
 
 _register(OAuthProvider(
@@ -255,6 +262,7 @@ _register(OAuthProvider(
     authorization_url="https://{shop}/wc-auth/v1/authorize",
     token_url="https://{shop}/wc-auth/v1/authorize",
     scopes=["read"],
+    subdomain_placeholder="shop",
 ))
 
 # ---------------------------------------------------------------------------
