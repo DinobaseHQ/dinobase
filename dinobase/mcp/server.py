@@ -117,21 +117,28 @@ def _build_instructions(engine: QueryEngine) -> str:
             "automatically fetch live data from the upstream API."
         )
 
-    # MCP proxy guidance
+    # exec_code — general-purpose Python escape hatch, equal partner to `query`
     lines.append("")
     lines.append(
-        "MCP tool proxy: use `exec_code` to call tools on connected MCP servers. "
-        "Write Python code using the dinobase.mcp API:"
+        "`exec_code` — run Python with full access to dinobase internals and every "
+        "connected MCP server. Reach for it when a task needs more than one step:"
     )
+    lines.append("  • Chain MCP calls (fetch a list, then look up each item)")
+    lines.append('  • Discover what is available: servers(), search("pattern"), tools("server")')
+    lines.append("  • Reshape query results with Python (group by computed keys, parse strings)")
+    lines.append("  • Call MCP tools whose arguments depend on a query result")
+    lines.append("")
+    lines.append("API (import inside your code string — nothing is pre-imported):")
     lines.append("  from dinobase.mcp import call, tools, servers, search, instructions")
-    lines.append('  result = call("server.tool", arg=value)  # call a tool with keyword args')
-    lines.append('  result = tools("server")                 # list tools with schemas')
-    lines.append('  result = servers()                       # list connected MCP servers')
-    lines.append('  result = search("pattern")               # regex search across all servers')
-    lines.append('  result = instructions("server")          # server info and usage instructions')
+    lines.append("  from dinobase.db import DinobaseDB")
+    lines.append("  from dinobase.query.engine import QueryEngine")
+    lines.append('  result = call("server.tool", arg=value)   # call a tool')
+    lines.append("  result = servers()                         # list connected MCP servers")
+    lines.append('  result = search("dashboard")               # regex search all server tools')
+    lines.append("")
     lines.append(
-        "Prefer SQL (`query` tool) for reading synced MCP data. "
-        "Use `exec_code` with `call()` for actions, writes, or tools that need specific arguments."
+        "`query` and `exec_code` are complementary: use `query` for SQL over synced "
+        "tables, use `exec_code` for everything else."
     )
 
     return "\n".join(lines)
@@ -465,25 +472,39 @@ def _create_server() -> FastMCP:
 
     @server.tool()
     def exec_code(
-        code: Annotated[str, Field(description="Python code to execute. Has access to all dinobase modules. The last expression's value is returned as the result. Use `result = ...` to capture output.")],
+        code: Annotated[str, Field(description="Python code to execute. Assign your return value to `result` — if unset, the tool returns {\"status\": \"ok\"}.")],
     ) -> str:
-        """Execute a Python script with access to dinobase internals. Use this for complex data processing, calling MCP tools via the Python API, or anything that's easier in code than SQL.
+        """Run Python with access to dinobase internals and every connected MCP server.
 
-        Available imports (pre-loaded):
+        Use this to chain MCP calls, reshape query results, or discover what tools
+        are available. Complementary to `query`: use SQL for reads over synced tables,
+        use `exec_code` for anything that needs more than one step.
+
+        Available imports (import inside your code — nothing is pre-imported):
           from dinobase.mcp import call, tools, servers, search, instructions
           from dinobase.db import DinobaseDB
           from dinobase.query.engine import QueryEngine
 
-        Examples:
-          # Call an MCP tool
-          from dinobase.mcp import call
-          result = call("posthog_mcp.dashboards-get-all")
+        Assign your return value to `result`. State does not persist between calls.
 
-          # Process data with Python
+        Examples:
+          # Discover what's available
+          from dinobase.mcp import servers, search
+          result = {"servers": servers(), "dashboard_tools": search("dashboard")}
+
+          # Chain MCP calls: fetch list, then look up each item
           from dinobase.mcp import call
           dashboards = call("posthog_mcp.dashboards-get-all")
-          names = [r["name"] for r in dashboards.get("structuredContent", {}).get("results", [])]
-          result = names
+          ids = [d["id"] for d in dashboards.get("structuredContent", {}).get("results", [])]
+          result = [call("posthog_mcp.dashboard-get", id=i).get("structuredContent") for i in ids[:5]]
+
+          # Combine SQL and an MCP call
+          from dinobase.db import DinobaseDB
+          from dinobase.query.engine import QueryEngine
+          from dinobase.mcp import call
+          with DinobaseDB() as db:
+              rows = QueryEngine(db).execute("SELECT id FROM hubspot.companies LIMIT 10")["rows"]
+          result = [call("clearbit_mcp.company-lookup", id=r["id"]) for r in rows]
         """
         from dinobase import telemetry
         telemetry.capture("mcp_tool_called", {"tool": "exec_code", "server_mode": "hosted" if client else "local"})
