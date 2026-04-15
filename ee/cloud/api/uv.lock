@@ -852,7 +852,7 @@ wheels = [
 
 [[package]]
 name = "dinobase"
-version = "0.2.5.1"
+version = "0.2.6"
 source = { editable = "../../../" }
 dependencies = [
     { name = "click" },
