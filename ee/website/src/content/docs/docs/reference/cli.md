@@ -276,6 +276,56 @@ dinobase mcp-config cursor         # Cursor only
 
 ---
 
+## `dinobase connector create <name>`
+
+Scaffold a local custom connector YAML config.
+
+```bash
+dinobase connector create <name> [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--url` | Base URL for the API |
+| `--auth-type` | Authentication type: `bearer`, `http_basic`, `api_key_header` (default: `bearer`) |
+| `--endpoint` | Endpoint path (e.g., `projects/123/feature_flags/`) |
+| `--data-selector` | JSON path to data array (default: `$` for root) |
+| `--mode` | Fetch mode: `live`, `sync`, `auto` (default: `auto`) |
+
+Creates `~/.dinobase/connectors/<name>.yaml`. See [Custom Connectors](/docs/guides/connecting-sources/#custom-connectors).
+
+---
+
+## `dinobase connector list`
+
+List all local custom connectors.
+
+```bash
+dinobase connector list [--pretty]
+```
+
+---
+
+## `dinobase connector validate <name>`
+
+Validate a local connector YAML config for required fields and credential placeholders.
+
+```bash
+dinobase connector validate my_api
+```
+
+---
+
+## `dinobase connector edit <name>`
+
+Open a local connector config in `$EDITOR`.
+
+```bash
+dinobase connector edit my_api
+```
+
+---
+
 ## Output format
 
 All data commands (`status`, `query`, `describe`) output JSON by default, optimized for agent consumption. Add `--pretty` for human-readable tables.

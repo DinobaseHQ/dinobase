@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import Field
 from mcp.server.fastmcp import FastMCP
@@ -85,6 +85,23 @@ def _build_instructions(engine: QueryEngine) -> str:
             "For single-record lookups by ID on stale sources, the system will "
             "automatically fetch live data from the source API."
         )
+
+    # MCP proxy guidance
+    lines.append("")
+    lines.append(
+        "MCP tool proxy: use `exec_code` to call tools on connected MCP servers. "
+        "Write Python code using the dinobase.mcp API:"
+    )
+    lines.append("  from dinobase.mcp import call, tools, servers, search, instructions")
+    lines.append('  result = call("server.tool", arg=value)  # call a tool with keyword args')
+    lines.append('  result = tools("server")                 # list tools with schemas')
+    lines.append('  result = servers()                       # list connected MCP servers')
+    lines.append('  result = search("pattern")               # regex search across all servers')
+    lines.append('  result = instructions("server")          # server info and usage instructions')
+    lines.append(
+        "Prefer SQL (`query` tool) for reading synced MCP data. "
+        "Use `exec_code` with `call()` for actions, writes, or tools that need specific arguments."
+    )
 
     return "\n".join(lines)
 
@@ -414,6 +431,46 @@ def _create_server() -> FastMCP:
             )
 
         return json.dumps(result, indent=2, default=str)
+
+    @server.tool()
+    def exec_code(
+        code: Annotated[str, Field(description="Python code to execute. Has access to all dinobase modules. The last expression's value is returned as the result. Use `result = ...` to capture output.")],
+    ) -> str:
+        """Execute a Python script with access to dinobase internals. Use this for complex data processing, calling MCP tools via the Python API, or anything that's easier in code than SQL.
+
+        Available imports (pre-loaded):
+          from dinobase.mcp import call, tools, servers, search, instructions
+          from dinobase.db import DinobaseDB
+          from dinobase.query.engine import QueryEngine
+
+        Examples:
+          # Call an MCP tool
+          from dinobase.mcp import call
+          result = call("posthog_mcp.dashboards-get-all")
+
+          # Process data with Python
+          from dinobase.mcp import call
+          dashboards = call("posthog_mcp.dashboards-get-all")
+          names = [r["name"] for r in dashboards.get("structuredContent", {}).get("results", [])]
+          result = names
+        """
+        from dinobase import telemetry
+        telemetry.capture("mcp_tool_called", {"tool": "exec_code", "server_mode": "hosted" if client else "local"})
+
+        namespace: dict[str, Any] = {"__builtins__": __builtins__}
+        try:
+            exec(code, namespace)
+        except Exception as e:
+            return json.dumps({"error": f"{type(e).__name__}: {e}"})
+
+        # Return the value of 'result' if set, otherwise None
+        output = namespace.get("result")
+        if output is None:
+            return json.dumps({"status": "ok"})
+        try:
+            return json.dumps(output, indent=2, default=str)
+        except (TypeError, ValueError):
+            return str(output)
 
     return server
 

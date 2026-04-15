@@ -13,7 +13,7 @@ from dinobase.annotations import AnnotateBatchInput, AnnotationInput, Relationsh
 
 _AGENT_COMMANDS = frozenset({
     "info", "query", "describe", "status", "sources",
-    "confirm", "cancel", "refresh", "auth",
+    "confirm", "cancel", "refresh", "auth", "mcp",
 })
 
 _CLI_INSTRUCTIONS = """\
@@ -31,6 +31,27 @@ Workflow:
 
 For mutations (INSERT/UPDATE/DELETE), `query` returns a preview with a mutation ID.
 Call `dinobase confirm <id>` to execute or `dinobase cancel <id>` to discard.
+
+MCP tool proxy — call tools on connected MCP servers directly:
+- `dinobase mcp servers` — list connected MCP servers and their tools
+- `dinobase mcp instructions <server>` — show a server's usage instructions
+- `dinobase mcp info <server>[.tool]` — list tools or show one tool's schema (parameters, types)
+- `dinobase mcp search "<pattern>"` — regex search tool names/descriptions across all servers
+- `dinobase mcp call <server.tool> ['{"arg": "value"}']` — call a tool with optional JSON args
+
+Prefer the SQL interface (`dinobase query`) over MCP retrieval tools for reading data.
+MCP server data is automatically synced into DuckDB tables (schema: server name, table: tool name).
+SQL lets you filter, join, aggregate, and paginate — much more powerful than raw tool calls.
+Use `mcp call` only for actions (writes, mutations) or tools that need specific arguments.
+Note: only tools with no required parameters are auto-synced into tables.
+
+When writing code that calls MCP tools, prefer the Python API over shelling out to the CLI:
+  from dinobase.mcp import call, tools, servers, search, instructions
+  call("server.tool", arg=value)  — call a tool with keyword args
+  tools("server")                 — list tools with schemas
+  servers()                       — list connected MCP servers
+  search("pattern")               — regex search across all servers
+  instructions("server")          — server info and usage instructions
 
 Always start with `dinobase info` to understand what data is available.
 Output is JSON by default. Add --pretty for human-readable tables."""
@@ -917,10 +938,16 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
     # One-time sync
     from dinobase.sync.engine import SyncEngine
 
+    from dinobase.fetch.connector import is_local_connector
+
     if source_name:
         if source_name not in sources:
-            click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
-            sys.exit(1)
+            # Check if it's a standalone local connector (e.g. MCP)
+            if is_local_connector(source_name):
+                sources[source_name] = {"type": source_name}
+            else:
+                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                sys.exit(1)
         to_sync = {source_name: sources[source_name]}
     else:
         to_sync = sources
@@ -998,12 +1025,17 @@ def refresh(source_name: str | None, stale: bool, pretty: bool):
     engine = QueryEngine(db)
     sync_engine = SyncEngine(db)
 
+    from dinobase.fetch.connector import is_local_connector
+
     # Determine which sources to refresh
     if source_name:
         if source_name not in sources:
-            click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
-            db.close()
-            sys.exit(1)
+            if is_local_connector(source_name):
+                sources[source_name] = {"type": source_name}
+            else:
+                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                db.close()
+                sys.exit(1)
         to_refresh = {source_name: sources[source_name]}
     elif stale:
         to_refresh = {}
@@ -1790,6 +1822,625 @@ def update(check: bool):
         click.echo(message, err=True)
         click.echo(f"\nManual update: {get_update_command(method)}")
         sys.exit(1)
+
+
+# ===================================================================
+# Connector management (local custom connectors)
+# ===================================================================
+
+
+@cli.group()
+def connector():
+    """Manage local custom connectors."""
+    pass
+
+
+_CONNECTOR_TEMPLATE = """\
+name: {name}
+description: "{description}"
+mode: {mode}
+
+credentials:
+  - name: api_key
+    flag: "--api-key"
+    env: {env_prefix}_API_KEY
+    prompt: "{display_name} API key"
+    secret: true
+
+client:
+  base_url: "{base_url}"
+  auth:
+    type: {auth_type}
+    token: "{{api_key}}"
+{paginator_block}
+resource_defaults:
+  primary_key: id
+  write_disposition: replace
+  endpoint:
+    data_selector: "{data_selector}"
+
+resources:
+  - name: {resource_name}
+    endpoint:
+      path: {endpoint_path}
+"""
+
+
+@connector.command("create")
+@click.argument("name")
+@click.option("--url", help="Base URL for the API (e.g., https://api.example.com/)")
+@click.option(
+    "--auth-type",
+    type=click.Choice(["bearer", "http_basic", "api_key_header"]),
+    default="bearer",
+    help="Authentication type (default: bearer)",
+)
+@click.option("--endpoint", help="Endpoint path (e.g., projects/123/feature_flags/)")
+@click.option("--data-selector", default="$", help="JSON path to data array (default: $ for root)")
+@click.option("--mode", type=click.Choice(["live", "sync", "auto"]), default="auto", help="Fetch mode")
+@click.option("--transport", type=click.Choice(["stdio", "sse", "streamable_http"]), help="MCP transport type")
+@click.option("--command", help="MCP stdio command (e.g., 'npx -y @modelcontextprotocol/server-filesystem /data')")
+def connector_create(
+    name: str,
+    url: str | None,
+    auth_type: str,
+    endpoint: str | None,
+    data_selector: str,
+    mode: str,
+    transport: str | None,
+    command: str | None,
+):
+    """Create a new local connector YAML config.
+
+    Examples:
+
+      dinobase connector create posthog_flags \\
+        --url "https://app.posthog.com/api/" \\
+        --endpoint "projects/123/feature_flags/" \\
+        --data-selector results
+
+      dinobase connector create my_api
+
+      dinobase connector create my_files \\
+        --transport stdio \\
+        --command "npx -y @modelcontextprotocol/server-filesystem /data"
+
+      dinobase connector create remote_tools \\
+        --transport sse --url http://localhost:8080/sse
+    """
+    from dinobase.config import get_connectors_dir
+
+    connectors_dir = get_connectors_dir()
+    connectors_dir.mkdir(parents=True, exist_ok=True)
+
+    yaml_path = connectors_dir / f"{name}.yaml"
+    if yaml_path.exists():
+        click.echo(f"Error: connector '{name}' already exists at {yaml_path}", err=True)
+        sys.exit(1)
+
+    # MCP connector path
+    if transport:
+        if transport == "stdio" and not command:
+            click.echo("Error: --command is required for stdio transport", err=True)
+            sys.exit(1)
+        if transport in ("sse", "streamable_http") and not url:
+            click.echo(f"Error: --url is required for {transport} transport", err=True)
+            sys.exit(1)
+
+        mcp_mode = mode if mode != "auto" else "live"
+        display_name = name.replace("_", " ").title()
+
+        if transport == "stdio":
+            import shlex
+            parts = shlex.split(command)
+            cmd = parts[0]
+            args = parts[1:] if len(parts) > 1 else []
+            args_str = "\n".join(f'    - "{a}"' for a in args)
+            content = (
+                f'name: {name}\n'
+                f'description: "MCP connector for {display_name}"\n'
+                f'mode: {mcp_mode}\n'
+                f'\n'
+                f'transport:\n'
+                f'  type: stdio\n'
+                f'  command: {cmd}\n'
+            )
+            if args:
+                content += f'  args:\n{args_str}\n'
+        else:
+            content = (
+                f'name: {name}\n'
+                f'description: "MCP connector for {display_name}"\n'
+                f'mode: {mcp_mode}\n'
+                f'\n'
+                f'transport:\n'
+                f'  type: {transport}\n'
+                f'  url: "{url}"\n'
+            )
+
+        yaml_path.write_text(content)
+        click.echo(f"Created MCP connector: {yaml_path}")
+        click.echo(f"\nNext steps:")
+        click.echo(f"  1. Sync: dinobase sync {name}")
+        click.echo(f"  2. Query: dinobase query \"SELECT * FROM {name}.<tool_name> LIMIT 10\"")
+        return
+
+    # REST connector path
+    display_name = name.replace("_", " ").title()
+    env_prefix = name.upper()
+    resource_name = (endpoint or name).strip("/").split("/")[-1] or name
+
+    # Detect if paginator should be included
+    paginator_block = ""
+    if url and "posthog" in url.lower():
+        paginator_block = '  paginator:\n    type: json_link\n    next_url_path: "next"\n'
+
+    content = _CONNECTOR_TEMPLATE.format(
+        name=name,
+        description=f"Custom connector for {display_name}",
+        mode=mode,
+        base_url=url or "https://api.example.com/",
+        auth_type=auth_type,
+        env_prefix=env_prefix,
+        display_name=display_name,
+        data_selector=data_selector,
+        resource_name=resource_name,
+        endpoint_path=endpoint or "endpoint/path",
+        paginator_block=paginator_block,
+    )
+
+    yaml_path.write_text(content)
+    click.echo(f"Created connector: {yaml_path}")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  1. Edit the config: dinobase connector edit {name}")
+    click.echo(f"  2. Add credentials: dinobase add {name} --api-key YOUR_KEY")
+    click.echo(f"  3. Query: dinobase query \"SELECT * FROM {name}.{resource_name} LIMIT 10\"")
+
+
+@connector.command("list")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def connector_list(pretty: bool):
+    """List all local custom connectors."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    connectors_dir = get_connectors_dir()
+    if not connectors_dir.is_dir():
+        if pretty:
+            click.echo("No local connectors directory found.")
+        else:
+            click.echo(json.dumps([]))
+        return
+
+    connectors = []
+    for path in sorted(connectors_dir.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            from dinobase.fetch.connector import get_connector_mode
+
+            connectors.append({
+                "name": cfg.get("name", path.stem),
+                "description": cfg.get("description", ""),
+                "mode": get_connector_mode(cfg),
+                "resources": [r["name"] for r in cfg.get("resources", [])],
+                "path": str(path),
+            })
+        except Exception as e:
+            connectors.append({
+                "name": path.stem,
+                "error": str(e),
+                "path": str(path),
+            })
+
+    if pretty:
+        if not connectors:
+            click.echo("No local connectors. Create one with: dinobase connector create <name>")
+            return
+        for c in connectors:
+            if "error" in c:
+                click.echo(f"  {c['name']} — ERROR: {c['error']}")
+            else:
+                resources = ", ".join(c["resources"]) if c["resources"] else "(none)"
+                click.echo(f"  {c['name']} ({c['mode']}) — {c['description']}")
+                click.echo(f"    resources: {resources}")
+    else:
+        click.echo(json.dumps(connectors, indent=2))
+
+
+@connector.command("edit")
+@click.argument("name")
+def connector_edit(name: str):
+    """Open a local connector config in your editor."""
+    import os
+
+    from dinobase.config import get_connectors_dir
+
+    yaml_path = get_connectors_dir() / f"{name}.yaml"
+    if not yaml_path.exists():
+        click.echo(f"Error: connector '{name}' not found at {yaml_path}", err=True)
+        click.echo(f"Create it with: dinobase connector create {name}")
+        sys.exit(1)
+
+    editor = os.environ.get("EDITOR", os.environ.get("VISUAL"))
+    if editor:
+        os.execlp(editor, editor, str(yaml_path))
+    else:
+        click.echo(f"No $EDITOR set. Config path: {yaml_path}")
+
+
+@connector.command("validate")
+@click.argument("name")
+def connector_validate(name: str):
+    """Validate a local connector YAML config."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    yaml_path = get_connectors_dir() / f"{name}.yaml"
+    if not yaml_path.exists():
+        click.echo(f"Error: connector '{name}' not found at {yaml_path}", err=True)
+        sys.exit(1)
+
+    try:
+        with open(yaml_path) as f:
+            cfg = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        click.echo(f"YAML parse error: {e}", err=True)
+        sys.exit(1)
+
+    errors = []
+
+    if not cfg.get("name"):
+        errors.append("Missing required field: name")
+    if not cfg.get("client", {}).get("base_url"):
+        errors.append("Missing required field: client.base_url")
+    if not cfg.get("resources"):
+        errors.append("No resources defined — add at least one resource")
+
+    for i, r in enumerate(cfg.get("resources", [])):
+        if not r.get("name"):
+            errors.append(f"Resource #{i + 1}: missing 'name' field")
+        if not r.get("endpoint", {}).get("path"):
+            errors.append(f"Resource '{r.get('name', f'#{i + 1}')}': missing endpoint.path")
+
+    # Check credential placeholders
+    import re
+
+    base_url = cfg.get("client", {}).get("base_url", "")
+    auth_token = cfg.get("client", {}).get("auth", {}).get("token", "")
+    placeholders = set(re.findall(r"\{(\w+)\}", base_url + auth_token))
+    cred_names = {c["name"] for c in cfg.get("credentials", [])}
+    for resource in cfg.get("resources", []):
+        path = resource.get("endpoint", {}).get("path", "")
+        placeholders.update(re.findall(r"\{(\w+)\}", path))
+
+    undefined = placeholders - cred_names
+    if undefined:
+        errors.append(
+            f"Undefined credential placeholders: {', '.join(sorted(undefined))}. "
+            f"Add them to the 'credentials' list."
+        )
+
+    if errors:
+        click.echo(f"Validation failed for {name}:", err=True)
+        for e in errors:
+            click.echo(f"  - {e}", err=True)
+        sys.exit(1)
+    else:
+        click.echo(f"Connector '{name}' is valid.")
+
+
+# ---------------------------------------------------------------------------
+# MCP tool proxy commands
+# ---------------------------------------------------------------------------
+
+
+def _get_mcp_connectors() -> list[dict[str, Any]]:
+    """Scan connectors dir for MCP connectors (those with transport: key)."""
+    from dinobase.config import get_connectors_dir
+
+    import yaml
+
+    connectors_dir = get_connectors_dir()
+    if not connectors_dir.is_dir():
+        return []
+
+    results = []
+    for path in sorted(connectors_dir.glob("*.yaml")):
+        try:
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            if cfg and "transport" in cfg:
+                results.append(cfg)
+        except Exception:
+            continue
+    return results
+
+
+@cli.group()
+def mcp():
+    """Proxy MCP server tools — list, search, inspect, and call."""
+    pass
+
+
+@mcp.command("servers")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_servers(pretty: bool):
+    """List connected MCP servers and their tools."""
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    connectors = _get_mcp_connectors()
+    if not connectors:
+        if pretty:
+            click.echo("No MCP servers configured. Create one with:")
+            click.echo("  dinobase connector create <name> --transport stdio --command '...'")
+        else:
+            click.echo(json.dumps({"servers": []}))
+        return
+
+    servers = []
+    for cfg in connectors:
+        name = cfg["name"]
+        transport = cfg["transport"]
+        entry: dict[str, Any] = {
+            "name": name,
+            "description": cfg.get("description", ""),
+            "transport": transport["type"],
+        }
+        if transport["type"] == "stdio":
+            entry["command"] = transport.get("command", "")
+        else:
+            entry["url"] = transport.get("url", "")
+
+        try:
+            tools = asyncio.run(list_all_tools(name))
+            entry["tools"] = len(tools)
+            entry["tool_names"] = [t["name"] for t in tools]
+        except Exception as e:
+            entry["tools"] = 0
+            entry["error"] = str(e)
+
+        servers.append(entry)
+
+    if pretty:
+        for s in servers:
+            status = f"{s['tools']} tools" if "error" not in s else f"error: {s['error']}"
+            click.echo(f"  {s['name']} ({s['transport']}) — {status}")
+            if s.get("tool_names"):
+                for t in s["tool_names"]:
+                    click.echo(f"    - {t}")
+    else:
+        click.echo(json.dumps({"servers": servers}, indent=2, default=str))
+
+
+@mcp.command("instructions")
+@click.argument("server")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_instructions(server: str, pretty: bool):
+    """Show an MCP server's instructions (how to use it).
+
+    Examples:
+
+      dinobase mcp instructions my_server
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import get_server_info
+
+    try:
+        info = asyncio.run(get_server_info(server))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if pretty:
+        if info.get("name"):
+            version = f" v{info['version']}" if info.get("version") else ""
+            click.echo(f"{info['name']}{version}\n")
+        if info.get("instructions"):
+            click.echo(info["instructions"])
+        else:
+            click.echo("(no instructions provided by this server)")
+    else:
+        click.echo(json.dumps(info, indent=2, default=str))
+
+
+@mcp.command("info")
+@click.argument("ref")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_info(ref: str, pretty: bool):
+    """Show tool schema. REF is 'server' (list all) or 'server.tool' (one tool).
+
+    Examples:
+
+      dinobase mcp info my_server
+      dinobase mcp info my_server.list_files
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    if "." in ref:
+        server, tool_name = ref.split(".", 1)
+    else:
+        server, tool_name = ref, None
+
+    try:
+        tools = asyncio.run(list_all_tools(server))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if tool_name:
+        match = [t for t in tools if t["name"] == tool_name]
+        if not match:
+            available = [t["name"] for t in tools]
+            click.echo(
+                json.dumps({"error": f"Tool '{tool_name}' not found on '{server}'", "available": available}),
+            )
+            sys.exit(1)
+        result = match[0]
+
+        if pretty:
+            click.echo(f"{server}.{result['name']}")
+            if result.get("description"):
+                click.echo(f"  {result['description']}")
+            schema = result.get("inputSchema", {})
+            props = schema.get("properties", {})
+            required = set(schema.get("required", []))
+            if props:
+                click.echo(f"\n  Parameters:")
+                for pname, pdef in props.items():
+                    req = " (required)" if pname in required else ""
+                    ptype = pdef.get("type", "any")
+                    desc = pdef.get("description", "")
+                    click.echo(f"    {pname}: {ptype}{req}")
+                    if desc:
+                        click.echo(f"      {desc}")
+            ann = result.get("annotations", {})
+            if ann:
+                flags = []
+                if ann.get("readOnlyHint"):
+                    flags.append("read-only")
+                if ann.get("destructiveHint"):
+                    flags.append("destructive")
+                if ann.get("idempotentHint"):
+                    flags.append("idempotent")
+                if flags:
+                    click.echo(f"\n  Annotations: {', '.join(flags)}")
+        else:
+            click.echo(json.dumps(result, indent=2, default=str))
+    else:
+        # List all tools on the server
+        if pretty:
+            click.echo(f"{server} — {len(tools)} tools\n")
+            for t in tools:
+                desc = f" — {t['description']}" if t.get("description") else ""
+                params = t.get("inputSchema", {}).get("properties", {})
+                required = t.get("inputSchema", {}).get("required", [])
+                param_str = ""
+                if params:
+                    parts = []
+                    for p in params:
+                        parts.append(f"{p}*" if p in required else p)
+                    param_str = f" ({', '.join(parts)})"
+                click.echo(f"  {t['name']}{param_str}{desc}")
+        else:
+            click.echo(json.dumps({"server": server, "tools": tools}, indent=2, default=str))
+
+
+@mcp.command("search")
+@click.argument("pattern")
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_search(pattern: str, pretty: bool):
+    """Search tools across all MCP servers by regex.
+
+    Matches against tool names and descriptions.
+
+    Examples:
+
+      dinobase mcp search "list.*"
+      dinobase mcp search "file"
+    """
+    import asyncio
+    import re as _re
+
+    from dinobase.fetch.mcp_connector import list_all_tools
+
+    connectors = _get_mcp_connectors()
+    if not connectors:
+        click.echo(json.dumps({"matches": []}))
+        return
+
+    try:
+        regex = _re.compile(pattern, _re.IGNORECASE)
+    except _re.error as e:
+        click.echo(json.dumps({"error": f"Invalid regex: {e}"}))
+        sys.exit(1)
+
+    matches = []
+    for cfg in connectors:
+        name = cfg["name"]
+        try:
+            tools = asyncio.run(list_all_tools(name))
+        except Exception:
+            continue
+
+        for t in tools:
+            text = t["name"] + " " + (t.get("description") or "")
+            if regex.search(text):
+                matches.append({
+                    "server": name,
+                    "tool": t["name"],
+                    "description": t.get("description", ""),
+                })
+
+    if pretty:
+        if not matches:
+            click.echo(f"No tools matching '{pattern}'")
+        else:
+            click.echo(f"{len(matches)} match(es):\n")
+            for m in matches:
+                desc = f" — {m['description']}" if m["description"] else ""
+                click.echo(f"  {m['server']}.{m['tool']}{desc}")
+    else:
+        click.echo(json.dumps({"matches": matches}, indent=2, default=str))
+
+
+@mcp.command("call")
+@click.argument("ref")
+@click.argument("args_json", required=False, default=None)
+@click.option("--pretty", is_flag=True, help="Human-readable output")
+def mcp_call(ref: str, args_json: str | None, pretty: bool):
+    """Call an MCP tool. REF is 'server.tool', ARGS_JSON is optional JSON arguments.
+
+    Examples:
+
+      dinobase mcp call my_server.list_allowed_directories
+      dinobase mcp call my_server.list_directory '{"path": "/tmp"}'
+    """
+    import asyncio
+
+    from dinobase.fetch.mcp_connector import call_tool
+
+    if "." not in ref:
+        click.echo(json.dumps({"error": "Use server.tool format (e.g. my_server.list_files)"}))
+        sys.exit(1)
+
+    server, tool_name = ref.split(".", 1)
+
+    arguments = {}
+    if args_json:
+        try:
+            arguments = json.loads(args_json)
+        except json.JSONDecodeError as e:
+            click.echo(json.dumps({"error": f"Invalid JSON arguments: {e}"}))
+            sys.exit(1)
+
+    try:
+        result = asyncio.run(call_tool(server, tool_name, arguments))
+    except Exception as e:
+        click.echo(json.dumps({"error": str(e)}))
+        sys.exit(1)
+
+    if pretty:
+        if result.get("isError"):
+            click.echo("Error:", err=True)
+        has_text = False
+        for block in result.get("content", []):
+            if block.get("type") == "text":
+                click.echo(block["text"])
+                has_text = True
+        if not has_text and result.get("structuredContent"):
+            click.echo(json.dumps(result["structuredContent"], indent=2, default=str))
+    else:
+        click.echo(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

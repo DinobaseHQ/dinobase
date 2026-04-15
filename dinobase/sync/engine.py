@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 import os
@@ -12,7 +13,7 @@ from typing import Any
 
 import dlt
 
-from dinobase.db import DinobaseDB
+from dinobase.db import META_SCHEMA, DinobaseDB
 
 # Workers for within-source resource parallelism.
 # Local mode stays at 1: DuckDB file locking prevents concurrent writes.
@@ -122,6 +123,12 @@ class SyncEngine:
         """Sync a single source into DuckDB."""
         source_type = source_config["type"]
         credentials = source_config.get("credentials", {})
+
+        # Local connectors use a lightweight fetch path (no dlt pipeline)
+        from dinobase.fetch.connector import is_local_connector
+
+        if is_local_connector(source_name) or is_local_connector(source_type):
+            return self._sync_local_connector(source_name, source_config)
 
         # Open log file and start timing
         self._sync_t0 = time.monotonic()
@@ -264,6 +271,63 @@ class SyncEngine:
                 self._log_fh.close()
                 self._log_fh = None
             self._sync_t0 = None
+
+    def _sync_local_connector(
+        self,
+        source_name: str,
+        source_config: dict[str, Any],
+    ) -> SyncResult:
+        """Lightweight sync for local connectors — uses dlt iteration + JSON cache."""
+        from dinobase.fetch.connector import get_fetcher
+
+        source_type = source_config["type"]
+        t0 = time.monotonic()
+
+        try:
+            fetcher = get_fetcher(self.db, source_name)
+            paths = fetcher.fetch_all()
+
+            total_rows = 0
+            for cache_path in paths.values():
+                with open(cache_path) as f:
+                    total_rows += len(json.loads(f.read()))
+
+            elapsed = time.monotonic() - t0
+            print(
+                f"  Synced {len(paths)} table(s), {total_rows:,} rows "
+                f"in {elapsed:.1f}s (local connector)",
+                file=sys.stderr,
+            )
+
+            sync_id = self.db.log_sync_start(source_name, source_type)
+            self.db.log_sync_end(
+                sync_id,
+                status="success",
+                tables_synced=len(paths),
+                rows_synced=total_rows,
+            )
+
+            return SyncResult(
+                source_name=source_name,
+                source_type=source_type,
+                tables_synced=len(paths),
+                rows_synced=total_rows,
+                status="success",
+                table_names=list(paths.keys()),
+            )
+        except Exception as e:
+            # ConnectorError already has a friendly message; other exceptions get wrapped
+            from dinobase.fetch.connector import ConnectorError
+
+            error_msg = str(e) if isinstance(e, ConnectorError) else f"Unexpected error: {e}"
+            return SyncResult(
+                source_name=source_name,
+                source_type=source_type,
+                tables_synced=0,
+                rows_synced=0,
+                status="error",
+                error=error_msg,
+            )
 
     def _run_pipeline(
         self,

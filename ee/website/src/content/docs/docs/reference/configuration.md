@@ -11,6 +11,8 @@ Dinobase stores everything in `~/.dinobase/` by default:
 ~/.dinobase/
   config.yaml        # Source configuration
   dinobase.duckdb    # DuckDB database (metadata + synced data)
+  connectors/        # User-defined local connector YAML configs
+  cache/             # Cached JSON data from local connectors
 ```
 
 Override with `DINOBASE_DIR`:
