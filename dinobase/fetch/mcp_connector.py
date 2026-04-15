@@ -425,7 +425,7 @@ class MCPConnectorFetcher:
         # Update metadata
         conn.execute(
             f"""INSERT OR REPLACE INTO {META_SCHEMA}.tables
-                (source_name, schema_name, table_name, row_count, last_sync)
+                (connector_name, schema_name, table_name, row_count, last_sync)
                 VALUES (?, ?, ?, ?, current_timestamp)""",
             [self.source_name, schema, resource_name, len(rows)],
         )

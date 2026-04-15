@@ -27,7 +27,7 @@ def dinobase_query(sql: str, max_rows: int = 200) -> str:
 
     Use this to query business data synced from SaaS APIs, databases, and files.
     Tables are referenced as schema.table (e.g., stripe.customers, hubspot.contacts).
-    Supports cross-source JOINs via shared columns like email or company name.
+    Supports cross-connector JOINs via shared columns like email or company name.
 
     Args:
         sql: SQL query to execute (DuckDB dialect).
@@ -38,14 +38,14 @@ def dinobase_query(sql: str, max_rows: int = 200) -> str:
     return json.dumps(result, indent=2, default=str)
 
 
-@tool("dinobase_list_sources")
-def dinobase_list_sources() -> str:
-    """List all connected Dinobase data sources with tables, row counts, and freshness.
+@tool("dinobase_list_connectors")
+def dinobase_list_connectors() -> str:
+    """List all connected Dinobase data connectors with tables, row counts, and freshness.
 
     Use this first to understand what business data is available before writing queries.
     """
     engine = _get_engine()
-    result = engine.list_sources()
+    result = engine.list_connectors()
     return json.dumps(result, indent=2, default=str)
 
 
@@ -64,32 +64,32 @@ def dinobase_describe(table: str) -> str:
 
 
 @tool("dinobase_refresh")
-def dinobase_refresh(source_name: str) -> str:
-    """Re-sync a Dinobase data source to get fresh data.
+def dinobase_refresh(connector_name: str) -> str:
+    """Re-sync a Dinobase connector to get fresh data.
 
     Use this when data might be stale and you need up-to-date results.
 
     Args:
-        source_name: Name of the source to refresh (e.g., stripe, hubspot).
+        connector_name: Name of the connector to refresh (e.g., stripe, hubspot).
     """
-    from dinobase.config import get_sources
+    from dinobase.config import get_connectors
     from dinobase.sync.engine import SyncEngine
 
-    sources = get_sources()
-    if source_name not in sources:
-        return json.dumps({"error": f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}"})
+    connectors = get_connectors()
+    if connector_name not in connectors:
+        return json.dumps({"error": f"Connector '{connector_name}' not found. Available: {', '.join(connectors.keys())}"})
 
-    config = sources[source_name]
+    config = connectors[connector_name]
     if config.get("type") in ("parquet", "csv"):
-        return json.dumps({"error": "File sources read live data — no refresh needed."})
+        return json.dumps({"error": "File connectors read live data — no refresh needed."})
 
     engine = _get_engine()
     sync_engine = SyncEngine(engine.db)
-    result = sync_engine.sync(source_name, config)
-    freshness = engine.get_freshness(source_name)
+    result = sync_engine.sync(connector_name, config)
+    freshness = engine.get_freshness(connector_name)
 
     return json.dumps({
-        "source": source_name,
+        "connector": connector_name,
         "status": result.status,
         "tables_synced": result.tables_synced,
         "rows_synced": result.rows_synced,
@@ -99,4 +99,4 @@ def dinobase_refresh(source_name: str) -> str:
 
 
 # Convenience list for importing all tools at once
-all_tools = [dinobase_query, dinobase_list_sources, dinobase_describe, dinobase_refresh]
+all_tools = [dinobase_query, dinobase_list_connectors, dinobase_describe, dinobase_refresh]

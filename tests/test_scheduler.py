@@ -66,7 +66,7 @@ def test_source_needs_sync_stale(db):
     # Insert a sync record with an old timestamp
     db.conn.execute(
         f"INSERT INTO {META_SCHEMA}.sync_log "
-        f"(source_name, source_type, started_at, finished_at, status) "
+        f"(connector_name, connector_type, started_at, finished_at, status) "
         f"VALUES ('stripe', 'stripe', "
         f"current_timestamp - INTERVAL '2 hours', "
         f"current_timestamp - INTERVAL '2 hours', 'success')"
@@ -89,7 +89,7 @@ def test_source_needs_sync_respects_per_source_interval(db):
     # With a short interval and an old sync, needs sync.
     # Backdate the log so the source is older than 1s.
     db.conn.execute(
-        "UPDATE _dinobase.sync_log SET finished_at = '2000-01-01' WHERE source_name = 'stripe'"
+        "UPDATE _dinobase.sync_log SET finished_at = '2000-01-01' WHERE connector_name = 'stripe'"
     )
     assert scheduler._source_needs_sync(
         "stripe", {"type": "stripe", "sync_interval": "1s"}

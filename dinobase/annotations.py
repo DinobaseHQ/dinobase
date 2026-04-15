@@ -45,9 +45,9 @@ def apply_annotation(db: DinobaseDB, item: AnnotationInput) -> dict:
         if item.key in _COLUMN_ONLY_KEYS:
             db.conn.execute(
                 f"INSERT INTO _dinobase.columns "
-                f"(source_name, schema_name, table_name, column_name, {item.key}) "
+                f"(connector_name, schema_name, table_name, column_name, {item.key}) "
                 f"VALUES (?, ?, ?, ?, ?) "
-                f"ON CONFLICT (source_name, schema_name, table_name, column_name) "
+                f"ON CONFLICT (connector_name, schema_name, table_name, column_name) "
                 f"DO UPDATE SET {item.key} = excluded.{item.key}",
                 [schema, schema, tbl, col, item.value],
             )

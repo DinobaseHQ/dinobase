@@ -127,19 +127,19 @@ def test_execute_syntax_error(engine):
     assert "error" in result
 
 
-# --- list_sources ---
+# --- list_connectors ---
 
-def test_list_sources(engine):
-    result = engine.list_sources()
-    names = [s["name"] for s in result["sources"]]
+def test_list_connectors(engine):
+    result = engine.list_connectors()
+    names = [s["name"] for s in result["connectors"]]
     assert "stripe" in names
     assert "hubspot" in names
 
-    stripe_src = next(s for s in result["sources"] if s["name"] == "stripe")
+    stripe_src = next(s for s in result["connectors"] if s["name"] == "stripe")
     assert stripe_src["table_count"] == 4
     assert stripe_src["total_rows"] > 0
 
-    hubspot_src = next(s for s in result["sources"] if s["name"] == "hubspot")
+    hubspot_src = next(s for s in result["connectors"] if s["name"] == "hubspot")
     assert hubspot_src["table_count"] == 3
 
 

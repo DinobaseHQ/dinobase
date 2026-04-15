@@ -136,13 +136,13 @@ class QueryEngine:
         })
         return result
 
-    def list_sources(self) -> dict[str, Any]:
-        """List all connected data sources with their tables and stats."""
+    def list_connectors(self) -> dict[str, Any]:
+        """List all connected data connectors with their tables and stats."""
         if self.db.is_cloud:
-            return self._list_sources_cloud()
+            return self._list_connectors_cloud()
 
         schemas = self.db.get_schemas()
-        sources: list[dict[str, Any]] = []
+        connectors: list[dict[str, Any]] = []
 
         for schema in schemas:
             if schema == META_SCHEMA:
@@ -162,7 +162,7 @@ class QueryEngine:
 
             freshness = self.get_freshness(schema)
 
-            source_entry: dict[str, Any] = {
+            connector_entry: dict[str, Any] = {
                 "name": schema,
                 "tables": table_info,
                 "table_count": len(user_tables),
@@ -171,16 +171,16 @@ class QueryEngine:
             }
 
             if freshness["threshold"] is not None:
-                source_entry["age"] = freshness["age_human"]
-                source_entry["freshness_threshold"] = freshness["threshold_human"]
-                source_entry["is_stale"] = freshness["is_stale"]
+                connector_entry["age"] = freshness["age_human"]
+                connector_entry["freshness_threshold"] = freshness["threshold_human"]
+                connector_entry["is_stale"] = freshness["is_stale"]
 
-            sources.append(source_entry)
+            connectors.append(connector_entry)
 
-        return {"sources": sources}
+        return {"connectors": connectors}
 
-    def _list_sources_cloud(self) -> dict[str, Any]:
-        """List sources in cloud mode using the parquet_paths index + metadata cache.
+    def _list_connectors_cloud(self) -> dict[str, Any]:
+        """List connectors in cloud mode using the parquet_paths index + metadata cache.
 
         Avoids registering all views upfront (which triggers S3 per-table on
         CREATE VIEW). Row counts come from the _dinobase.tables metadata cache
@@ -190,10 +190,10 @@ class QueryEngine:
         parquet_paths = self.db._parquet_paths or {}
 
         if not parquet_paths:
-            return {"sources": []}
+            return {"connectors": []}
 
-        sources: list[dict[str, Any]] = []
-        for source_name, table_paths in parquet_paths.items():
+        connectors: list[dict[str, Any]] = []
+        for connector_name, table_paths in parquet_paths.items():
             user_tables = sorted(
                 t for t in table_paths
                 if not t.startswith("_dlt_") and not t.startswith("_live_")
@@ -209,7 +209,7 @@ class QueryEngine:
                     row = self.db.meta_conn.execute(
                         f"SELECT row_count FROM {META_SCHEMA}.tables "
                         "WHERE schema_name = ? AND table_name = ?",
-                        [source_name, table],
+                        [connector_name, table],
                     ).fetchone()
                     if row:
                         count = row[0] or 0
@@ -218,21 +218,21 @@ class QueryEngine:
                 total_rows += count
                 table_info.append({"name": table, "rows": count})
 
-            freshness = self.get_freshness(source_name)
-            source_entry: dict[str, Any] = {
-                "name": source_name,
+            freshness = self.get_freshness(connector_name)
+            connector_entry: dict[str, Any] = {
+                "name": connector_name,
                 "tables": table_info,
                 "table_count": len(user_tables),
                 "total_rows": total_rows,
                 "last_sync": freshness["last_sync"],
             }
             if freshness["threshold"] is not None:
-                source_entry["age"] = freshness["age_human"]
-                source_entry["freshness_threshold"] = freshness["threshold_human"]
-                source_entry["is_stale"] = freshness["is_stale"]
-            sources.append(source_entry)
+                connector_entry["age"] = freshness["age_human"]
+                connector_entry["freshness_threshold"] = freshness["threshold_human"]
+                connector_entry["is_stale"] = freshness["is_stale"]
+            connectors.append(connector_entry)
 
-        return {"sources": sources}
+        return {"connectors": connectors}
 
     def describe_table(self, table_ref: str) -> dict[str, Any]:
         """Describe a table's columns. table_ref can be 'schema.table' or just 'table'."""
@@ -336,8 +336,8 @@ class QueryEngine:
 
         return result
 
-    def get_freshness(self, source_name: str) -> dict[str, Any]:
-        """Return freshness info for a source.
+    def get_freshness(self, connector_name: str) -> dict[str, Any]:
+        """Return freshness info for a connector.
 
         Returns {last_sync, age_seconds, age_human, threshold, threshold_human, is_stale}.
         """
@@ -345,13 +345,13 @@ class QueryEngine:
 
         result = self.db.meta_conn.execute(
             f"SELECT MAX(finished_at) as last_sync FROM {META_SCHEMA}.sync_log "
-            "WHERE source_name = ? AND status = 'success'",
-            [source_name],
+            "WHERE connector_name = ? AND status = 'success'",
+            [connector_name],
         )
         row = result.fetchone()
         last_sync = row[0] if row and row[0] else None
 
-        threshold = get_freshness_threshold(source_name)
+        threshold = get_freshness_threshold(connector_name)
 
         # File sources — never stale
         if threshold is None:
@@ -395,10 +395,10 @@ class QueryEngine:
         Returns a formatted result dict on success, None on any failure
         (falls back to parquet query).
         """
-        from dinobase.config import get_sources
+        from dinobase.config import get_connectors
 
-        sources = get_sources()
-        source_config = sources.get(schema, {})
+        connectors = get_connectors()
+        source_config = connectors.get(schema, {})
         source_type = source_config.get("type", schema)
         credentials = source_config.get("credentials", {})
 

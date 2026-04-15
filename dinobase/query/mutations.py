@@ -184,7 +184,7 @@ class MutationEngine:
 
     def list_pending(self) -> list[dict[str, Any]]:
         return self.db.query(
-            f"SELECT mutation_id, source_name, table_name, operation, sql_text, "
+            f"SELECT mutation_id, connector_name, table_name, operation, sql_text, "
             f"preview, created_at FROM {META_SCHEMA}.mutations "
             f"WHERE status = 'pending' ORDER BY created_at"
         )
@@ -280,7 +280,7 @@ class MutationEngine:
 
         self.db.conn.execute(
             f"INSERT INTO {META_SCHEMA}.mutations "
-            f"(mutation_id, source_name, table_name, operation, sql_text, preview, status) "
+            f"(mutation_id, connector_name, table_name, operation, sql_text, preview, status) "
             f"VALUES (?, ?, ?, ?, ?, ?, 'pending')",
             [mutation_id, schema, table, "UPDATE", sql, json.dumps(preview_data, default=str)],
         )
@@ -315,7 +315,7 @@ class MutationEngine:
 
         self.db.conn.execute(
             f"INSERT INTO {META_SCHEMA}.mutations "
-            f"(mutation_id, source_name, table_name, operation, sql_text, preview, status) "
+            f"(mutation_id, connector_name, table_name, operation, sql_text, preview, status) "
             f"VALUES (?, ?, ?, ?, ?, ?, 'pending')",
             [mutation_id, schema, table, "INSERT", sql, json.dumps(preview_data, default=str)],
         )
@@ -380,7 +380,7 @@ class MutationEngine:
 
         self.db.conn.execute(
             f"INSERT INTO {META_SCHEMA}.mutations "
-            f"(mutation_id, source_name, table_name, operation, sql_text, preview, status) "
+            f"(mutation_id, connector_name, table_name, operation, sql_text, preview, status) "
             f"VALUES (?, ?, ?, ?, ?, ?, 'pending')",
             [mutation_id, schema, table, "DELETE", sql, json.dumps(preview_data, default=str)],
         )
@@ -395,7 +395,7 @@ class MutationEngine:
     # --- Execution ---
 
     def _execute_mutation(self, mutation: dict) -> dict[str, Any]:
-        schema = mutation["source_name"]
+        schema = mutation["connector_name"]
         table = mutation["table_name"]
         operation = mutation["operation"]
         sql = mutation["sql_text"]
@@ -735,9 +735,9 @@ class MutationEngine:
         return None
 
     def _get_source_info(self, schema: str) -> dict[str, Any] | None:
-        from dinobase.config import get_sources
-        sources = get_sources()
-        return sources.get(schema)
+        from dinobase.config import get_connectors
+        connectors = get_connectors()
+        return connectors.get(schema)
 
 
 def get_endpoint_from_config(config: dict, name: str) -> dict | None:

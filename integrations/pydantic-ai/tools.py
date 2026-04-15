@@ -33,9 +33,9 @@ dinobase_tools = FunctionToolset()
 def dinobase_query(ctx: RunContext[DinobaseDeps], sql: str, max_rows: int = 200) -> str:
     """Execute a SQL query against Dinobase (DuckDB dialect).
 
-    Use this to query business data from connected sources. Tables are
+    Use this to query business data from connected connectors. Tables are
     referenced as schema.table (e.g., stripe.customers, hubspot.contacts).
-    Cross-source JOINs work via shared columns like email.
+    Cross-connector JOINs work via shared columns like email.
 
     Args:
         sql: SQL query to execute (DuckDB dialect).
@@ -47,13 +47,13 @@ def dinobase_query(ctx: RunContext[DinobaseDeps], sql: str, max_rows: int = 200)
 
 
 @dinobase_tools.tool
-def dinobase_list_sources(ctx: RunContext[DinobaseDeps]) -> str:
-    """List all connected Dinobase data sources with tables, row counts, and freshness.
+def dinobase_list_connectors(ctx: RunContext[DinobaseDeps]) -> str:
+    """List all connected Dinobase data connectors with tables, row counts, and freshness.
 
     Use this first to understand what business data is available before writing queries.
     """
     engine = ctx.deps.get_engine()
-    result = engine.list_sources()
+    result = engine.list_connectors()
     return json.dumps(result, indent=2, default=str)
 
 
@@ -72,32 +72,32 @@ def dinobase_describe(ctx: RunContext[DinobaseDeps], table: str) -> str:
 
 
 @dinobase_tools.tool
-def dinobase_refresh(ctx: RunContext[DinobaseDeps], source_name: str) -> str:
-    """Re-sync a data source to get fresh data.
+def dinobase_refresh(ctx: RunContext[DinobaseDeps], connector_name: str) -> str:
+    """Re-sync a connector to get fresh data.
 
     Use when data might be stale and you need up-to-date results.
 
     Args:
-        source_name: Name of the source to refresh (e.g., stripe, hubspot).
+        connector_name: Name of the connector to refresh (e.g., stripe, hubspot).
     """
-    from dinobase.config import get_sources
+    from dinobase.config import get_connectors
     from dinobase.sync.engine import SyncEngine
 
-    sources = get_sources()
-    if source_name not in sources:
-        return json.dumps({"error": f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}"})
+    connectors = get_connectors()
+    if connector_name not in connectors:
+        return json.dumps({"error": f"Connector '{connector_name}' not found. Available: {', '.join(connectors.keys())}"})
 
-    config = sources[source_name]
+    config = connectors[connector_name]
     if config.get("type") in ("parquet", "csv"):
-        return json.dumps({"error": "File sources read live data — no refresh needed."})
+        return json.dumps({"error": "File connectors read live data — no refresh needed."})
 
     engine = ctx.deps.get_engine()
     sync_engine = SyncEngine(engine.db)
-    result = sync_engine.sync(source_name, config)
-    freshness = engine.get_freshness(source_name)
+    result = sync_engine.sync(connector_name, config)
+    freshness = engine.get_freshness(connector_name)
 
     return json.dumps({
-        "source": source_name,
+        "connector": connector_name,
         "status": result.status,
         "tables_synced": result.tables_synced,
         "rows_synced": result.rows_synced,
@@ -116,7 +116,7 @@ dinobase_agent = Agent(
         "You are a data analyst with access to Dinobase — a SQL database "
         "containing business data synced from multiple SaaS tools.\n\n"
         "Workflow:\n"
-        "1. Use dinobase_list_sources to see what data is available\n"
+        "1. Use dinobase_list_connectors to see what data is available\n"
         "2. Use dinobase_describe on relevant tables to understand schemas\n"
         "3. Use dinobase_query to run SQL (DuckDB dialect, tables are schema.table)\n"
         "4. Present results clearly with your analysis"

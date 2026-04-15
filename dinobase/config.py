@@ -99,10 +99,10 @@ def _normalize_url(url: str) -> str:
 def load_config() -> dict[str, Any]:
     path = get_config_path()
     if not path.exists():
-        return {"sources": {}}
+        return {"connectors": {}}
     try:
         with open(path) as f:
-            return yaml.safe_load(f) or {"sources": {}}
+            config = yaml.safe_load(f) or {"connectors": {}}
     except yaml.YAMLError as e:
         import click
         click.echo(f"Error: broken config file at {path}", err=True)
@@ -110,10 +110,26 @@ def load_config() -> dict[str, Any]:
         click.echo("Fix the file manually or delete it and run `dinobase init`.", err=True)
         raise SystemExit(1)
 
+    # Migrate old `sources` key to `connectors`
+    if "sources" in config and "connectors" not in config:
+        import click
+        click.echo(
+            "Note: migrating config.yaml — renaming 'sources' key to 'connectors'.",
+            err=True,
+        )
+        config["connectors"] = config.pop("sources")
+        save_config(config)
 
-def source_exists(name: str) -> bool:
-    """Check if a source with this name is already configured."""
-    return name in load_config().get("sources", {})
+    return config
+
+
+def connector_exists(name: str) -> bool:
+    """Check if a connector with this name is already configured."""
+    return name in load_config().get("connectors", {})
+
+
+# Backward-compat alias
+source_exists = connector_exists
 
 
 def save_config(config: dict[str, Any]) -> None:
@@ -136,7 +152,7 @@ def init_dinobase(storage_url: str | None = None) -> Path:
     (ddir / "cache").mkdir(exist_ok=True)
     config_path = get_config_path()
     if not config_path.exists():
-        config: dict[str, Any] = {"sources": {}}
+        config: dict[str, Any] = {"connectors": {}}
         if storage_url:
             config["storage"] = {"url": _normalize_url(storage_url)}
         save_config(config)
@@ -148,6 +164,27 @@ def init_dinobase(storage_url: str | None = None) -> Path:
     return ddir
 
 
+def add_connector(
+    name: str,
+    connector_type: str,
+    credentials: dict[str, str],
+    sync_interval: str | None = None,
+    freshness_threshold: str | None = None,
+) -> None:
+    config = load_config()
+    connector_config: dict[str, Any] = {
+        "type": connector_type,
+        "credentials": credentials,
+    }
+    if sync_interval:
+        connector_config["sync_interval"] = sync_interval
+    if freshness_threshold:
+        connector_config["freshness_threshold"] = freshness_threshold
+    config["connectors"][name] = connector_config
+    save_config(config)
+
+
+# Backward-compat alias
 def add_source(
     name: str,
     source_type: str,
@@ -155,24 +192,14 @@ def add_source(
     sync_interval: str | None = None,
     freshness_threshold: str | None = None,
 ) -> None:
-    config = load_config()
-    source_config: dict[str, Any] = {
-        "type": source_type,
-        "credentials": credentials,
-    }
-    if sync_interval:
-        source_config["sync_interval"] = sync_interval
-    if freshness_threshold:
-        source_config["freshness_threshold"] = freshness_threshold
-    config["sources"][name] = source_config
-    save_config(config)
+    add_connector(name, source_type, credentials, sync_interval, freshness_threshold)
 
 
 def update_credentials(name: str, credentials: dict[str, str]) -> None:
-    """Update the credentials for an existing source (e.g. after token refresh)."""
+    """Update the credentials for an existing connector (e.g. after token refresh)."""
     config = load_config()
-    if name in config["sources"]:
-        config["sources"][name]["credentials"] = credentials
+    if name in config["connectors"]:
+        config["connectors"][name]["credentials"] = credentials
         save_config(config)
 
 
@@ -188,21 +215,29 @@ def set_oauth_proxy_url(url: str) -> None:
     save_config(config)
 
 
-def remove_source(name: str) -> None:
+def remove_connector(name: str) -> None:
     config = load_config()
-    config["sources"].pop(name, None)
+    config["connectors"].pop(name, None)
     save_config(config)
 
 
-def get_sources() -> dict[str, Any]:
-    return load_config().get("sources", {})
+# Backward-compat alias
+remove_source = remove_connector
+
+
+def get_connectors() -> dict[str, Any]:
+    return load_config().get("connectors", {})
+
+
+# Backward-compat alias
+get_sources = get_connectors
 
 
 # ---------------------------------------------------------------------------
 # Freshness thresholds
 # ---------------------------------------------------------------------------
 
-# Defaults by source category (when not explicitly set in config)
+# Defaults by connector category (when not explicitly set in config)
 _DEFAULT_THRESHOLDS: dict[str, str] = {
     "saas": "1h",
     "database": "6h",
@@ -229,7 +264,7 @@ def _parse_duration(duration: str) -> int:
 
 
 def _source_category(source_type: str) -> str:
-    """Classify a source type into a category for default thresholds."""
+    """Classify a connector type into a category for default thresholds."""
     if source_type in ("parquet", "csv"):
         return "file"
     try:
@@ -245,27 +280,27 @@ def _source_category(source_type: str) -> str:
     return "saas"
 
 
-def get_freshness_threshold(source_name: str) -> int | None:
-    """Return the freshness threshold in seconds for a source.
+def get_freshness_threshold(connector_name: str) -> int | None:
+    """Return the freshness threshold in seconds for a connector.
 
-    Returns None for file sources (never stale).
-    Uses explicit config value if set, otherwise defaults by source category.
+    Returns None for file connectors (never stale).
+    Uses explicit config value if set, otherwise defaults by connector category.
     """
-    sources = get_sources()
-    source_config = sources.get(source_name, {})
-    source_type = source_config.get("type", source_name)
+    connectors = get_connectors()
+    connector_config = connectors.get(connector_name, {})
+    connector_type = connector_config.get("type", connector_name)
 
-    # File sources are never stale (they read live at query time)
-    if _source_category(source_type) == "file":
+    # File connectors are never stale (they read live at query time)
+    if _source_category(connector_type) == "file":
         return None
 
     # Explicit threshold in config
-    explicit = source_config.get("freshness_threshold")
+    explicit = connector_config.get("freshness_threshold")
     if explicit:
         return _parse_duration(explicit)
 
     # Default by category
-    category = _source_category(source_type)
+    category = _source_category(connector_type)
     default = _DEFAULT_THRESHOLDS.get(category)
     if default:
         return _parse_duration(default)

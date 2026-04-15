@@ -305,7 +305,7 @@ def test_mutation_logged(mutation_engine, db):
     )
     assert len(rows) == 1
     assert rows[0]["status"] == "executed"
-    assert rows[0]["source_name"] == "hubspot"
+    assert rows[0]["connector_name"] == "hubspot"
     assert rows[0]["operation"] == "UPDATE"
 
 
@@ -429,7 +429,7 @@ def test_delete_audit_log(mutation_engine, db):
     assert len(rows) == 1
     assert rows[0]["status"] == "executed"
     assert rows[0]["operation"] == "DELETE"
-    assert rows[0]["source_name"] == "hubspot"
+    assert rows[0]["connector_name"] == "hubspot"
 
 
 def test_multi_statement_with_delete(mutation_engine):

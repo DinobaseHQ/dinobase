@@ -38,7 +38,7 @@ def test_instructions_do_not_contain_columns(engine):
 
 def test_instructions_mention_tools(engine):
     instructions = _build_instructions(engine)
-    assert "list_sources" in instructions
+    assert "list_connectors" in instructions
     assert "describe" in instructions
     assert "query" in instructions
 
@@ -151,9 +151,9 @@ def test_cross_source_query(engine):
     assert result["row_count"] > 0
 
 
-def test_list_sources_returns_both(engine):
-    result = engine.list_sources()
-    names = {s["name"] for s in result["sources"]}
+def test_list_connectors_returns_both(engine):
+    result = engine.list_connectors()
+    names = {s["name"] for s in result["connectors"]}
     assert names == {"stripe", "hubspot"}
 
 

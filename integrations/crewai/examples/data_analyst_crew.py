@@ -14,7 +14,7 @@ from crewai import Agent, Crew, Process, Task
 
 # Import Dinobase tools
 sys.path.insert(0, "..")
-from tools import dinobase_query, dinobase_list_sources, dinobase_describe
+from tools import dinobase_query, dinobase_list_connectors, dinobase_describe
 
 
 def create_crew(question: str) -> Crew:
@@ -27,7 +27,7 @@ def create_crew(question: str) -> Crew:
             "You always check what data is available before writing queries, "
             "and you use describe to understand table schemas."
         ),
-        tools=[dinobase_list_sources, dinobase_describe, dinobase_query],
+        tools=[dinobase_list_connectors, dinobase_describe, dinobase_query],
         verbose=True,
     )
 
@@ -35,7 +35,7 @@ def create_crew(question: str) -> Crew:
         description=(
             f"Answer this business question: {question}\n\n"
             "Steps:\n"
-            "1. Use dinobase_list_sources to see what data is available\n"
+            "1. Use dinobase_list_connectors to see what data is available\n"
             "2. Use dinobase_describe on relevant tables to understand columns\n"
             "3. Write and execute SQL queries with dinobase_query\n"
             "4. Present the results clearly with your analysis"

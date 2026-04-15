@@ -93,18 +93,18 @@ def test_describe_parquet_table(db):
     assert len(result["sample_rows"]) == 3
 
 
-def test_list_sources_includes_parquet(db):
-    """list_sources should show parquet-backed sources."""
+def test_list_connectors_includes_parquet(db):
+    """list_connectors should show parquet-backed connectors."""
     add_file_source(db, "demo", str(SAMPLE_DATA_DIR))
     db.log_sync_start("demo", "parquet")
     db.log_sync_end(1, "success", tables_synced=7, rows_synced=1385)
     db.update_table_metadata("demo", "demo")
 
     engine = QueryEngine(db)
-    result = engine.list_sources()
-    names = [s["name"] for s in result["sources"]]
+    result = engine.list_connectors()
+    names = [s["name"] for s in result["connectors"]]
     assert "demo" in names
-    demo = next(s for s in result["sources"] if s["name"] == "demo")
+    demo = next(s for s in result["connectors"] if s["name"] == "demo")
     assert demo["total_rows"] > 0
 
 

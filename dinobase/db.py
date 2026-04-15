@@ -20,8 +20,8 @@ CREATE SEQUENCE IF NOT EXISTS {META_SCHEMA}.sync_log_seq START 1;
 
 CREATE TABLE IF NOT EXISTS {META_SCHEMA}.sync_log (
     id INTEGER PRIMARY KEY DEFAULT nextval('{META_SCHEMA}.sync_log_seq'),
-    source_name VARCHAR NOT NULL,
-    source_type VARCHAR NOT NULL,
+    connector_name VARCHAR NOT NULL,
+    connector_type VARCHAR NOT NULL,
     started_at TIMESTAMP DEFAULT current_timestamp,
     finished_at TIMESTAMP,
     status VARCHAR DEFAULT 'running',
@@ -31,17 +31,17 @@ CREATE TABLE IF NOT EXISTS {META_SCHEMA}.sync_log (
 );
 
 CREATE TABLE IF NOT EXISTS {META_SCHEMA}.tables (
-    source_name VARCHAR NOT NULL,
+    connector_name VARCHAR NOT NULL,
     schema_name VARCHAR NOT NULL,
     table_name VARCHAR NOT NULL,
     row_count BIGINT DEFAULT 0,
     last_sync TIMESTAMP,
     description VARCHAR,
-    PRIMARY KEY (source_name, schema_name, table_name)
+    PRIMARY KEY (connector_name, schema_name, table_name)
 );
 
 CREATE TABLE IF NOT EXISTS {META_SCHEMA}.columns (
-    source_name VARCHAR NOT NULL,
+    connector_name VARCHAR NOT NULL,
     schema_name VARCHAR NOT NULL,
     table_name VARCHAR NOT NULL,
     column_name VARCHAR NOT NULL,
@@ -49,17 +49,17 @@ CREATE TABLE IF NOT EXISTS {META_SCHEMA}.columns (
     is_nullable BOOLEAN DEFAULT true,
     description VARCHAR,
     note VARCHAR,
-    PRIMARY KEY (source_name, schema_name, table_name, column_name)
+    PRIMARY KEY (connector_name, schema_name, table_name, column_name)
 );
 
 CREATE TABLE IF NOT EXISTS {META_SCHEMA}.live_rows (
-    source_name VARCHAR NOT NULL,
+    connector_name VARCHAR NOT NULL,
     table_name VARCHAR NOT NULL,
     record_id VARCHAR NOT NULL,
     row_data JSON NOT NULL,
     written_at TIMESTAMP DEFAULT current_timestamp,
     mutation_id VARCHAR,
-    PRIMARY KEY (source_name, table_name, record_id)
+    PRIMARY KEY (connector_name, table_name, record_id)
 );
 
 CREATE SEQUENCE IF NOT EXISTS {META_SCHEMA}.mutation_seq START 1;
@@ -67,7 +67,7 @@ CREATE SEQUENCE IF NOT EXISTS {META_SCHEMA}.mutation_seq START 1;
 CREATE TABLE IF NOT EXISTS {META_SCHEMA}.mutations (
     id INTEGER PRIMARY KEY DEFAULT nextval('{META_SCHEMA}.mutation_seq'),
     mutation_id VARCHAR NOT NULL UNIQUE,
-    source_name VARCHAR NOT NULL,
+    connector_name VARCHAR NOT NULL,
     table_name VARCHAR NOT NULL,
     operation VARCHAR NOT NULL,
     sql_text VARCHAR NOT NULL,
@@ -379,8 +379,40 @@ class DinobaseDB:
         self._conn.execute(
             f"ALTER TABLE {META_SCHEMA}.tables ADD COLUMN IF NOT EXISTS description VARCHAR"
         )
+        self._migrate_schema()
         # Register views for cached local connector data
         self._register_endpoint_views()
+
+    def _migrate_schema(self) -> None:
+        """Rename legacy source_name/source_type columns to connector_name/connector_type."""
+        # Check if old column name still exists in sync_log
+        try:
+            cols = self._conn.execute(
+                f"SELECT column_name FROM information_schema.columns "
+                f"WHERE table_schema = '{META_SCHEMA}' AND table_name = 'sync_log' "
+                f"AND column_name = 'source_name'"
+            ).fetchall()
+        except Exception:
+            return
+        if not cols:
+            return  # Already migrated
+
+        renames = [
+            ("sync_log", "source_name", "connector_name"),
+            ("sync_log", "source_type", "connector_type"),
+            ("tables", "source_name", "connector_name"),
+            ("columns", "source_name", "connector_name"),
+            ("live_rows", "source_name", "connector_name"),
+            ("mutations", "source_name", "connector_name"),
+        ]
+        for table, old_col, new_col in renames:
+            try:
+                self._conn.execute(
+                    f"ALTER TABLE {META_SCHEMA}.{table} "
+                    f"RENAME COLUMN {old_col} TO {new_col}"
+                )
+            except Exception:
+                pass  # Column may not exist in this table
 
     def _register_endpoint_views(self) -> None:
         """Create DuckDB views for any existing JSON cache files from local connectors."""
@@ -441,13 +473,13 @@ class DinobaseDB:
         rows = self.query(f'SELECT COUNT(*) as cnt FROM "{schema}"."{table}"')
         return rows[0]["cnt"] if rows else 0
 
-    def log_sync_start(self, source_name: str, source_type: str) -> int:
+    def log_sync_start(self, connector_name: str, connector_type: str) -> int:
         """Record the start of a sync. Returns the sync log ID."""
         result = self.meta_conn.execute(
-            f"INSERT INTO {META_SCHEMA}.sync_log (source_name, source_type) "
+            f"INSERT INTO {META_SCHEMA}.sync_log (connector_name, connector_type) "
             f"VALUES (?, ?) "
             f"RETURNING id",
-            [source_name, source_type],
+            [connector_name, connector_type],
         )
         return result.fetchone()[0]
 
@@ -472,7 +504,7 @@ class DinobaseDB:
 
     def update_table_metadata(
         self,
-        source_name: str,
+        connector_name: str,
         schema_name: str,
         annotations: dict[str, dict[str, dict[str, str]]] | None = None,
         row_counts: dict[str, int] | None = None,
@@ -499,7 +531,7 @@ class DinobaseDB:
         # The stored schemas come from the previous sync and avoid all S3 access.
         # For tables that have no stored schema yet (first sync), fall back to
         # information_schema.columns which will read S3 (unavoidable on first sync).
-        stored_cols = self.get_stored_column_schemas(source_name, schema_name)
+        stored_cols = self.get_stored_column_schemas(connector_name, schema_name)
         columns_by_table: dict[str, list[dict]] = defaultdict(list)
         for tbl, col_list in stored_cols.items():
             for col_name, col_type in col_list:
@@ -538,11 +570,11 @@ class DinobaseDB:
                 row_count = self.get_row_count(schema_name, table)
             # Upsert into _dinobase.tables
             self.meta_conn.execute(
-                f"INSERT INTO {META_SCHEMA}.tables (source_name, schema_name, table_name, row_count, last_sync) "
+                f"INSERT INTO {META_SCHEMA}.tables (connector_name, schema_name, table_name, row_count, last_sync) "
                 f"VALUES (?, ?, ?, ?, current_timestamp) "
-                f"ON CONFLICT (source_name, schema_name, table_name) DO UPDATE SET "
+                f"ON CONFLICT (connector_name, schema_name, table_name) DO UPDATE SET "
                 f"row_count = excluded.row_count, last_sync = excluded.last_sync",
-                [source_name, schema_name, table, row_count],
+                [connector_name, schema_name, table, row_count],
             )
             # Update columns (stored schemas first, fall back to per-table query)
             table_annotations = annotations.get(table, {})
@@ -552,14 +584,14 @@ class DinobaseDB:
                 col_ann = table_annotations.get(col_name, {})
                 self.meta_conn.execute(
                     f"INSERT INTO {META_SCHEMA}.columns "
-                    f"(source_name, schema_name, table_name, column_name, column_type, is_nullable, description, note) "
+                    f"(connector_name, schema_name, table_name, column_name, column_type, is_nullable, description, note) "
                     f"VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-                    f"ON CONFLICT (source_name, schema_name, table_name, column_name) DO UPDATE SET "
+                    f"ON CONFLICT (connector_name, schema_name, table_name, column_name) DO UPDATE SET "
                     f"column_type = excluded.column_type, is_nullable = excluded.is_nullable, "
                     f"description = COALESCE(excluded.description, {META_SCHEMA}.columns.description), "
                     f"note = COALESCE(excluded.note, {META_SCHEMA}.columns.note)",
                     [
-                        source_name,
+                        connector_name,
                         schema_name,
                         table,
                         col_name,
@@ -574,7 +606,7 @@ class DinobaseDB:
             self._save_meta_table("columns")
 
     def get_stored_column_schemas(
-        self, source_name: str, schema_name: str
+        self, connector_name: str, schema_name: str
     ) -> dict[str, list[tuple[str, str]]]:
         """Return stored column (name, type) pairs per table from _dinobase.columns.
 
@@ -586,10 +618,10 @@ class DinobaseDB:
             rows = self.meta_conn.execute(
                 f"SELECT table_name, column_name, column_type "
                 f"FROM {META_SCHEMA}.columns "
-                "WHERE source_name = ? AND schema_name = ? "
+                "WHERE connector_name = ? AND schema_name = ? "
                 "AND column_type IS NOT NULL "
                 "ORDER BY table_name, column_name",
-                [source_name, schema_name],
+                [connector_name, schema_name],
             ).fetchall()
         except Exception:
             return {}
@@ -675,15 +707,15 @@ class DinobaseDB:
         ).fetchone()
         return (row[0] if row else 0) > 0
 
-    def get_sources_without_relationships(self) -> list[str]:
+    def get_connectors_without_relationships(self) -> list[str]:
         """Return schema names that have tables but no relationship edges."""
         self._ensure_metadata_loaded()
-        all_sources = self.query(
+        all_connectors = self.query(
             f"SELECT DISTINCT schema_name FROM {META_SCHEMA}.tables "
             f"WHERE schema_name != '{META_SCHEMA}'"
         )
         result = []
-        for row in all_sources:
+        for row in all_connectors:
             schema = row["schema_name"]
             if not self.has_relationships(schema):
                 result.append(schema)
@@ -736,7 +768,7 @@ class DinobaseDB:
 
     def upsert_live_row(
         self,
-        source_name: str,
+        connector_name: str,
         table_name: str,
         record_id: str,
         row_data: dict,
@@ -750,36 +782,36 @@ class DinobaseDB:
         import json
         self.meta_conn.execute(
             f"INSERT INTO {META_SCHEMA}.live_rows "
-            f"(source_name, table_name, record_id, row_data, mutation_id) "
+            f"(connector_name, table_name, record_id, row_data, mutation_id) "
             f"VALUES (?, ?, ?, ?, ?) "
-            f"ON CONFLICT (source_name, table_name, record_id) DO UPDATE SET "
+            f"ON CONFLICT (connector_name, table_name, record_id) DO UPDATE SET "
             f"row_data = excluded.row_data, written_at = current_timestamp, "
             f"mutation_id = excluded.mutation_id",
-            [source_name, table_name, record_id, json.dumps(row_data, default=str), mutation_id],
+            [connector_name, table_name, record_id, json.dumps(row_data, default=str), mutation_id],
         )
         if self.is_cloud:
             self._save_meta_table("live_rows")
 
-    def get_live_row_ids(self, source_name: str, table_name: str) -> list[str]:
-        """Get IDs of all live rows for a source.table."""
+    def get_live_row_ids(self, connector_name: str, table_name: str) -> list[str]:
+        """Get IDs of all live rows for a connector.table."""
         result = self.meta_conn.execute(
             f"SELECT record_id FROM {META_SCHEMA}.live_rows "
-            "WHERE source_name = ? AND table_name = ?",
-            [source_name, table_name],
+            "WHERE connector_name = ? AND table_name = ?",
+            [connector_name, table_name],
         )
         return [r[0] for r in result.fetchall()]
 
-    def clear_live_rows(self, source_name: str, table_name: str | None = None) -> int:
+    def clear_live_rows(self, connector_name: str, table_name: str | None = None) -> int:
         """Clear live rows after a successful sync. Returns count cleared."""
         if table_name:
             sql = (
                 f"DELETE FROM {META_SCHEMA}.live_rows "
-                f"WHERE source_name = ? AND table_name = ?"
+                f"WHERE connector_name = ? AND table_name = ?"
             )
-            result = self.meta_conn.execute(sql, [source_name, table_name])
+            result = self.meta_conn.execute(sql, [connector_name, table_name])
         else:
-            sql = f"DELETE FROM {META_SCHEMA}.live_rows WHERE source_name = ?"
-            result = self.meta_conn.execute(sql, [source_name])
+            sql = f"DELETE FROM {META_SCHEMA}.live_rows WHERE connector_name = ?"
+            result = self.meta_conn.execute(sql, [connector_name])
         count = result.fetchone()[0] if result.description else 0
         if self.is_cloud:
             self._save_meta_table("live_rows")

@@ -142,7 +142,7 @@ def test_get_freshness_stale_source(sample_db):
     # so we must store a naive UTC timestamp to get the correct age.
     old_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
     sample_db.conn.execute(
-        "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
+        "UPDATE _dinobase.sync_log SET finished_at = ? WHERE connector_name = 'stripe'",
         [old_time],
     )
 
@@ -168,33 +168,33 @@ def test_get_freshness_never_synced(sample_db):
 
 
 # ---------------------------------------------------------------------------
-# Integration tests: list_sources includes freshness
+# Integration tests: list_connectors includes freshness
 # ---------------------------------------------------------------------------
 
-def test_list_sources_includes_freshness(sample_db):
-    """list_sources should include freshness fields."""
+def test_list_connectors_includes_freshness(sample_db):
+    """list_connectors should include freshness fields."""
     engine = QueryEngine(sample_db)
-    result = engine.list_sources()
+    result = engine.list_connectors()
 
-    stripe = next(s for s in result["sources"] if s["name"] == "stripe")
+    stripe = next(s for s in result["connectors"] if s["name"] == "stripe")
     assert "last_sync" in stripe
     assert "is_stale" in stripe
     assert "age" in stripe
     assert "freshness_threshold" in stripe
 
 
-def test_list_sources_stale_flag(sample_db):
-    """Stale sources should have is_stale=True in list_sources."""
+def test_list_connectors_stale_flag(sample_db):
+    """Stale connectors should have is_stale=True in list_connectors."""
     old_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
     sample_db.conn.execute(
-        "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
+        "UPDATE _dinobase.sync_log SET finished_at = ? WHERE connector_name = 'stripe'",
         [old_time],
     )
 
     engine = QueryEngine(sample_db)
-    result = engine.list_sources()
+    result = engine.list_connectors()
 
-    stripe = next(s for s in result["sources"] if s["name"] == "stripe")
+    stripe = next(s for s in result["connectors"] if s["name"] == "stripe")
     assert stripe["is_stale"] is True
 
 

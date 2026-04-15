@@ -34,7 +34,7 @@ def fresh_db(tmp_path):
 
     # Register in _dinobase.tables so the agent knows about them
     db.conn.execute(
-        "INSERT INTO _dinobase.tables (source_name, schema_name, table_name, row_count) VALUES "
+        "INSERT INTO _dinobase.tables (connector_name, schema_name, table_name, row_count) VALUES "
         "('stripe','stripe','customers',10),"
         "('stripe','stripe','subscriptions',5),"
         "('stripe','stripe','plans',3)"
@@ -107,7 +107,7 @@ def test_heuristic_skips_dlt_tables(tmp_path):
     db.conn.execute("CREATE TABLE src._dlt_loads (load_id VARCHAR, schema_name VARCHAR)")
     db.conn.execute("CREATE TABLE src.items (id VARCHAR, _dlt_load_id VARCHAR)")
     db.conn.execute(
-        "INSERT INTO _dinobase.tables (source_name, schema_name, table_name, row_count) VALUES "
+        "INSERT INTO _dinobase.tables (connector_name, schema_name, table_name, row_count) VALUES "
         "('src','src','_dlt_loads',1),('src','src','items',5)"
     )
     rels = detect_relationships_heuristic(db, "src")

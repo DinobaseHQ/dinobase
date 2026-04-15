@@ -12,7 +12,7 @@ from dinobase.annotations import AnnotateBatchInput, AnnotationInput, Relationsh
 
 
 _AGENT_COMMANDS = frozenset({
-    "info", "query", "describe", "status", "sources",
+    "info", "query", "describe", "status", "connectors",
     "confirm", "cancel", "refresh", "auth", "mcp",
 })
 
@@ -769,67 +769,77 @@ def auth(source_type: str, name: str | None, headless: bool):
         click.echo("Run `dinobase sync` to load data.")
 
 
-@cli.command("sources")
-@click.option("--available", is_flag=True, help="Show all available source types (not just connected)")
+@cli.command("connectors")
+@click.option("--available", is_flag=True, help="Show all available connector types (not just connected)")
 @click.option("--pretty", is_flag=True, help="Human-readable output with descriptions")
-def list_sources_cmd(available: bool, pretty: bool):
-    """List connected data sources, or all available source types with --available."""
+def list_connectors_cmd(available: bool, pretty: bool):
+    """List connected data connectors, or all available connector types with --available."""
     if available:
-        _list_available_sources(pretty)
+        _list_available_connectors(pretty)
         return
 
-    # Cloud mode — list sources from the API
+    # Cloud mode — list connectors from the API
     cloud = _get_cloud_client()
     if cloud:
         try:
-            sources = cloud.list_sources()
+            connectors = cloud.list_connectors()
             if not pretty:
-                click.echo(json.dumps(sources, indent=2, default=str))
-            elif not sources:
-                click.echo("No sources connected. Run `dinobase auth <source>` to connect one.")
+                click.echo(json.dumps(connectors, indent=2, default=str))
+            elif not connectors:
+                click.echo("No connectors connected. Run `dinobase auth <connector>` to connect one.")
             else:
-                for src in sources:
+                for src in connectors:
                     click.echo(f"  {src['name']:<20} type={src['type']}  ({src['auth_method']})")
-                click.echo(f"\n{len(sources)} source(s) connected.")
+                click.echo(f"\n{len(connectors)} connector(s) connected.")
         except RuntimeError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(1)
         return
 
-    # Local mode — show connected sources from config
-    from dinobase.config import get_sources
+    # Local mode — show connected connectors from config
+    from dinobase.config import get_connectors
 
-    sources = get_sources()
-    if not sources:
+    connectors = get_connectors()
+    if not connectors:
         if pretty:
-            click.echo("No sources connected. Run `dinobase add <source>` to add one.")
-            click.echo("Run `dinobase sources --available` to see all available source types.")
+            click.echo("No connectors configured. Run `dinobase add <connector>` to add one.")
+            click.echo("Run `dinobase connectors --available` to see all available connector types.")
         else:
             click.echo(json.dumps([]))
         return
 
     if not pretty:
-        click.echo(json.dumps(list(sources.keys())))
+        click.echo(json.dumps(list(connectors.keys())))
         return
 
-    for name, config in sources.items():
-        source_type = config.get("type", name)
-        click.echo(f"  {name:<20} type={source_type}")
+    for name, config in connectors.items():
+        connector_type = config.get("type", name)
+        click.echo(f"  {name:<20} type={connector_type}")
 
-    click.echo(f"\n{len(sources)} source(s) connected.")
-    click.echo("Run `dinobase sources --available` to see all available source types.")
+    click.echo(f"\n{len(connectors)} connector(s) connected.")
+    click.echo("Run `dinobase connectors --available` to see all available connector types.")
 
 
-def _list_available_sources(pretty: bool):
-    """Show all available source types from the registry."""
+@cli.command("sources", hidden=True)
+@click.option("--available", is_flag=True)
+@click.option("--pretty", is_flag=True)
+@click.pass_context
+def list_sources_cmd(ctx: click.Context, available: bool, pretty: bool):
+    """Deprecated: use `dinobase connectors` instead."""
+    click.echo("Note: `dinobase sources` is deprecated, use `dinobase connectors`.", err=True)
+    ctx.invoke(list_connectors_cmd, available=available, pretty=pretty)
+
+
+def _list_available_connectors(pretty: bool):
+    """Show all available connector types from the registry."""
     from dinobase.sync.registry import SOURCES
 
     if not pretty:
-        sources = []
+        connectors = []
         for _name, entry in sorted(SOURCES.items()):
-            sources.append(entry.to_dict())
-        # Add file sources
-        sources.append({
+            connectors.append(entry.to_dict())
+        # Add file connectors
+        connectors.append({
             "name": "parquet",
             "description": "Parquet files (local, S3, GCS)",
             "supports_oauth": False,
@@ -837,7 +847,7 @@ def _list_available_sources(pretty: bool):
             "credentials": [{"name": "path", "cli_flag": "--path", "env_var": None, "prompt": "Path to parquet files", "secret": False}],
             "pip_extra": None,
         })
-        sources.append({
+        connectors.append({
             "name": "csv",
             "description": "CSV files (local, S3, GCS)",
             "supports_oauth": False,
@@ -845,7 +855,7 @@ def _list_available_sources(pretty: bool):
             "credentials": [{"name": "path", "cli_flag": "--path", "env_var": None, "prompt": "Path to CSV files", "secret": False}],
             "pip_extra": None,
         })
-        click.echo(json.dumps(sources, indent=2))
+        click.echo(json.dumps(connectors, indent=2))
         return
 
     saas = []
@@ -862,7 +872,7 @@ def _list_available_sources(pretty: bool):
         else:
             saas.append(line)
 
-    click.echo("Available sources:\n")
+    click.echo("Available connectors:\n")
 
     click.echo("  SaaS APIs:")
     for line in saas:
@@ -887,18 +897,18 @@ def _list_available_sources(pretty: bool):
 @click.option("--interval", default="1h", help="Default sync interval for --schedule (e.g. 30m, 1h, 6h)")
 @click.option("--max-workers", default=10, help="Max concurrent syncs (default 10)")
 def sync(source_name: str | None, schedule: bool, interval: str, max_workers: int):
-    """Sync data from connected sources.
+    """Sync data from connected connectors.
 
     By default, runs a one-time sync. Use --schedule to run continuously.
-    Sources sync concurrently (up to --max-workers at a time).
+    Connectors sync concurrently (up to --max-workers at a time).
 
     Examples:
 
-      dinobase sync                    # sync all sources once
-      dinobase sync salesforce         # sync one source
+      dinobase sync                    # sync all connectors once
+      dinobase sync salesforce         # sync one connector
       dinobase sync --schedule         # run daemon, sync every 1h
       dinobase sync --schedule --interval 30m  # sync every 30m
-      dinobase sync --max-workers 20   # sync up to 20 sources at once
+      dinobase sync --max-workers 20   # sync up to 20 connectors at once
     """
     # Cloud mode — trigger server-side sync
     cloud = _get_cloud_client()
@@ -911,14 +921,14 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
             sys.exit(1)
         return
 
-    from dinobase.config import get_sources, init_dinobase
+    from dinobase.config import get_connectors, init_dinobase
     from dinobase.db import DinobaseDB
 
     init_dinobase()
-    sources = get_sources()
+    connectors = get_connectors()
 
-    if not sources:
-        click.echo("No sources configured. Run `dinobase add <source>` first.")
+    if not connectors:
+        click.echo("No connectors configured. Run `dinobase add <connector>` first.")
         sys.exit(1)
 
     # Scheduled mode — run as daemon
@@ -941,16 +951,16 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
     from dinobase.fetch.connector import is_local_connector
 
     if source_name:
-        if source_name not in sources:
+        if source_name not in connectors:
             # Check if it's a standalone local connector (e.g. MCP)
             if is_local_connector(source_name):
-                sources[source_name] = {"type": source_name}
+                connectors[source_name] = {"type": source_name}
             else:
-                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                click.echo(f"Connector '{source_name}' not found. Available: {', '.join(connectors.keys())}")
                 sys.exit(1)
-        to_sync = {source_name: sources[source_name]}
+        to_sync = {source_name: connectors[source_name]}
     else:
-        to_sync = sources
+        to_sync = connectors
 
     db = DinobaseDB()
     engine = SyncEngine(db)
@@ -959,9 +969,9 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
     total_rows = 0
 
     for name, config in to_sync.items():
-        # Skip file sources with a clear message
+        # Skip file connectors with a clear message
         if config.get("type") in ("parquet", "csv"):
-            click.echo(f"  {name}: file source — no sync needed (query directly)")
+            click.echo(f"  {name}: file connector — no sync needed (query directly)")
             continue
         result = engine.sync(name, config)
         if result.status == "success":
@@ -983,16 +993,16 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
 @click.option("--stale", is_flag=True, help="Refresh only stale sources")
 @click.option("--pretty", is_flag=True, help="Human-readable output instead of JSON")
 def refresh(source_name: str | None, stale: bool, pretty: bool):
-    """Re-sync sources to get fresh data. Blocks until complete (typically 10-60s per source).
+    """Re-sync connectors to get fresh data. Blocks until complete (typically 10-60s per connector).
 
-    Without arguments, refreshes all sources. Use --stale to refresh
-    only sources that exceed their freshness threshold.
+    Without arguments, refreshes all connectors. Use --stale to refresh
+    only connectors that exceed their freshness threshold.
 
     Examples:
 
-      dinobase refresh                 # refresh all sources
-      dinobase refresh stripe          # refresh one source
-      dinobase refresh --stale         # refresh only stale sources
+      dinobase refresh                 # refresh all connectors
+      dinobase refresh stripe          # refresh one connector
+      dinobase refresh --stale         # refresh only stale connectors
       dinobase refresh --stale --pretty  # human-readable output
     """
     # Cloud mode — trigger sync via API
@@ -1003,22 +1013,22 @@ def refresh(source_name: str | None, stale: bool, pretty: bool):
             if not pretty:
                 click.echo(json.dumps(result, indent=2, default=str))
             else:
-                click.echo(f"Sync triggered for {result.get('sources', '?')} source(s).")
+                click.echo(f"Sync triggered for {result.get('connectors', '?')} connector(s).")
         except RuntimeError as e:
             click.echo(f"Refresh failed: {e}", err=True)
             sys.exit(1)
         return
 
-    from dinobase.config import get_sources, init_dinobase
+    from dinobase.config import get_connectors, init_dinobase
     from dinobase.db import DinobaseDB
     from dinobase.query.engine import QueryEngine
     from dinobase.sync.engine import SyncEngine
 
     init_dinobase()
-    sources = get_sources()
+    connectors = get_connectors()
 
-    if not sources:
-        click.echo("No sources configured. Run `dinobase add <source>` first.")
+    if not connectors:
+        click.echo("No connectors configured. Run `dinobase add <connector>` first.")
         sys.exit(1)
 
     db = DinobaseDB()
@@ -1027,19 +1037,19 @@ def refresh(source_name: str | None, stale: bool, pretty: bool):
 
     from dinobase.fetch.connector import is_local_connector
 
-    # Determine which sources to refresh
+    # Determine which connectors to refresh
     if source_name:
-        if source_name not in sources:
+        if source_name not in connectors:
             if is_local_connector(source_name):
-                sources[source_name] = {"type": source_name}
+                connectors[source_name] = {"type": source_name}
             else:
-                click.echo(f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}")
+                click.echo(f"Connector '{source_name}' not found. Available: {', '.join(connectors.keys())}")
                 db.close()
                 sys.exit(1)
-        to_refresh = {source_name: sources[source_name]}
+        to_refresh = {source_name: connectors[source_name]}
     elif stale:
         to_refresh = {}
-        for name, config in sources.items():
+        for name, config in connectors.items():
             if config.get("type") in ("parquet", "csv"):
                 continue
             freshness = engine.get_freshness(name)
@@ -1047,19 +1057,19 @@ def refresh(source_name: str | None, stale: bool, pretty: bool):
                 to_refresh[name] = config
         if not to_refresh:
             if pretty:
-                click.echo("All sources are fresh.")
+                click.echo("All connectors are fresh.")
             else:
                 click.echo(json.dumps({"status": "all_fresh"}))
             db.close()
             return
     else:
-        # No args, no --stale: refresh all non-file sources
+        # No args, no --stale: refresh all non-file connectors
         to_refresh = {
-            name: config for name, config in sources.items()
+            name: config for name, config in connectors.items()
             if config.get("type") not in ("parquet", "csv")
         }
         if not to_refresh:
-            click.echo("No syncable sources to refresh.")
+            click.echo("No syncable connectors to refresh.")
             db.close()
             return
 
@@ -1130,7 +1140,7 @@ def status(pretty: bool):
 
     db = DinobaseDB()
     engine = QueryEngine(db)
-    result = engine.list_sources()
+    result = engine.list_connectors()
 
     if not pretty:
         click.echo(json.dumps(result, indent=2, default=str))
@@ -1145,27 +1155,27 @@ def status(pretty: bool):
         from dinobase.config import get_db_path
         click.echo(f"Storage: {get_db_path()} (local)")
 
-    if not result["sources"]:
-        click.echo("\nNo data loaded. Run `dinobase add <source>` then `dinobase sync`.")
+    if not result["connectors"]:
+        click.echo("\nNo data loaded. Run `dinobase add <connector>` then `dinobase sync`.")
         db.close()
         return
 
-    for source in result["sources"]:
+    for connector in result["connectors"]:
         status_tag = ""
-        if source.get("is_stale"):
+        if connector.get("is_stale"):
             status_tag = " [STALE]"
-        elif source.get("age"):
+        elif connector.get("age"):
             status_tag = " [fresh]"
 
-        click.echo(f"\n{source['name']}:{status_tag}")
-        click.echo(f"  Tables: {source['table_count']}")
-        click.echo(f"  Total rows: {source['total_rows']:,}")
-        if source["last_sync"]:
-            age_str = f" ({source['age']} ago)" if source.get("age") else ""
-            click.echo(f"  Last sync: {source['last_sync']}{age_str}")
-        if source.get("freshness_threshold"):
-            click.echo(f"  Freshness threshold: {source['freshness_threshold']}")
-        for table in source["tables"]:
+        click.echo(f"\n{connector['name']}:{status_tag}")
+        click.echo(f"  Tables: {connector['table_count']}")
+        click.echo(f"  Total rows: {connector['total_rows']:,}")
+        if connector["last_sync"]:
+            age_str = f" ({connector['age']} ago)" if connector.get("age") else ""
+            click.echo(f"  Last sync: {connector['last_sync']}{age_str}")
+        if connector.get("freshness_threshold"):
+            click.echo(f"  Freshness threshold: {connector['freshness_threshold']}")
+        for table in connector["tables"]:
             click.echo(f"    {table['name']}: {table['rows']:,} rows")
 
     db.close()
@@ -1565,14 +1575,14 @@ def doctor():
         else:
             _fail(f"Local database not found: {db_path}", "Run `dinobase init` to create it.")
 
-    # 4. Connected sources
+    # 4. Connected connectors
     try:
         config = load_config()
-        sources = config.get("sources", {})
-        if sources:
-            _pass(f"{len(sources)} source(s) configured: {', '.join(sources.keys())}")
+        connectors = config.get("connectors", {})
+        if connectors:
+            _pass(f"{len(connectors)} connector(s) configured: {', '.join(connectors.keys())}")
         else:
-            _warn("No sources configured. Run `dinobase add <source>` or `dinobase quickstart`.")
+            _warn("No connectors configured. Run `dinobase add <connector>` or `dinobase quickstart`.")
     except Exception:
         pass  # Already reported above
 
@@ -1835,37 +1845,6 @@ def connector():
     pass
 
 
-_CONNECTOR_TEMPLATE = """\
-name: {name}
-description: "{description}"
-mode: {mode}
-
-credentials:
-  - name: api_key
-    flag: "--api-key"
-    env: {env_prefix}_API_KEY
-    prompt: "{display_name} API key"
-    secret: true
-
-client:
-  base_url: "{base_url}"
-  auth:
-    type: {auth_type}
-    token: "{{api_key}}"
-{paginator_block}
-resource_defaults:
-  primary_key: id
-  write_disposition: replace
-  endpoint:
-    data_selector: "{data_selector}"
-
-resources:
-  - name: {resource_name}
-    endpoint:
-      path: {endpoint_path}
-"""
-
-
 @connector.command("create")
 @click.argument("name")
 @click.option("--url", help="Base URL for the API (e.g., https://api.example.com/)")
@@ -1909,6 +1888,10 @@ def connector_create(
         --transport sse --url http://localhost:8080/sse
     """
     from dinobase.config import get_connectors_dir
+    from dinobase.connectors.templates import (
+        build_mcp_connector_yaml,
+        build_rest_connector_yaml,
+    )
 
     connectors_dir = get_connectors_dir()
     connectors_dir.mkdir(parents=True, exist_ok=True)
@@ -1920,43 +1903,17 @@ def connector_create(
 
     # MCP connector path
     if transport:
-        if transport == "stdio" and not command:
-            click.echo("Error: --command is required for stdio transport", err=True)
-            sys.exit(1)
-        if transport in ("sse", "streamable_http") and not url:
-            click.echo(f"Error: --url is required for {transport} transport", err=True)
-            sys.exit(1)
-
-        mcp_mode = mode if mode != "auto" else "live"
-        display_name = name.replace("_", " ").title()
-
-        if transport == "stdio":
-            import shlex
-            parts = shlex.split(command)
-            cmd = parts[0]
-            args = parts[1:] if len(parts) > 1 else []
-            args_str = "\n".join(f'    - "{a}"' for a in args)
-            content = (
-                f'name: {name}\n'
-                f'description: "MCP connector for {display_name}"\n'
-                f'mode: {mcp_mode}\n'
-                f'\n'
-                f'transport:\n'
-                f'  type: stdio\n'
-                f'  command: {cmd}\n'
+        try:
+            content = build_mcp_connector_yaml(
+                name=name,
+                transport=transport,
+                command=command,
+                url=url,
+                mode=mode,
             )
-            if args:
-                content += f'  args:\n{args_str}\n'
-        else:
-            content = (
-                f'name: {name}\n'
-                f'description: "MCP connector for {display_name}"\n'
-                f'mode: {mcp_mode}\n'
-                f'\n'
-                f'transport:\n'
-                f'  type: {transport}\n'
-                f'  url: "{url}"\n'
-            )
+        except ValueError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
 
         yaml_path.write_text(content)
         click.echo(f"Created MCP connector: {yaml_path}")
@@ -1966,27 +1923,14 @@ def connector_create(
         return
 
     # REST connector path
-    display_name = name.replace("_", " ").title()
-    env_prefix = name.upper()
     resource_name = (endpoint or name).strip("/").split("/")[-1] or name
-
-    # Detect if paginator should be included
-    paginator_block = ""
-    if url and "posthog" in url.lower():
-        paginator_block = '  paginator:\n    type: json_link\n    next_url_path: "next"\n'
-
-    content = _CONNECTOR_TEMPLATE.format(
+    content = build_rest_connector_yaml(
         name=name,
-        description=f"Custom connector for {display_name}",
-        mode=mode,
-        base_url=url or "https://api.example.com/",
+        url=url,
         auth_type=auth_type,
-        env_prefix=env_prefix,
-        display_name=display_name,
+        endpoint=endpoint,
         data_selector=data_selector,
-        resource_name=resource_name,
-        endpoint_path=endpoint or "endpoint/path",
-        paginator_block=paginator_block,
+        mode=mode,
     )
 
     yaml_path.write_text(content)

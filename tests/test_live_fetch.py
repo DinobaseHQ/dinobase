@@ -225,7 +225,7 @@ class TestExecuteLiveFetch:
         # Backdate sync to make stripe stale
         old_time = datetime.now(timezone.utc) - timedelta(hours=3)
         sample_db.conn.execute(
-            "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
+            "UPDATE _dinobase.sync_log SET finished_at = ? WHERE connector_name = 'stripe'",
             [old_time],
         )
 
@@ -239,7 +239,7 @@ class TestExecuteLiveFetch:
         """JOINs and multi-condition queries should never trigger live fetch."""
         old_time = datetime.now(timezone.utc) - timedelta(hours=3)
         sample_db.conn.execute(
-            "UPDATE _dinobase.sync_log SET finished_at = ? WHERE source_name = 'stripe'",
+            "UPDATE _dinobase.sync_log SET finished_at = ? WHERE connector_name = 'stripe'",
             [old_time],
         )
 

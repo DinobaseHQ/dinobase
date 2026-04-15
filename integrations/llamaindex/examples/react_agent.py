@@ -33,7 +33,7 @@ def main():
             "You are a data analyst with access to Dinobase — a SQL database "
             "containing business data synced from multiple SaaS tools.\n\n"
             "Workflow:\n"
-            "1. Use dinobase_list_sources to see what data is available\n"
+            "1. Use dinobase_list_connectors to see what data is available\n"
             "2. Use dinobase_describe on relevant tables to understand schemas\n"
             "3. Use dinobase_query to run SQL (DuckDB dialect, tables are schema.table)\n"
             "4. Present results clearly with your analysis"

@@ -43,14 +43,25 @@ class SourceEntry:
     supports_oauth: bool = False   # whether this source can be connected via OAuth
     live_fetch_config: dict[str, Any] | None = None  # API config for single-record live fetch
     credential_help: str | None = None  # where to find credentials (for agents)
+    is_custom: bool = False        # true for YAMLs loaded from ~/.dinobase/connectors/
+
+    def derive_type(self) -> str:
+        """Broad category derived from import_path: saas, database, or file_storage."""
+        if "sql_database" in self.import_path:
+            return "database"
+        if "filesystem" in self.import_path:
+            return "file_storage"
+        return "saas"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a dict for JSON output (used by `dinobase sources --available`)."""
         return {
             "name": self.name,
+            "type": self.derive_type(),
             "description": self.description,
             "supports_oauth": self.supports_oauth,
             "credential_help": self.credential_help,
+            "is_custom": self.is_custom,
             "credentials": [
                 {
                     "name": p.name,
@@ -755,7 +766,10 @@ def _load_local_configs() -> None:
 
         local_dir = get_connectors_dir()
         if local_dir.is_dir():
+            before = set(SOURCES.keys())
             _load_yaml_api_configs(apis_dir=local_dir)
+            for name in SOURCES.keys() - before:
+                SOURCES[name].is_custom = True
     except Exception:
         pass  # graceful: don't break import if ~/.dinobase doesn't exist
 

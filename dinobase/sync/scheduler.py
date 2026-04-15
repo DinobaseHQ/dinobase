@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
-from dinobase.config import get_sources
+from dinobase.config import get_connectors
 from dinobase.db import DinobaseDB, META_SCHEMA
 from dinobase.sync.engine import SyncEngine
 
@@ -69,12 +69,12 @@ class SyncScheduler:
         self._syncing: set[str] = set()
         self._syncing_lock = threading.Lock()
 
-    def _get_last_sync_time(self, source_name: str) -> datetime | None:
-        """Get the last successful sync time for a source."""
+    def _get_last_sync_time(self, connector_name: str) -> datetime | None:
+        """Get the last successful sync time for a connector."""
         result = self.db.conn.execute(
             f"SELECT MAX(finished_at) as last_sync FROM {META_SCHEMA}.sync_log "
-            "WHERE source_name = ? AND status = 'success'",
-            [source_name],
+            "WHERE connector_name = ? AND status = 'success'",
+            [connector_name],
         )
         row = result.fetchone()
         if row and row[0]:
@@ -82,15 +82,15 @@ class SyncScheduler:
         return None
 
     def _source_needs_sync(
-        self, source_name: str, source_config: dict[str, Any]
+        self, connector_name: str, source_config: dict[str, Any]
     ) -> bool:
-        """Check if a source is due for a sync based on its interval."""
+        """Check if a connector is due for a sync based on its interval."""
         if source_config.get("type") in ("parquet", "csv"):
             return False
 
         # Don't schedule if already syncing
         with self._syncing_lock:
-            if source_name in self._syncing:
+            if connector_name in self._syncing:
                 return False
 
         interval_str = source_config.get("sync_interval", "")
@@ -99,7 +99,7 @@ class SyncScheduler:
         else:
             interval_seconds = parse_interval(interval_str)
 
-        last_sync = self._get_last_sync_time(source_name)
+        last_sync = self._get_last_sync_time(connector_name)
         if last_sync is None:
             return True
 
@@ -147,8 +147,8 @@ class SyncScheduler:
                 self._syncing.discard(name)
 
     def sync_all_due(self) -> list[dict[str, Any]]:
-        """Sync all sources that are due, concurrently via thread pool."""
-        sources = get_sources()
+        """Sync all connectors that are due, concurrently via thread pool."""
+        sources = get_connectors()
 
         due = {
             name: config
@@ -159,7 +159,7 @@ class SyncScheduler:
         if not due:
             return []
 
-        _log(f"Starting sync for {len(due)} source(s) (max {self.max_workers} concurrent)")
+        _log(f"Starting sync for {len(due)} connector(s) (max {self.max_workers} concurrent)")
 
         results = []
         workers = min(self.max_workers, len(due))
@@ -187,7 +187,7 @@ class SyncScheduler:
             f"max {self.max_workers} concurrent)"
         )
 
-        sources = get_sources()
+        sources = get_connectors()
         for name, config in sources.items():
             if config.get("type") in ("parquet", "csv"):
                 continue

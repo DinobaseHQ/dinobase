@@ -50,38 +50,52 @@ class CloudClient:
     def whoami(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/auth/me")
 
-    # -- Sources --
+    # -- Connectors --
 
-    def list_sources(self) -> list[dict[str, Any]]:
+    def list_connectors(self) -> list[dict[str, Any]]:
         return self._request("GET", "/api/v1/sources/")  # type: ignore[return-value]
 
-    def add_source(
-        self, name: str, source_type: str, credentials: dict[str, str], sync_interval: str = "1h"
+    # Backward-compat alias
+    def list_sources(self) -> list[dict[str, Any]]:
+        return self.list_connectors()
+
+    def add_connector(
+        self, name: str, connector_type: str, credentials: dict[str, str], sync_interval: str = "1h"
     ) -> dict[str, Any]:
         return self._request("POST", "/api/v1/sources/", {
             "name": name,
-            "type": source_type,
+            "type": connector_type,
             "credentials": credentials,
             "sync_interval": sync_interval,
         })
 
-    def start_oauth(self, source_name: str, redirect_uri: str) -> dict[str, Any]:
+    # Backward-compat alias
+    def add_source(
+        self, name: str, source_type: str, credentials: dict[str, str], sync_interval: str = "1h"
+    ) -> dict[str, Any]:
+        return self.add_connector(name, source_type, credentials, sync_interval)
+
+    def start_oauth(self, connector_name: str, redirect_uri: str) -> dict[str, Any]:
         return self._request(
             "POST",
-            f"/api/v1/sources/{source_name}/auth?redirect_uri={redirect_uri}",
+            f"/api/v1/sources/{connector_name}/auth?redirect_uri={redirect_uri}",
         )
 
     def complete_oauth(
-        self, source_name: str, code: str, redirect_uri: str, state: str
+        self, connector_name: str, code: str, redirect_uri: str, state: str
     ) -> dict[str, Any]:
-        return self._request("POST", f"/api/v1/sources/{source_name}/auth/callback", {
+        return self._request("POST", f"/api/v1/sources/{connector_name}/auth/callback", {
             "code": code,
             "redirect_uri": redirect_uri,
             "state": state,
         })
 
-    def delete_source(self, source_name: str) -> dict[str, Any]:
-        return self._request("DELETE", f"/api/v1/sources/{source_name}")
+    def delete_connector(self, connector_name: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/sources/{connector_name}")
+
+    # Backward-compat alias
+    def delete_source(self, connector_name: str) -> dict[str, Any]:
+        return self.delete_connector(connector_name)
 
     # -- Sync --
 

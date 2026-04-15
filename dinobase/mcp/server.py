@@ -1,4 +1,4 @@
-"""MCP server for Dinobase — exposes query, describe, and list_sources tools."""
+"""MCP server for Dinobase — exposes query, describe, and list_connectors tools."""
 
 from __future__ import annotations
 
@@ -20,45 +20,76 @@ from dinobase.query.engine import QueryEngine
 # ---------------------------------------------------------------------------
 
 
+def _has_mcp_proxy_servers() -> bool:
+    """Return True if any connector YAML declares a `transport` section (MCP proxy)."""
+    import yaml
+    from dinobase.config import get_connectors_dir
+
+    connectors_dir = get_connectors_dir()
+    if not connectors_dir.is_dir():
+        return False
+    for path in connectors_dir.glob("*.yaml"):
+        try:
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            if cfg and "transport" in cfg:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _build_instructions(engine: QueryEngine) -> str:
     """Build MCP instructions from the current database state."""
-    sources_info = engine.list_sources()
-    sources = sources_info.get("sources", [])
+    connectors_info = engine.list_connectors()
+    connectors = connectors_info.get("connectors", [])
 
-    if not sources:
-        return (
+    if not connectors:
+        base = (
             "This is a Dinobase instance with no data loaded yet. "
-            "The user needs to run `dinobase add <source>` and `dinobase sync` first."
+            "The user needs to run `dinobase add <connector>` and `dinobase sync` first."
+        )
+        if not _has_mcp_proxy_servers():
+            return base
+        return (
+            base
+            + "\n\n"
+            + "You also have connected MCP servers. Use `exec_code` to browse and call them:\n"
+            + "  from dinobase.mcp import servers, search, call\n"
+            + "  result = servers()                         # what is connected\n"
+            + '  result = search("issue")                   # find tools across all servers\n'
+            + '  result = call("linear_mcp.issues-list")    # call one'
         )
 
     lines = [
-        "You have access to a Dinobase database — business data synced from multiple sources "
+        "You have access to a Dinobase database — business data synced from multiple connectors "
         "into a single SQL database (DuckDB dialect).",
         "",
     ]
 
-    lines.append("Connected sources:")
+    lines.append("Connected connectors:")
     has_stale = False
-    for source in sources:
-        table_names = [t["name"] for t in source["tables"]]
+    for connector in connectors:
+        table_names = [t["name"] for t in connector["tables"]]
         line = (
-            f"  {source['name']}: {', '.join(table_names)} "
-            f"({source['total_rows']:,} rows total)"
+            f"  {connector['name']}: {', '.join(table_names)} "
+            f"({connector['total_rows']:,} rows total)"
         )
-        if source.get("is_stale"):
-            line += f" — STALE (last sync: {source.get('age', '?')} ago)"
+        if connector.get("is_stale"):
+            line += f" — STALE (last sync: {connector.get('age', '?')} ago)"
             has_stale = True
-        elif source.get("age"):
-            line += f" — fresh ({source['age']} ago)"
+        elif connector.get("age"):
+            line += f" — fresh ({connector['age']} ago)"
         lines.append(line)
     lines.append("")
 
     lines.append("How to work with this database:")
-    lines.append("1. Use `list_sources` to see what data is available (includes freshness)")
+    lines.append("1. Use `list_connectors` to see what data is available (includes freshness)")
     lines.append("2. Use `describe` on a table to see its columns, types, annotations, and sample data")
     lines.append("3. Use `query` to run SQL (DuckDB dialect, reference tables as schema.table)")
+    lines.append("4. Use `exec_code` to run Python when a task needs chaining, discovery, or reshaping beyond SQL")
     if has_stale:
-        lines.append("4. Use `refresh` to re-sync a stale source before querying")
+        lines.append("5. Use `refresh` to re-sync a stale connector before querying")
     lines.append("")
     lines.append(
         "Call `describe` on any table to see its columns, `related_tables` (join paths), "
@@ -70,8 +101,8 @@ def _build_instructions(engine: QueryEngine) -> str:
         "All annotations are stored permanently and returned in every future describe() call."
     )
 
-    # Remind agent to build the graph for sources that don't have one yet
-    no_graph = engine.db.get_sources_without_relationships()
+    # Remind agent to build the graph for connectors that don't have one yet
+    no_graph = engine.db.get_connectors_without_relationships()
     if no_graph:
         lines.append("")
         lines.append(
@@ -81,9 +112,9 @@ def _build_instructions(engine: QueryEngine) -> str:
     if has_stale:
         lines.append("")
         lines.append(
-            "Some sources are stale. For bulk queries, use `refresh` to re-sync. "
-            "For single-record lookups by ID on stale sources, the system will "
-            "automatically fetch live data from the source API."
+            "Some connectors are stale. For bulk queries, use `refresh` to re-sync. "
+            "For single-record lookups by ID on stale connectors, the system will "
+            "automatically fetch live data from the upstream API."
         )
 
     # MCP proxy guidance
@@ -141,7 +172,7 @@ class _HostedClient:
         except Exception as e:
             raise  # let _create_server fall back to local
 
-    def list_sources(self) -> str:
+    def list_connectors(self) -> str:
         import httpx
         try:
             r = httpx.get(
@@ -186,7 +217,7 @@ class _HostedClient:
         try:
             r = httpx.post(
                 f"{self.api_url}/api/v1/sync/",
-                json={"source_name": source},
+                json={"connector_name": source},
                 headers=self._headers(),
                 timeout=15,
             )
@@ -262,9 +293,9 @@ def _create_server() -> FastMCP:
         with DinobaseDB() as db:
             engine = QueryEngine(db)
             instructions = _build_instructions(engine)
-            sources = engine.list_sources().get("sources", [])
+            connectors = engine.list_connectors().get("connectors", [])
         print("Dinobase MCP server ready (local mode).", file=sys.stderr)
-        for s in sources:
+        for s in connectors:
             print(f"  {s['name']}: {s['table_count']} tables, {s['total_rows']:,} rows", file=sys.stderr)
 
     server = FastMCP("dinobase", instructions=instructions)
@@ -285,15 +316,15 @@ def _create_server() -> FastMCP:
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
-    def list_sources() -> str:
-        """List all connected data sources with their tables, row counts, and last sync time."""
+    def list_connectors() -> str:
+        """List all connected data connectors with their tables, row counts, and last sync time."""
         from dinobase import telemetry
-        telemetry.capture("mcp_tool_called", {"tool": "list_sources", "server_mode": "hosted" if client else "local"})
+        telemetry.capture("mcp_tool_called", {"tool": "list_connectors", "server_mode": "hosted" if client else "local"})
         if client:
-            return client.list_sources()
+            return client.list_connectors()
         with DinobaseDB() as db:
             eng = QueryEngine(db)
-            result = eng.list_sources()
+            result = eng.list_connectors()
         return json.dumps(result, indent=2, default=str)
 
     @server.tool()
@@ -383,9 +414,9 @@ def _create_server() -> FastMCP:
 
     @server.tool()
     def refresh(
-        source: Annotated[str, Field(description="Name of the source to re-sync (e.g. 'stripe', 'hubspot')")],
+        source: Annotated[str, Field(description="Name of the connector to re-sync (e.g. 'stripe', 'hubspot')")],
     ) -> str:
-        """Re-sync a source to get fresh data. Use when data is stale or you need up-to-date results before querying. This call blocks until sync completes (typically 10-60 seconds depending on the source size)."""
+        """Re-sync a connector to get fresh data. Use when data is stale or you need up-to-date results before querying. This call blocks until sync completes (typically 10-60 seconds depending on the connector size)."""
         from dinobase import telemetry
         telemetry.capture("mcp_tool_called", {"tool": "refresh", "source": source, "server_mode": "hosted" if client else "local"})
         if client:
@@ -402,13 +433,13 @@ def _create_server() -> FastMCP:
         from dinobase.sync.engine import SyncEngine
 
         config = load_config()
-        sources_config = config.get("sources", {})
-        if source not in sources_config:
-            return json.dumps({"error": f"Source '{source}' not found"})
+        connectors_config = config.get("connectors", {})
+        if source not in connectors_config:
+            return json.dumps({"error": f"Connector '{source}' not found"})
 
-        source_config = sources_config[source]
+        source_config = connectors_config[source]
         if source_config.get("type") in ("parquet", "csv"):
-            return json.dumps({"error": f"File source '{source}' reads live data — no sync needed"})
+            return json.dumps({"error": f"File connector '{source}' reads live data — no sync needed"})
 
         with DinobaseDB() as db:
             eng = QueryEngine(db)

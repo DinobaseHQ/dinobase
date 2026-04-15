@@ -3,7 +3,7 @@
 Dinobase Benchmark: SQL vs Per-Source MCP Tools
 
 Multi-model, multi-vertical benchmark comparing:
-  1. Dinobase (SQL) — agent gets list_sources, describe, query tools
+  1. Dinobase (SQL) — agent gets list_connectors, describe, query tools
   2. Raw MCP tools  — agent gets per-source tools returning paginated JSON
 
 Supports 10+ models via OpenRouter, multiple verticals, N runs per question,
@@ -317,7 +317,7 @@ def setup_dinobase(verticals: list[str] | None = None) -> "QueryEngine":
     - Parquet loading simulating dlt sync output
     - Stripe OpenAPI metadata extraction for annotations
     - Sync logging so freshness tracking works
-    - QueryEngine for query execution, describe, list_sources
+    - QueryEngine for query execution, describe, list_connectors
     """
     import tempfile
     os.environ.setdefault("DINOBASE_DIR", tempfile.mkdtemp())
@@ -380,8 +380,8 @@ def make_dinobase_system(engine: "QueryEngine") -> str:
 # Tool definitions match the real MCP server exactly
 DINOBASE_TOOLS = [
     {
-        "name": "list_sources",
-        "description": "List all connected data sources with their tables, row counts, and last sync time.",
+        "name": "list_connectors",
+        "description": "List all connected data connectors with their tables, row counts, and last sync time.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
@@ -410,8 +410,8 @@ DINOBASE_TOOLS = [
 
 def handle_dinobase_tool(engine: "QueryEngine", name: str, input: dict) -> str:
     """Route tool calls through the REAL QueryEngine — same code path as the MCP server."""
-    if name == "list_sources":
-        result = engine.list_sources()
+    if name == "list_connectors":
+        result = engine.list_connectors()
         return json.dumps(result, indent=2, default=str)
 
     elif name == "describe":

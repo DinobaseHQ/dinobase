@@ -189,10 +189,10 @@ class LocalConnectorFetcher:
             )
 
         # Load credentials from user config
-        from dinobase.config import get_sources
+        from dinobase.config import get_connectors
 
-        sources = get_sources()
-        source_cfg = sources.get(source_name, {})
+        connectors = get_connectors()
+        source_cfg = connectors.get(source_name, {})
         self.credentials = source_cfg.get("credentials", {})
         self.source_type = self.config.get("name", source_name)
 
@@ -335,7 +335,7 @@ class LocalConnectorFetcher:
 
         conn.execute(
             f"""INSERT OR REPLACE INTO {META_SCHEMA}.tables
-                (source_name, schema_name, table_name, row_count, last_sync)
+                (connector_name, schema_name, table_name, row_count, last_sync)
                 VALUES (?, ?, ?, ?, current_timestamp)""",
             [self.source_name, schema, resource_name, row_count],
         )

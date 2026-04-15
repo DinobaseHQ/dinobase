@@ -85,8 +85,8 @@ def _is_unknown_identifier(error_msg: str) -> bool:
 
 @dataclass
 class SyncResult:
-    source_name: str
-    source_type: str
+    connector_name: str
+    connector_type: str
     tables_synced: int
     rows_synced: int
     status: str
@@ -162,8 +162,8 @@ class SyncEngine:
                 if not cloud.acquire_lock(source_name):
                     self._log("lock not acquired — another process is syncing")
                     return SyncResult(
-                        source_name=source_name,
-                        source_type=source_type,
+                        connector_name=source_name,
+                        connector_type=source_type,
                         tables_synced=0,
                         rows_synced=0,
                         status="skipped",
@@ -257,8 +257,8 @@ class SyncEngine:
                 "error_type": type(e).__name__,
             })
             return SyncResult(
-                source_name=source_name,
-                source_type=source_type,
+                connector_name=source_name,
+                connector_type=source_type,
                 tables_synced=0,
                 rows_synced=0,
                 status="error",
@@ -308,8 +308,8 @@ class SyncEngine:
             )
 
             return SyncResult(
-                source_name=source_name,
-                source_type=source_type,
+                connector_name=source_name,
+                connector_type=source_type,
                 tables_synced=len(paths),
                 rows_synced=total_rows,
                 status="success",
@@ -321,8 +321,8 @@ class SyncEngine:
 
             error_msg = str(e) if isinstance(e, ConnectorError) else f"Unexpected error: {e}"
             return SyncResult(
-                source_name=source_name,
-                source_type=source_type,
+                connector_name=source_name,
+                connector_type=source_type,
                 tables_synced=0,
                 rows_synced=0,
                 status="error",
@@ -404,8 +404,8 @@ class SyncEngine:
                 return result
 
             return SyncResult(
-                source_name=source_name,
-                source_type=source_type,
+                connector_name=source_name,
+                connector_type=source_type,
                 tables_synced=0,
                 rows_synced=0,
                 status="success",
@@ -422,8 +422,8 @@ class SyncEngine:
                     rows_synced += self.db.get_row_count(source_name, table)
 
         return SyncResult(
-            source_name=source_name,
-            source_type=source_type,
+            connector_name=source_name,
+            connector_type=source_type,
             tables_synced=tables_synced,
             rows_synced=rows_synced,
             status="success",
@@ -829,8 +829,8 @@ class SyncEngine:
                     print(f"  [cloud] failed to register {source_name}.{table_name}: {e}", file=sys.stderr)
 
         return SyncResult(
-            source_name=source_name,
-            source_type=source_type,
+            connector_name=source_name,
+            connector_type=source_type,
             tables_synced=tables_synced,
             rows_synced=rows_synced,
             status="success",

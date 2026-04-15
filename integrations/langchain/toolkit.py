@@ -21,8 +21,8 @@ class TableInput(BaseModel):
     table: str = Field(description="Table reference as schema.table (e.g., stripe.customers).")
 
 
-class SourceInput(BaseModel):
-    source_name: str = Field(description="Name of the source to refresh (e.g., stripe, hubspot).")
+class ConnectorInput(BaseModel):
+    connector_name: str = Field(description="Name of the connector to refresh (e.g., stripe, hubspot).")
 
 
 class DinobaseToolkit(BaseToolkit):
@@ -56,20 +56,20 @@ class DinobaseToolkit(BaseToolkit):
         def dinobase_query(sql: str, max_rows: int = 200) -> str:
             """Execute a SQL query against Dinobase (DuckDB dialect).
 
-            Use this to query business data from connected sources. Tables are
+            Use this to query business data from connected connectors. Tables are
             referenced as schema.table (e.g., stripe.customers, hubspot.contacts).
-            Cross-source JOINs work via shared columns like email.
+            Cross-connector JOINs work via shared columns like email.
             """
             result = engine.execute(sql, max_rows=max_rows)
             return json.dumps(result, indent=2, default=str)
 
-        @tool("dinobase_list_sources")
-        def dinobase_list_sources() -> str:
-            """List all connected Dinobase data sources with tables, row counts, and freshness.
+        @tool("dinobase_list_connectors")
+        def dinobase_list_connectors() -> str:
+            """List all connected Dinobase data connectors with tables, row counts, and freshness.
 
             Use this first to understand what business data is available.
             """
-            result = engine.list_sources()
+            result = engine.list_connectors()
             return json.dumps(result, indent=2, default=str)
 
         @tool("dinobase_describe", args_schema=TableInput)
@@ -81,29 +81,29 @@ class DinobaseToolkit(BaseToolkit):
             result = engine.describe_table(table)
             return json.dumps(result, indent=2, default=str)
 
-        @tool("dinobase_refresh", args_schema=SourceInput)
-        def dinobase_refresh(source_name: str) -> str:
-            """Re-sync a data source to get fresh data.
+        @tool("dinobase_refresh", args_schema=ConnectorInput)
+        def dinobase_refresh(connector_name: str) -> str:
+            """Re-sync a connector to get fresh data.
 
             Use when data might be stale and you need up-to-date results.
             """
-            from dinobase.config import get_sources
+            from dinobase.config import get_connectors
             from dinobase.sync.engine import SyncEngine
 
-            sources = get_sources()
-            if source_name not in sources:
-                return json.dumps({"error": f"Source '{source_name}' not found. Available: {', '.join(sources.keys())}"})
+            connectors = get_connectors()
+            if connector_name not in connectors:
+                return json.dumps({"error": f"Connector '{connector_name}' not found. Available: {', '.join(connectors.keys())}"})
 
-            config = sources[source_name]
+            config = connectors[connector_name]
             if config.get("type") in ("parquet", "csv"):
-                return json.dumps({"error": "File sources read live data — no refresh needed."})
+                return json.dumps({"error": "File connectors read live data — no refresh needed."})
 
             sync_engine = SyncEngine(engine.db)
-            result = sync_engine.sync(source_name, config)
-            freshness = engine.get_freshness(source_name)
+            result = sync_engine.sync(connector_name, config)
+            freshness = engine.get_freshness(connector_name)
 
             return json.dumps({
-                "source": source_name,
+                "connector": connector_name,
                 "status": result.status,
                 "tables_synced": result.tables_synced,
                 "rows_synced": result.rows_synced,
@@ -111,4 +111,4 @@ class DinobaseToolkit(BaseToolkit):
                 "freshness": freshness,
             }, indent=2, default=str)
 
-        return [dinobase_query, dinobase_list_sources, dinobase_describe, dinobase_refresh]
+        return [dinobase_query, dinobase_list_connectors, dinobase_describe, dinobase_refresh]

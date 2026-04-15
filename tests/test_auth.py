@@ -256,8 +256,8 @@ def test_refresh_updates_config_file(tmp_config):
     with open(tmp_config / "config.yaml") as f:
         config = yaml.safe_load(f)
 
-    assert config["sources"]["test_source"]["credentials"]["access_token"] == "refreshed"
-    assert config["sources"]["test_source"]["credentials"]["refresh_token"] == "rt_new"
+    assert config["connectors"]["test_source"]["credentials"]["access_token"] == "refreshed"
+    assert config["connectors"]["test_source"]["credentials"]["refresh_token"] == "rt_new"
 
 
 # ---------------------------------------------------------------------------

@@ -39,9 +39,9 @@ def test_add_stripe(runner, tmp_path):
     import yaml
     with open(tmp_path / "config.yaml") as f:
         config = yaml.safe_load(f)
-    assert "stripe" in config["sources"]
+    assert "stripe" in config["connectors"]
     # Registry uses the dlt param name "stripe_secret_key"
-    assert config["sources"]["stripe"]["credentials"]["stripe_secret_key"] == "sk_test_123"
+    assert config["connectors"]["stripe"]["credentials"]["stripe_secret_key"] == "sk_test_123"
 
 
 def test_add_hubspot(runner):
@@ -71,15 +71,15 @@ def test_add_with_custom_name(runner, tmp_path):
     import yaml
     with open(tmp_path / "config.yaml") as f:
         config = yaml.safe_load(f)
-    assert "stripe_prod" in config["sources"]
+    assert "stripe_prod" in config["connectors"]
 
 
 def test_status_no_data(runner):
     runner.invoke(cli, ["init"])
     result = runner.invoke(cli, ["status"])
     assert result.exit_code == 0
-    # JSON output by default — empty sources list
-    assert "sources" in result.output
+    # JSON output by default — empty connectors list
+    assert "connectors" in result.output
 
 
 def test_query_direct(runner):
@@ -93,7 +93,7 @@ def test_sync_no_sources(runner):
     runner.invoke(cli, ["init"])
     result = runner.invoke(cli, ["sync"])
     assert result.exit_code == 1
-    assert "No sources configured" in result.output
+    assert "No connectors configured" in result.output
 
 
 def test_mcp_config(runner):

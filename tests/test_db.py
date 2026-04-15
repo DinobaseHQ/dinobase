@@ -97,7 +97,7 @@ def test_update_table_metadata(db):
 
     # Check _dinobase.tables
     rows = db.query(
-        f"SELECT * FROM {META_SCHEMA}.tables WHERE source_name = 'my_source'"
+        f"SELECT * FROM {META_SCHEMA}.tables WHERE connector_name = 'my_source'"
     )
     assert len(rows) == 1  # _dlt_loads should be skipped
     assert rows[0]["table_name"] == "orders"
@@ -106,7 +106,7 @@ def test_update_table_metadata(db):
     # Check _dinobase.columns
     cols = db.query(
         f"SELECT * FROM {META_SCHEMA}.columns "
-        f"WHERE source_name = 'my_source' AND table_name = 'orders' "
+        f"WHERE connector_name = 'my_source' AND table_name = 'orders' "
         f"ORDER BY column_name"
     )
     assert len(cols) == 3

@@ -138,19 +138,36 @@ def _proxy_request(url: str, data: dict[str, Any] | None = None, token: str | No
         raise RuntimeError(f"Failed to reach OAuth proxy at {url}: {e}") from e
 
 
-def _exchange_code(provider: str, code: str, redirect_uri: str) -> dict[str, Any]:
-    """Exchange an authorization code for tokens via the proxy."""
+def exchange_code(
+    provider: str,
+    code: str,
+    redirect_uri: str,
+    ctx: str = "",
+) -> dict[str, Any]:
+    """Exchange an authorization code for tokens via the proxy.
+
+    ``ctx`` is the opaque blob returned by the proxy in the /callback redirect.
+    It carries the PKCE verifier and tenant subdomain for providers that need
+    them. Non-PKCE, non-tenant providers can pass an empty string.
+    """
     token = _get_cloud_token()
     if not token:
         raise RuntimeError(
             "Not logged in to Dinobase cloud. Run `dinobase login` first."
         )
     proxy_url = get_proxy_url()
+    body: dict[str, Any] = {"code": code, "redirect_uri": redirect_uri}
+    if ctx:
+        body["ctx"] = ctx
     return _proxy_request(
         f"{proxy_url}/token/{provider}",
-        {"code": code, "redirect_uri": redirect_uri},
+        body,
         token=token,
     )
+
+
+# Backcompat alias — internal callers still use the underscored name.
+_exchange_code = exchange_code
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +221,8 @@ def authorize(provider: str) -> dict[str, str]:
     if not code:
         raise RuntimeError("No authorization code received from OAuth callback")
 
-    # Exchange code for tokens
-    tokens = _exchange_code(provider, code, redirect_uri)
+    # Exchange code for tokens. `ctx` carries PKCE + subdomain context.
+    tokens = exchange_code(provider, code, redirect_uri, ctx=result.get("ctx", ""))
 
     expires_at = ""
     if "expires_in" in tokens:
