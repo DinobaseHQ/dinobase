@@ -530,7 +530,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         try:
             result = cloud.add_source(source_name, source_type, credentials)
             from dinobase import telemetry
-            telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": True})
+            telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": True, "surface": "cli"})
             click.echo(f"Added {source_type} source as '{source_name}' (cloud)")
             click.echo("Run `dinobase sync` to load data.")
         except RuntimeError as e:
@@ -564,7 +564,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         db.update_table_metadata(source_name, source_name, annotations=annotations)
         save_source(source_name, source_type, {"path": path, "format": source_type})
         from dinobase import telemetry
-        telemetry.capture("source_added", {"source_type": source_type, "auth_method": "file", "is_cloud_mode": False})
+        telemetry.capture("source_added", {"source_type": source_type, "auth_method": "file", "is_cloud_mode": False, "surface": "cli"})
 
         click.echo(f"\nAdded {len(result['tables'])} tables from {path} as '{source_name}'")
         click.echo(f"Total: {result['total_rows']:,} rows. Ready to query — no sync needed.")
@@ -629,7 +629,7 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         freshness_threshold=freshness_threshold,
     )
     from dinobase import telemetry
-    telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": False})
+    telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": False, "surface": "cli"})
     click.echo(f"Added {source_type} source as '{source_name}'")
     if sync_interval:
         click.echo(f"Sync interval: {sync_interval}")
@@ -1766,7 +1766,11 @@ def _install_client(client: str) -> None:
         config_path.write_text(json.dumps(data, indent=2) + "\n")
         click.echo(f"✓ Dinobase MCP added to {config_path}")
 
-    telemetry.capture("client_installed", {"client": client})
+    if telemetry.was_installed(client):
+        telemetry.capture("client_reinstalled", {"client": client})
+    else:
+        telemetry.capture("client_installed", {"client": client})
+        telemetry.mark_installed(client)
 
 
 @cli.command("install")
@@ -1822,12 +1826,7 @@ def update(check: bool):
 
     if success:
         click.echo(message)
-        from dinobase import telemetry
-        telemetry.capture("cli_updated", {
-            "from_version": __version__,
-            "to_version": latest,
-            "method": method,
-        })
+        # cli_updated is captured inside updater.perform_update().
     else:
         click.echo(message, err=True)
         click.echo(f"\nManual update: {get_update_command(method)}")
@@ -1917,6 +1916,12 @@ def connector_create(
 
         yaml_path.write_text(content)
         click.echo(f"Created MCP connector: {yaml_path}")
+        from dinobase import telemetry
+        telemetry.capture("custom_connector_created", {
+            "kind": "mcp",
+            "transport": transport,
+            "surface": "cli",
+        })
         click.echo(f"\nNext steps:")
         click.echo(f"  1. Sync: dinobase sync {name}")
         click.echo(f"  2. Query: dinobase query \"SELECT * FROM {name}.<tool_name> LIMIT 10\"")
@@ -1935,6 +1940,12 @@ def connector_create(
 
     yaml_path.write_text(content)
     click.echo(f"Created connector: {yaml_path}")
+    from dinobase import telemetry
+    telemetry.capture("custom_connector_created", {
+        "kind": "rest",
+        "auth_type": auth_type,
+        "surface": "cli",
+    })
     click.echo(f"\nNext steps:")
     click.echo(f"  1. Edit the config: dinobase connector edit {name}")
     click.echo(f"  2. Add credentials: dinobase add {name} --api-key YOUR_KEY")

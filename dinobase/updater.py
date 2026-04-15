@@ -128,6 +128,7 @@ def perform_update() -> tuple[bool, str]:
     """Run the update command. Returns (success, message)."""
     method = detect_install_method()
     cmd = get_update_command(method)
+    from_version = __version__
     try:
         result = subprocess.run(
             cmd.split(),
@@ -136,6 +137,11 @@ def perform_update() -> tuple[bool, str]:
             timeout=120,
         )
         if result.returncode == 0:
+            from dinobase import telemetry
+            telemetry.capture("cli_updated", {
+                "from_version": from_version,
+                "method": method,
+            })
             return True, f"Updated successfully via {method}."
         return False, f"Update failed:\n{result.stderr}"
     except Exception as e:
@@ -170,13 +176,7 @@ def maybe_auto_update(cmd: str) -> None:
         return
 
     click.echo(f"Updated to {latest}.", err=True)
-
-    from dinobase import telemetry
-    telemetry.capture("cli_updated", {
-        "from_version": __version__,
-        "to_version": latest,
-        "method": detect_install_method(),
-    })
+    # cli_updated is captured inside perform_update() — don't double-fire here.
 
     # Re-exec so the new version handles the command
     try:
