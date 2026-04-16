@@ -1,0 +1,16 @@
+# Caddy auto-issues Let's Encrypt certs for both domains.
+# Env vars come from docker-compose (which reads .env).
+
+{
+	email {$DINOBASE_ACME_EMAIL}
+}
+
+{$DINOBASE_WEB_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+{$DINOBASE_API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8787
+}

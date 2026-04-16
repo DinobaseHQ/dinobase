@@ -1,0 +1,104 @@
+# Dinobase self-hosted on a single Hetzner Cloud VM.
+#
+# Services:
+#   api     — FastAPI server (DINOBASE_MODE=web), handles HTTP + proxies /query
+#   query   — in-process DuckDB query server (DINOBASE_MODE=query)
+#   worker  — background sync worker (DINOBASE_MODE=worker)
+#   web     — Next.js frontend
+#   caddy   — TLS termination + reverse proxy (Let's Encrypt via Caddy)
+#
+# All services share the same image (built from ee/cloud/api) except `web`,
+# which is built from ee/cloud/web. State is stored in the `dinobase-data`
+# named volume (local storage backend). Swap to S3-compatible object storage
+# by setting DINOBASE_LOCAL_STORAGE_ROOT="" and the AWS_* vars in .env.
+
+name: dinobase
+
+x-api-base: &api-base
+  build:
+    context: ../../api
+    dockerfile: Dockerfile
+  image: dinobase-api:local
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - dinobase-data:/data
+  networks:
+    - internal
+
+services:
+  api:
+    <<: *api-base
+    environment:
+      DINOBASE_MODE: web
+      DINOBASE_HOST: 0.0.0.0
+      DINOBASE_PORT: "8787"
+      DINOBASE_QUERY_URL: http://query:8789
+      DINOBASE_LOCAL_STORAGE_ROOT: /data
+    depends_on:
+      - query
+    expose:
+      - "8787"
+
+  query:
+    <<: *api-base
+    environment:
+      DINOBASE_MODE: query
+      DINOBASE_HOST: 0.0.0.0
+      DINOBASE_PORT: "8789"
+      DINOBASE_LOCAL_STORAGE_ROOT: /data
+    expose:
+      - "8789"
+
+  worker:
+    <<: *api-base
+    environment:
+      DINOBASE_MODE: worker
+      DINOBASE_LOCAL_STORAGE_ROOT: /data
+
+  web:
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${DINOBASE_PUBLIC_API_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_WEBSITE_URL: ${DINOBASE_PUBLIC_WEB_URL}
+        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+    image: dinobase-web:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    expose:
+      - "3000"
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DINOBASE_WEB_DOMAIN: ${DINOBASE_WEB_DOMAIN}
+      DINOBASE_API_DOMAIN: ${DINOBASE_API_DOMAIN}
+      DINOBASE_ACME_EMAIL: ${DINOBASE_ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    depends_on:
+      - api
+      - web
+
+volumes:
+  dinobase-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:
