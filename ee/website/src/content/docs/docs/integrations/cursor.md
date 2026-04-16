@@ -9,6 +9,9 @@ Dinobase integrates with [Cursor](https://cursor.com) via MCP. Once connected, C
 
 ```bash
 curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor
+
+# Or if Dinobase is already installed:
+dinobase install cursor
 ```
 
 Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `AGENTS.md` in your current directory. Then add your connectors:

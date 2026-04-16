@@ -39,6 +39,9 @@ uv tool install dinobase
 
 # or with pip
 pip install dinobase
+
+# or with pipx
+pipx install dinobase
 ```
 
 ### 1. Connect your data
@@ -63,6 +66,17 @@ dinobase query "SELECT * FROM posthog_mcp.list_projects LIMIT 10"
 ```
 
 ### 2. Pick your agent interface
+
+**One-liner** — installs Dinobase and configures your agent in one step:
+
+```bash
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor
+curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex
+```
+
+**Already have Dinobase?** Run the install subcommand directly:
 
 <table>
 <tr>
@@ -141,7 +155,24 @@ result = call("posthog_mcp.dashboard-get", id=1118504)
 matches = search("feature flag")
 ```
 
-Agents can also call MCP tools via the `exec_code` MCP tool, which executes Python code with full access to `dinobase.mcp`.
+Agents can also run Python code via the `exec_code` MCP tool — chain multiple tool calls, reshape data, or do anything that plain SQL can't:
+
+```python
+# exec_code: chain tool calls and build dynamic queries
+from dinobase.mcp import call, search, servers
+
+# discover available tools
+flags = call("posthog_mcp.list-feature-flags")
+
+# chain calls with logic
+for flag in flags:
+    if not flag["active"]:
+        call("posthog_mcp.update-feature-flag", id=flag["id"], active=True)
+
+result = {"reactivated": len([f for f in flags if not f["active"]])}
+```
+
+`exec_code` has full access to `dinobase.mcp` (call, search, servers, tools, instructions) and `dinobase.db` for direct database access. Assign your return value to `result`. See [exec_code docs](https://dinobase.ai/docs/guides/exec-code/).
 
 ### 6. (Optional) Enable the semantic layer
 

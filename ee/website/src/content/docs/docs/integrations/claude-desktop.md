@@ -9,6 +9,9 @@ Dinobase integrates with [Claude Desktop](https://claude.ai/download) via MCP. O
 
 ```bash
 curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop
+
+# Or if Dinobase is already installed:
+dinobase install claude-desktop
 ```
 
 Installs Dinobase via `uv`, runs `dinobase init`, and writes the `mcpServers` entry to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS). Then add your connectors:

@@ -2,6 +2,7 @@
 # Dinobase installer — https://dinobase.ai
 # Usage:
 #   curl -fsSL https://dinobase.ai/install.sh | bash
+#   curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop
 #   curl -fsSL https://dinobase.ai/install.sh | bash -s -- --no-setup
 set -eu
 
@@ -167,15 +168,27 @@ main() {
     ensure_on_path
     verify
 
-    # Launch the browser-based setup UI (opt out with --no-setup).
+    # Parse arguments: agent names and flags.
+    AGENT_CLIENT=""
     RUN_SETUP=1
     for arg in "$@"; do
         case "$arg" in
             --no-setup|--skip-setup) RUN_SETUP=0 ;;
+            claude-desktop|claude-code|cursor|codex) AGENT_CLIENT="$arg" ;;
         esac
     done
 
-    if [ "$RUN_SETUP" -eq 1 ] && command -v "$PACKAGE" >/dev/null 2>&1; then
+    if [ -n "$AGENT_CLIENT" ] && command -v "$PACKAGE" >/dev/null 2>&1; then
+        printf "\n"
+        info "Setting up $AGENT_CLIENT..."
+        echo 5 | "$PACKAGE" init 2>/dev/null || true
+        "$PACKAGE" install "$AGENT_CLIENT" || true
+        printf "\n"
+        info "Launching Dinobase setup..."
+        printf "  Opens a browser window to connect sources and finish setup.\n"
+        printf "  Press Ctrl+C to quit the setup server.\n\n"
+        "$PACKAGE" setup || true
+    elif [ "$RUN_SETUP" -eq 1 ] && command -v "$PACKAGE" >/dev/null 2>&1; then
         printf "\n"
         info "Launching Dinobase setup..."
         printf "  Opens a browser window to connect sources and finish setup.\n"

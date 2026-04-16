@@ -9,6 +9,9 @@ Dinobase works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 
 ```bash
 curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code
+
+# Or if Dinobase is already installed:
+dinobase install claude-code
 ```
 
 Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.claude/CLAUDE.md`. Then add your connectors:

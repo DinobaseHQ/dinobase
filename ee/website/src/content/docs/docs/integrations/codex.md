@@ -9,6 +9,9 @@ Dinobase integrates with [Codex](https://openai.com/codex) via CLI. Once connect
 
 ```bash
 curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex
+
+# Or if Dinobase is already installed:
+dinobase install codex
 ```
 
 Installs Dinobase via `uv`, runs `dinobase init`, and writes CLI usage instructions to `~/.codex/AGENTS.md`. Then add your connectors:
