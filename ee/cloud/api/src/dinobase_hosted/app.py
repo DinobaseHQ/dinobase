@@ -11,6 +11,7 @@ Routers:
 - /api/v1/sources/* — Source management (add, list, OAuth connect, delete)
 - /api/v1/sync/*    — Sync management (trigger, status, jobs)
 - /api/v1/query/*   — SQL query execution against user's cloud data
+- /mcp              — Remote MCP (streamable-HTTP) for Claude.ai connectors
 """
 
 from __future__ import annotations
@@ -29,12 +30,12 @@ from dinobase_hosted.config import get_allowed_origins
 #
 #   all     (default)  All routers. Good for local dev and simple self-hosted.
 #   web                OAuth + accounts + sources + sync + proxy→query.
-#   query              Query + sandbox only. Internal; no OAuth exposed.
+#   query              Query + sandbox + MCP only. Internal; no OAuth exposed.
 #   worker             No HTTP routes. cli.py starts a sync worker loop instead.
 #
 # In production, run behind a load balancer:
 #   DINOBASE_MODE=web    → web-facing server (auth, sources, sync HTTP API)
-#   DINOBASE_MODE=query  → SQL compute pool (scales independently)
+#   DINOBASE_MODE=query  → SQL compute pool + MCP (scales independently)
 #   DINOBASE_MODE=worker → sync worker process (polls Supabase for pending jobs)
 # ---------------------------------------------------------------------------
 _MODE = os.environ.get("DINOBASE_MODE", "all")
@@ -45,7 +46,7 @@ if _MODE not in ("all", "web", "query", "worker"):
 
 app = FastAPI(
     title="Dinobase Cloud API",
-    description="Hosted Dinobase service — OAuth, sync, and query.",
+    description="Hosted Dinobase service — OAuth, sync, query, and MCP.",
     version="0.1.0",
 )
 
@@ -66,12 +67,16 @@ if _MODE in ("all", "web"):
     app.include_router(sources.router,  prefix="/api/v1/sources")
     app.include_router(sync.router,     prefix="/api/v1/sync")
 
-# SQL query execution and AI sandbox — compute-heavy, separate process.
+# SQL query execution, AI sandbox, and remote MCP — compute-heavy, separate process.
 if _MODE in ("all", "query"):
     app.include_router(query.router,   prefix="/api/v1/query")
     app.include_router(sandbox.router, prefix="/api/v1/sandbox")
+    # MCP is mounted as a sub-ASGI app (FastMCP exposes its own routes under /mcp).
+    # Imported lazily so `web`/`worker` modes don't require the `mcp` package.
+    from dinobase_hosted.routers.mcp import mcp_app
+    app.mount("/mcp", mcp_app)
 
-# web mode: proxy query/sandbox traffic to the query server so the client
+# web mode: proxy query/sandbox/mcp traffic to the query server so the client
 # only needs one URL. Activates when DINOBASE_QUERY_URL is set.
 if _MODE == "web":
     import httpx
@@ -138,6 +143,17 @@ if _MODE == "web":
         @app.api_route("/api/v1/sandbox/{path:path}", methods=["GET", "POST"])
         async def _proxy_sandbox(path: str, request: Request):
             return await _forward(request, f"{_QUERY_URL}/api/v1/sandbox/{path}", timeout=600.0)
+
+        # MCP proxy — streamable-HTTP needs SSE pass-through, which _forward
+        # already handles. We also proxy the bare /mcp path (no trailing slash)
+        # because Claude.ai's connector probes both.
+        @app.api_route("/mcp", methods=["GET", "POST", "DELETE"])
+        async def _proxy_mcp_root(request: Request):
+            return await _forward(request, f"{_QUERY_URL}/mcp", timeout=600.0)
+
+        @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "DELETE"])
+        async def _proxy_mcp(path: str, request: Request):
+            return await _forward(request, f"{_QUERY_URL}/mcp/{path}", timeout=600.0)
 
 
 @app.get("/health")

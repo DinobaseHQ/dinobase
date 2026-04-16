@@ -18,6 +18,7 @@ dependencies = [
     "supabase>=2.0",
     "python-dotenv>=1.0",
     "anthropic>=0.40",
+    "mcp>=1.8",
     "dinobase",
     "dlt[sql_database,filesystem,parquet]>=0.5",
     "psycopg2-binary>=2.9",
