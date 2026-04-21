@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "dinobase": {
+      "type": "sse",
+      "url": "https://dinobase.chloris.co.il/sse",
+      "headers": {
+        "Authorization": "Bearer twcmK5kQevB6cnJ1C_hjrGzJu5Kky6O-4dgXsMzxjBE"
+      }
+    }
+  }
+}
