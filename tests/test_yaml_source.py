@@ -7,6 +7,7 @@ from dinobase.sync.yaml_source import (
     _translate_config,
     _substitute,
     _build_auth,
+    _build_endpoint,
     _build_paginator,
     get_write_endpoints,
 )
@@ -43,6 +44,14 @@ def test_substitute_preserves_dlt_templates():
 
 def test_substitute_missing_key():
     assert _substitute("{missing}", {}) == "{missing}"
+
+
+# --- Endpoint building ---
+
+def test_build_endpoint_substitutes_path_credentials():
+    endpoint = {"path": "projects/{project_id}/events/"}
+    result = _build_endpoint(endpoint, {"project_id": "12345"})
+    assert result["path"] == "projects/12345/events/"
 
 
 # --- Auth building ---
