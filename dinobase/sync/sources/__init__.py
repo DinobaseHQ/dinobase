@@ -54,42 +54,56 @@ def get_source(
         available = ", ".join(list_available_sources())
         raise ValueError(f"Unknown source type: {source_type}. Available: {available}")
 
-    # Check for missing pip dependencies
-    # Some pip package names differ from their importable module names.
-    _PIP_TO_MODULE: dict[str, str] = {
-        "snowflake-sqlalchemy": "snowflake.sqlalchemy",
-        "databricks-sql-connector": "databricks.sql",
-        "google-api-python-client": "googleapiclient",
-        "google-analytics-data": "google.analytics.data",
-        "google-ads": "google.ads.googleads",
-        "facebook_business": "facebook_business",
-        "confluent_kafka": "confluent_kafka",
-        "oracledb": "oracledb",
-    }
-    if entry.pip_extra:
-        module_name = _PIP_TO_MODULE.get(
-            entry.pip_extra, entry.pip_extra.replace("-", "_")
-        )
+    # Verified sources (import_path = "sources.X.Y") aren't on PyPI — they live
+    # in dlt-hub/verified-sources and are meant to be copied into a project via
+    # `dlt init`. Fetch the requested source on demand and install its
+    # requirements.txt before importing.
+    module_path, func_name = entry.import_path.rsplit(".", 1)
+    if module_path.startswith("sources."):
+        from dinobase.sync.source_fetch import ensure_verified_source
+        verified_source_name = module_path.split(".", 2)[1]
         try:
-            importlib.import_module(module_name)
-        except ImportError as _e:
-            # Only surface the friendly error when the package is genuinely absent.
-            # Some installed packages (e.g. sqlalchemy-redshift) have broken
-            # internal imports that would cause a false "not installed" message.
-            if "No module named" in str(_e):
-                raise ImportError(
-                    f"Source '{source_type}' requires an extra package. "
-                    f"Install it with: pip install {entry.pip_extra}"
-                )
+            ensure_verified_source(verified_source_name)
+        except Exception as e:
+            raise ImportError(
+                f"Could not prepare verified source '{source_type}': {e}"
+            ) from e
+    else:
+        # Built-in dlt sources / dinobase-internal modules: just check the
+        # registry's pip_extra hint. Some pip package names differ from their
+        # importable module names.
+        _PIP_TO_MODULE: dict[str, str] = {
+            "snowflake-sqlalchemy": "snowflake.sqlalchemy",
+            "databricks-sql-connector": "databricks.sql",
+            "google-api-python-client": "googleapiclient",
+            "google-analytics-data": "google.analytics.data",
+            "google-ads": "google.ads.googleads",
+            "facebook_business": "facebook_business",
+            "confluent_kafka": "confluent_kafka",
+            "oracledb": "oracledb",
+        }
+        if entry.pip_extra:
+            module_name = _PIP_TO_MODULE.get(
+                entry.pip_extra, entry.pip_extra.replace("-", "_")
+            )
+            try:
+                importlib.import_module(module_name)
+            except ImportError as _e:
+                # Only surface the friendly error when the package is genuinely absent.
+                # Some installed packages (e.g. sqlalchemy-redshift) have broken
+                # internal imports that would cause a false "not installed" message.
+                if "No module named" in str(_e):
+                    raise ImportError(
+                        f"Source '{source_type}' requires an extra package. "
+                        f"Install it with: pip install {entry.pip_extra}"
+                    )
 
     # Import the source function
-    module_path, func_name = entry.import_path.rsplit(".", 1)
     try:
         module = importlib.import_module(module_path)
     except ImportError as e:
         raise ImportError(
-            f"Could not import source '{source_type}' from {module_path}: {e}. "
-            f"Make sure dlt-verified-sources is installed: pip install dlt-verified-sources"
+            f"Could not import source '{source_type}' from {module_path}: {e}"
         )
     source_func = getattr(module, func_name)
 

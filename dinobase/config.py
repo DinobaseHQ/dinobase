@@ -47,6 +47,11 @@ def get_setup_ui_cache_dir() -> Path:
     return get_dinobase_dir() / "setup-ui-cache"
 
 
+def get_verified_sources_cache_dir() -> Path:
+    """Directory for on-demand-fetched dlt verified sources."""
+    return get_dinobase_dir() / "cache" / "verified-sources"
+
+
 # ---------------------------------------------------------------------------
 # Cloud storage
 # ---------------------------------------------------------------------------
