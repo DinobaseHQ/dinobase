@@ -236,7 +236,7 @@ def _build_resource(
 def _build_endpoint(
     endpoint: dict[str, Any], credentials: dict[str, str]
 ) -> dict[str, Any]:
-    """Build an endpoint config with credential substitution in params."""
+    """Build an endpoint config with credential substitution in path, params, and headers."""
     dlt_endpoint: dict[str, Any] = {}
 
     if "path" in endpoint:
