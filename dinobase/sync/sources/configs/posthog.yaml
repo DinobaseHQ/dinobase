@@ -46,13 +46,10 @@ resources:
 
   # Events — raw event stream. PostHog returns events newest-first.
   # Use after/before params (ISO 8601) to window the pull.
-  # primary_key is uuid (string), not integer id.
   - name: events
-    primary_key: uuid
+    primary_key: id
     endpoint:
       path: projects/{project_id}/events/
-      params:
-        orderBy: "-timestamp"
     incremental:
       cursor_path: timestamp
       param: after
