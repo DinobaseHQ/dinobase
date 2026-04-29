@@ -240,7 +240,7 @@ def _build_endpoint(
     dlt_endpoint: dict[str, Any] = {}
 
     if "path" in endpoint:
-        dlt_endpoint["path"] = endpoint["path"]
+        dlt_endpoint["path"] = _substitute(endpoint["path"], credentials)
 
     if "method" in endpoint:
         dlt_endpoint["method"] = endpoint["method"]
