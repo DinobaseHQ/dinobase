@@ -119,6 +119,7 @@ class SyncEngine:
         source_name: str,
         source_config: dict[str, Any],
         on_progress: "Callable[[int, int], None] | None" = None,
+        timeout_seconds: int | None = None,
     ) -> SyncResult:
         """Sync a single source into DuckDB."""
         source_type = source_config["type"]
@@ -179,12 +180,21 @@ class SyncEngine:
             params = source_config.get("params") or None
 
             self._log("_run_pipeline START")
-            result = self._run_pipeline(
-                source_name, source_type, credentials,
-                resource_names=resource_names,
-                params=params,
-                on_progress=on_progress,
-            )
+            if timeout_seconds is not None:
+                result = self._run_pipeline_with_timeout(
+                    source_name, source_type, credentials,
+                    resource_names=resource_names,
+                    params=params,
+                    on_progress=on_progress,
+                    timeout_seconds=timeout_seconds,
+                )
+            else:
+                result = self._run_pipeline(
+                    source_name, source_type, credentials,
+                    resource_names=resource_names,
+                    params=params,
+                    on_progress=on_progress,
+                )
             self._log(
                 f"_run_pipeline DONE: {result.tables_synced} tables, "
                 f"{result.rows_synced:,} rows"
@@ -336,6 +346,48 @@ class SyncEngine:
                 rows_synced=0,
                 status="error",
                 error=error_msg,
+            )
+
+    def _run_pipeline_with_timeout(
+        self,
+        source_name: str,
+        source_type: str,
+        credentials: dict[str, str],
+        resource_names: list[str] | None = None,
+        params: dict[str, Any] | None = None,
+        on_progress: "Callable[[int, int], None] | None" = None,
+        timeout_seconds: int = 600,
+    ) -> SyncResult:
+        """Run the pipeline with a cooperative timeout via on_progress."""
+        deadline = time.monotonic() + timeout_seconds
+
+        class _SyncTimedOut(Exception):
+            pass
+
+        original_on_progress = on_progress
+
+        def _timed_progress(tables_synced: int, tables_total: int) -> None:
+            if time.monotonic() > deadline:
+                raise _SyncTimedOut()
+            if original_on_progress is not None:
+                original_on_progress(tables_synced, tables_total)
+
+        try:
+            return self._run_pipeline(
+                source_name, source_type, credentials,
+                resource_names=resource_names,
+                params=params,
+                on_progress=_timed_progress,
+            )
+        except _SyncTimedOut:
+            self._log(f"Sync timed out after {timeout_seconds}s")
+            return SyncResult(
+                connector_name=source_name,
+                connector_type=source_type,
+                tables_synced=0,
+                rows_synced=0,
+                status="error",
+                error=f"Sync timed out after {timeout_seconds} seconds",
             )
 
     def _run_pipeline(
