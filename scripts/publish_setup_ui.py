@@ -9,7 +9,7 @@ single-line JSON document that the workflow consumes.
 The workflow uses the JSON to:
   - decide on the git tag (``setup-ui-v{ui_version}``)
   - upload the tarball as a release asset
-  - prepend an entry to ``ee/cloud/web/public/setup-ui/manifest.json``
+  - prepend an entry to ``web/public/setup-ui/manifest.json`` in the dinobase-cloud repo
 
 Usage:
     python scripts/publish_setup_ui.py --out-dir dist/setup-ui
