@@ -14,7 +14,13 @@ class QueryEngine:
     def __init__(self, db: DinobaseDB):
         self.db = db
 
-    def execute(self, sql: str, max_rows: int = 200) -> dict[str, Any]:
+    def execute(
+        self,
+        sql: str,
+        max_rows: int = 200,
+        timeout_seconds: int | None = None,
+        memory_limit: str | None = None,
+    ) -> dict[str, Any]:
         """Execute a SQL query and return formatted results.
 
         Mutations (UPDATE, INSERT, DELETE) are intercepted and routed to the
@@ -56,33 +62,59 @@ class QueryEngine:
         # Refresh stale local connector caches before executing
         self._refresh_stale_connectors(sql)
 
-        _exec_error: Exception | None = None
-        for _attempt in range(2):
+        # Apply memory limit before executing user SQL
+        if memory_limit is not None:
             try:
-                conn_result = self.db.conn.execute(sql)
-                columns = [desc[0] for desc in conn_result.description]
-                data_types = {desc[0]: str(desc[1]) for desc in conn_result.description}
-                rows = conn_result.fetchall()
-                _exec_error = None
-                break
-            except Exception as e:
-                _exec_error = e
-                if _attempt == 0:
-                    _err_lower = str(e).lower()
-                    if "does not exist" in _err_lower or "catalog error" in _err_lower:
-                        _m = re.search(
-                            r'\bFROM\b\s+"?(\w+)"?\s*\.\s*"?(\w+)"?',
-                            sql, re.IGNORECASE,
-                        )
-                        if _m:
-                            _schema, _table = _m.group(1), _m.group(2)
-                            # Try cloud view registration
-                            if self.db.is_cloud and self.db.register_view_on_demand(_schema, _table):
-                                continue
-                            # Try local connector live fetch
-                            if self._try_local_connector_fetch(_schema, _table):
-                                continue
-                break  # non-retryable or retry exhausted
+                self.db.conn.execute(f"SET memory_limit='{memory_limit}'")
+            except Exception:
+                pass
+
+        # Schedule an interrupt timer for query timeout (DuckDB has no
+        # statement_timeout setting — conn.interrupt() is the only way).
+        import threading as _threading
+        _timer: _threading.Timer | None = None
+        if timeout_seconds is not None:
+            _timer = _threading.Timer(timeout_seconds, self.db.conn.interrupt)
+            _timer.start()
+
+        _exec_error: Exception | None = None
+        try:
+            for _attempt in range(2):
+                try:
+                    conn_result = self.db.conn.execute(sql)
+                    columns = [desc[0] for desc in conn_result.description]
+                    data_types = {desc[0]: str(desc[1]) for desc in conn_result.description}
+                    rows = conn_result.fetchall()
+                    _exec_error = None
+                    break
+                except Exception as e:
+                    _exec_error = e
+                    if _attempt == 0:
+                        _err_lower = str(e).lower()
+                        if "does not exist" in _err_lower or "catalog error" in _err_lower:
+                            _m = re.search(
+                                r'\bFROM\b\s+"?(\w+)"?\s*\.\s*"?(\w+)"?',
+                                sql, re.IGNORECASE,
+                            )
+                            if _m:
+                                _schema, _table = _m.group(1), _m.group(2)
+                                # Try cloud view registration
+                                if self.db.is_cloud and self.db.register_view_on_demand(_schema, _table):
+                                    continue
+                                # Try local connector live fetch
+                                if self._try_local_connector_fetch(_schema, _table):
+                                    continue
+                    break  # non-retryable or retry exhausted
+        finally:
+            if _timer is not None:
+                _timer.cancel()
+
+        # Reset memory limit so the connection is clean for the next query
+        if memory_limit is not None:
+            try:
+                self.db.conn.execute("RESET memory_limit")
+            except Exception:
+                pass
 
         if _exec_error is not None:
             from dinobase import telemetry
