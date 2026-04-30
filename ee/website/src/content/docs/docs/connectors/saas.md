@@ -451,7 +451,7 @@ dinobase add intercom --token ...
 
 ### Freshdesk
 
-Tickets, contacts, companies.
+Tickets, contacts, companies, agents, groups.
 
 ```bash
 dinobase add freshdesk --api-key ... --domain mycompany
@@ -461,6 +461,8 @@ dinobase add freshdesk --api-key ... --domain mycompany
 |--------|---------|
 | `--api-key` | `FRESHDESK_API_KEY` |
 | `--domain` | `FRESHDESK_DOMAIN` |
+
+To limit which resources sync or to set a `start_date` for incremental tickets, see [Customizing a sync](/docs/connectors/customizing/).
 
 ### <img src="/logos/helpscout.svg" class="connector-logo" alt="" />HelpScout
 

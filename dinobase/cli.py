@@ -498,8 +498,21 @@ def whoami():
 @click.argument("source_type")
 @click.option("--name", help="Custom name for the source (defaults to source type)")
 @click.option("--path", help="Path to files (for parquet/csv sources)")
+@click.option(
+    "--resources",
+    help="Comma-separated resource names to sync (default: all). "
+         "Example: --resources tickets,agents,groups",
+)
+@click.option(
+    "--param", "params", multiple=True, metavar="KEY=VALUE",
+    help="Extra kwargs forwarded to the source factory function (repeatable). "
+         "Example: --param start_date=2026-03-20T00:00:00Z",
+)
 @click.pass_context
-def add(ctx: click.Context, source_type: str, name: str | None, path: str | None):
+def add(
+    ctx: click.Context, source_type: str, name: str | None, path: str | None,
+    resources: str | None, params: tuple[str, ...],
+):
     """Add a data source to Dinobase.
 
     Supports 100+ sources: CRMs, billing, support, analytics, databases,
@@ -523,9 +536,25 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
 
     init_dinobase()
 
+    resource_list = (
+        [r.strip() for r in resources.split(",") if r.strip()] if resources else None
+    )
+    params_dict: dict[str, str] = {}
+    for kv in params:
+        if "=" not in kv:
+            click.echo(f"Invalid --param '{kv}': expected KEY=VALUE", err=True)
+            sys.exit(1)
+        k, v = kv.split("=", 1)
+        params_dict[k.strip()] = v
+
     # Cloud mode — register source with the API
     cloud = _get_cloud_client()
     if cloud and source_type not in ("parquet", "csv"):
+        if resource_list or params_dict:
+            click.echo(
+                "Note: --resources and --param are local-only; ignoring for cloud add.",
+                err=True,
+            )
         from dinobase.sync.registry import get_source_entry, list_available_sources
 
         entry = get_source_entry(source_type)
@@ -649,6 +678,8 @@ def add(ctx: click.Context, source_type: str, name: str | None, path: str | None
         source_name, source_type, credentials,
         sync_interval=sync_interval,
         freshness_threshold=freshness_threshold,
+        resources=resource_list,
+        params=params_dict or None,
     )
     from dinobase import telemetry
     telemetry.capture("source_added", {"source_type": source_type, "auth_method": "api_key", "is_cloud_mode": False, "surface": "cli"})
@@ -918,7 +949,15 @@ def _list_available_connectors(pretty: bool):
 @click.option("--schedule", is_flag=True, help="Run as a daemon, syncing on configured intervals")
 @click.option("--interval", default="1h", help="Default sync interval for --schedule (e.g. 30m, 1h, 6h)")
 @click.option("--max-workers", default=10, help="Max concurrent syncs (default 10)")
-def sync(source_name: str | None, schedule: bool, interval: str, max_workers: int):
+@click.option(
+    "--resources",
+    help="Comma-separated resource names to sync this run (overrides config). "
+         "Only valid when a connector name is given.",
+)
+def sync(
+    source_name: str | None, schedule: bool, interval: str, max_workers: int,
+    resources: str | None,
+):
     """Sync data from connected connectors.
 
     By default, runs a one-time sync. Use --schedule to run continuously.
@@ -982,7 +1021,18 @@ def sync(source_name: str | None, schedule: bool, interval: str, max_workers: in
                 sys.exit(1)
         to_sync = {source_name: connectors[source_name]}
     else:
+        if resources:
+            click.echo(
+                "--resources is only supported when a connector name is given.",
+                err=True,
+            )
+            sys.exit(1)
         to_sync = connectors
+
+    # CLI override applies once for this run — don't persist to config.
+    if resources and source_name:
+        override = [r.strip() for r in resources.split(",") if r.strip()]
+        to_sync[source_name] = {**to_sync[source_name], "resources": override}
 
     db = DinobaseDB()
     engine = SyncEngine(db)

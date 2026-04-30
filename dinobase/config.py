@@ -180,6 +180,8 @@ def add_connector(
     credentials: dict[str, str],
     sync_interval: str | None = None,
     freshness_threshold: str | None = None,
+    resources: list[str] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> None:
     config = load_config()
     connector_config: dict[str, Any] = {
@@ -190,6 +192,10 @@ def add_connector(
         connector_config["sync_interval"] = sync_interval
     if freshness_threshold:
         connector_config["freshness_threshold"] = freshness_threshold
+    if resources:
+        connector_config["resources"] = list(resources)
+    if params:
+        connector_config["params"] = dict(params)
     config["connectors"][name] = connector_config
     save_config(config)
 
@@ -201,8 +207,13 @@ def add_source(
     credentials: dict[str, str],
     sync_interval: str | None = None,
     freshness_threshold: str | None = None,
+    resources: list[str] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> None:
-    add_connector(name, source_type, credentials, sync_interval, freshness_threshold)
+    add_connector(
+        name, source_type, credentials, sync_interval, freshness_threshold,
+        resources=resources, params=params,
+    )
 
 
 def update_credentials(name: str, credentials: dict[str, str]) -> None:

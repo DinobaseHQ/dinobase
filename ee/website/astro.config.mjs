@@ -84,6 +84,7 @@ export default defineConfig({
             { label: "Cloud Storage", slug: "docs/connectors/cloud-storage" },
             { label: "Custom REST", slug: "docs/connectors/custom-rest" },
             { label: "MCP Servers", slug: "docs/connectors/mcp" },
+            { label: "Customizing a sync", slug: "docs/connectors/customizing" },
           ],
         },
         {
