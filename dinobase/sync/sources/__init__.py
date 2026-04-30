@@ -24,6 +24,7 @@ def get_source(
     credentials: dict[str, str],
     resource_names: list[str] | None = None,
     extra_skip_tables: list[str] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Any:
     """Return a dlt source for the given source type.
 
@@ -33,6 +34,12 @@ def get_source(
         resource_names: Optional list of resources to sync (None = all)
         extra_skip_tables: Additional tables to exclude on top of engine-type filtering.
             Used during recovery to skip tables that caused extraction errors.
+        params: Optional user-supplied kwargs forwarded to the source factory.
+            For verified sources this is how a user can pass values like
+            `start_date` that the dlt source accepts but dinobase's registry
+            does not surface. User params override registry `extra_params`
+            on key collision; collisions with credential param names are
+            ignored to avoid clobbering auth.
     """
     # File sources don't use dlt
     if source_type in ("parquet", "csv"):
@@ -45,6 +52,12 @@ def get_source(
     yaml_config = load_yaml_config(source_type)
     if yaml_config and "client" in yaml_config:
         print(f"  Using YAML config: configs/{source_type}.yaml", file=sys.stderr)
+        if params:
+            print(
+                f"  Note: --param values are not applied to YAML-config sources; "
+                f"edit configs/{source_type}.yaml to override defaults.",
+                file=sys.stderr,
+            )
         return build_dlt_source(source_type, credentials, resource_names)
 
     # 2. Fall back to registry (dlt verified sources / built-in sources)
@@ -555,6 +568,20 @@ def get_source(
         kwargs["resources"] = entry.graphql_config["resources"]
         if "auth_prefix" in entry.graphql_config:
             kwargs["auth_prefix"] = entry.graphql_config["auth_prefix"]
+
+    # Apply user-supplied params last so they override registry extra_params,
+    # but skip keys that would clobber a credential param (auth must win).
+    if params:
+        _credential_keys = {p.name for p in entry.credentials}
+        _safe_params = {k: v for k, v in params.items() if k not in _credential_keys}
+        _ignored = set(params) - set(_safe_params)
+        if _ignored:
+            print(
+                f"  Warning: ignoring params {sorted(_ignored)} — they collide with "
+                f"credential field names for source '{source_type}'.",
+                file=sys.stderr,
+            )
+        kwargs.update(_safe_params)
 
     # Resource selection for verified sources
     print(f"  Using dlt source: {entry.import_path}", file=sys.stderr)

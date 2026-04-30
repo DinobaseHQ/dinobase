@@ -174,8 +174,17 @@ class SyncEngine:
             sync_id = self.db.log_sync_start(source_name, source_type)
             self._log("log_sync_start done")
 
+            # Optional per-connector overrides from config.yaml
+            resource_names = source_config.get("resources") or None
+            params = source_config.get("params") or None
+
             self._log("_run_pipeline START")
-            result = self._run_pipeline(source_name, source_type, credentials, on_progress=on_progress)
+            result = self._run_pipeline(
+                source_name, source_type, credentials,
+                resource_names=resource_names,
+                params=params,
+                on_progress=on_progress,
+            )
             self._log(
                 f"_run_pipeline DONE: {result.tables_synced} tables, "
                 f"{result.rows_synced:,} rows"
@@ -335,6 +344,7 @@ class SyncEngine:
         source_type: str,
         credentials: dict[str, str],
         resource_names: list[str] | None = None,
+        params: dict[str, Any] | None = None,
         on_progress: "Callable[[int, int], None] | None" = None,
         max_workers: int | None = None,
     ) -> SyncResult:
@@ -361,7 +371,10 @@ class SyncEngine:
 
         # Discover all resources first so we can report per-table progress.
         self._log("probe get_source START")
-        probe_source = get_source(source_type, credentials, resource_names=resource_names)
+        probe_source = get_source(
+            source_type, credentials,
+            resource_names=resource_names, params=params,
+        )
         all_resource_names: list[str] = [
             name for name, res in probe_source.resources.items() if res.selected
         ]
@@ -381,12 +394,12 @@ class SyncEngine:
         if _workers <= 1:
             _first_load_info, _tables_done = self._run_resources_sequential(
                 source_name, source_type, credentials, destination, pipelines_dir,
-                all_resource_names, on_progress,
+                all_resource_names, on_progress, params=params,
             )
         else:
             _first_load_info, _tables_done = self._run_resources_parallel(
                 source_name, source_type, credentials, destination, pipelines_dir,
-                all_resource_names, on_progress, _workers,
+                all_resource_names, on_progress, _workers, params=params,
             )
         self._log(f"pipeline dispatch DONE: {_tables_done}/{total_resources} tables loaded")
 
@@ -442,6 +455,7 @@ class SyncEngine:
         pipelines_dir: str,
         all_resource_names: list[str],
         on_progress: "Callable[[int, int], None] | None",
+        params: dict[str, Any] | None = None,
     ) -> "tuple[Any, int]":
         """Run resources one at a time, each with its own isolated pipeline."""
         from dinobase.sync.sources import get_source
@@ -466,7 +480,8 @@ class SyncEngine:
                 for _attempt in range(5):
                     try:
                         _resource_source = get_source(
-                            source_type, credentials, resource_names=[_resource_name]
+                            source_type, credentials,
+                            resource_names=[_resource_name], params=params,
                         )
                         _load_info = pipeline.run(_resource_source, loader_file_format="parquet")
                         if _load_info.loads_ids and _first_load_info is None:
@@ -524,6 +539,7 @@ class SyncEngine:
         all_resource_names: list[str],
         on_progress: "Callable[[int, int], None] | None",
         max_workers: int,
+        params: dict[str, Any] | None = None,
     ) -> "tuple[Any, int]":
         """Run resources in parallel using batched pipelines.
 
@@ -571,7 +587,10 @@ class SyncEngine:
             tables_done = 0
             _load_info = None
             try:
-                src = get_source(source_type, credentials, resource_names=batch_resources)
+                src = get_source(
+                    source_type, credentials,
+                    resource_names=batch_resources, params=params,
+                )
                 _load_info = pipeline.run(src, loader_file_format="parquet")
                 tables_done = len(batch_resources)
             except Exception as batch_err:
@@ -597,7 +616,8 @@ class SyncEngine:
                         for _attempt in range(5):
                             try:
                                 res_src = get_source(
-                                    source_type, credentials, resource_names=[resource_name]
+                                    source_type, credentials,
+                                    resource_names=[resource_name], params=params,
                                 )
                                 res_load = res_pipeline.run(res_src, loader_file_format="parquet")
                                 if res_load.loads_ids and _load_info is None:
