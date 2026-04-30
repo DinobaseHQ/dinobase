@@ -19,7 +19,7 @@ def _make_engine():
 def test_cooperative_timeout_fires():
     engine = _make_engine()
 
-    def slow_pipeline(source_name, source_type, credentials, on_progress=None):
+    def slow_pipeline(source_name, source_type, credentials, on_progress=None, **kwargs):
         # Simulate slow sync: call on_progress after sleeping past deadline
         time.sleep(0.3)
         if on_progress:
@@ -53,7 +53,7 @@ def test_no_timeout_when_fast():
         status="success",
     )
 
-    def fast_pipeline(source_name, source_type, credentials, on_progress=None):
+    def fast_pipeline(source_name, source_type, credentials, on_progress=None, **kwargs):
         if on_progress:
             on_progress(1, 3)
             on_progress(2, 3)
@@ -74,7 +74,7 @@ def test_original_on_progress_called():
     engine = _make_engine()
     progress_calls = []
 
-    def fast_pipeline(source_name, source_type, credentials, on_progress=None):
+    def fast_pipeline(source_name, source_type, credentials, on_progress=None, **kwargs):
         if on_progress:
             on_progress(1, 2)
             on_progress(2, 2)
