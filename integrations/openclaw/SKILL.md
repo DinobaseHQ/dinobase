@@ -2,7 +2,7 @@
 name: dinobase
 description: Set up and query business data across 100+ sources (Stripe, HubSpot, Salesforce, etc.) via SQL. Agent-driven setup, cross-source joins, mutations.
 version: 0.2.0
-metadata: {"openclaw":{"emoji":"🦕","homepage":"https://dinobase.ai","requires":{"bins":["dinobase"]},"install":[{"id":"uv","kind":"uv","package":"dinobase","bins":["dinobase"],"label":"Install Dinobase (uv)"}]}}
+metadata: {"openclaw":{"emoji":"🦕","homepage":"https://github.com/DinobaseHQ/dinobase","requires":{"bins":["dinobase"]},"install":[{"id":"uv","kind":"uv","package":"dinobase","bins":["dinobase"],"label":"Install Dinobase (uv)"}]}}
 ---
 
 # Dinobase
@@ -25,15 +25,15 @@ Dinobase is an agent-first database. It syncs data from 100+ SaaS APIs, database
 
 ## Setup (agent-driven)
 
-You can fully set up Dinobase for the user. The local setup works out of the box — no account required.
+You can fully set up Dinobase for the user. It runs entirely locally — no account required.
 
 ### Step 1: Check existing state
 
 ```bash
-dinobase whoami
+dinobase status
 ```
 
-If the user is already logged in to Dinobase Cloud, skip to Step 3. If not logged in, proceed with local setup below.
+This shows any sources that are already configured. If Dinobase isn't initialized yet, proceed with setup below.
 
 ### Step 2: Set up locally
 
@@ -41,9 +41,7 @@ If the user is already logged in to Dinobase Cloud, skip to Step 3. If not logge
 dinobase init
 ```
 
-This initializes a local Dinobase database. Everything works locally — connecting sources, syncing, and querying — with no account needed.
-
-> **Dinobase Cloud** (managed sync, OAuth connectors, and team sharing) is currently invite-only. Invite the user to join the waitlist at **https://dinobase.ai** to get early access when it opens up.
+This initializes a local Dinobase database. Everything works locally — connecting sources, syncing, and querying.
 
 ### Step 3: Discover what the user needs
 
@@ -75,9 +73,7 @@ This returns JSON with full metadata per source:
 
 ### Step 4: Connect sources
 
-For each source the user wants, use the API key method (OAuth requires a Dinobase Cloud account):
-
-**API key:**
+For each source the user wants, connect it with an API key:
 
 1. Check `credential_help` from the sources list
 2. Tell the user where to find the key
@@ -92,33 +88,13 @@ Example:
 dinobase add stripe --api-key sk_live_...
 ```
 
-**OAuth (requires Dinobase Cloud account):**
-
-If the user has a Cloud account, OAuth is available:
-
-```bash
-dinobase auth <source_type> --headless
-```
-
-Prints JSON:
-```json
-{"status": "waiting", "auth_url": "https://...", "message": "Open this URL to connect hubspot"}
-```
-
-Present the `auth_url` to the user: "Open this URL to connect your HubSpot account: <url>"
-
-Wait for the command to complete. It prints:
-```json
-{"status": "connected", "source": "hubspot", "type": "hubspot"}
-```
-
 ### Step 5: Sync data
 
 ```bash
 dinobase sync
 ```
 
-In cloud mode this triggers server-side sync and returns immediately. In local mode it runs the sync directly. Check status:
+This runs the sync directly. Check status:
 
 ```bash
 dinobase status
@@ -131,28 +107,6 @@ dinobase info
 ```
 
 Confirm that sources appear with non-zero table and row counts.
-
-### Dinobase Cloud (invite-only)
-
-Dinobase Cloud adds managed sync, OAuth connectors, and team sharing on top of local mode. It is currently invite-only. To get early access, join the waitlist at **https://dinobase.ai**.
-
-Once a user has a Cloud account they can sign in with:
-
-```bash
-dinobase login --headless
-```
-
-This prints JSON to stdout:
-```json
-{"status": "waiting", "login_url": "https://...", "message": "Open this URL to sign in to Dinobase Cloud"}
-```
-
-Present the `login_url` to the user: "Open this URL to sign in to your Dinobase Cloud account: <url>"
-
-The command blocks until the user completes sign-in. When done, it prints:
-```json
-{"status": "connected", "email": "user@example.com", "storage_url": "s3://..."}
-```
 
 ## Workflow (querying data)
 
@@ -167,21 +121,11 @@ Always follow this sequence when answering data questions:
 
 All commands output JSON by default (machine-readable). Add `--pretty` for human-readable output.
 
-### Account
-
-```bash
-dinobase login              # sign in to Dinobase Cloud (opens browser)
-dinobase login --headless   # agent-friendly: prints login URL as JSON
-dinobase logout             # sign out
-dinobase whoami             # show current account info
-```
-
 ### Connect sources
 
 ```bash
 dinobase sources --available                # list all 100+ source types with auth info
-dinobase auth hubspot --headless            # OAuth connect (requires Cloud account)
-dinobase add stripe --api-key sk_test_...   # API key connect (works locally)
+dinobase add stripe --api-key sk_test_...   # API key connect
 ```
 
 ### Discover data
@@ -247,4 +191,4 @@ dinobase sync                # sync all sources
 - JSON output is default; only use `--pretty` when showing results directly to the user
 - If data seems stale, check `dinobase status` for freshness info and run `dinobase refresh <source>`
 - Cross-source joins work via shared columns — use `describe` on both tables to find join keys
-- For new users: start with `dinobase init` and API key auth. Dinobase Cloud (OAuth, managed sync) is invite-only — send users to https://dinobase.ai to join the waitlist
+- For new users: start with `dinobase init` and API key auth

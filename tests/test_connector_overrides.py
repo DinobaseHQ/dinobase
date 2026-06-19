@@ -176,8 +176,6 @@ def test_engine_sync_forwards_resources_and_params_to_run_pipeline():
     with patch.object(SyncEngine, "_run_pipeline", fake_run_pipeline), \
          patch("dinobase.sync.sources.extract_metadata", return_value={}), \
          patch("dinobase.semantic_agent.spawn_semantic_agent"), \
-         patch("dinobase.auth.ensure_fresh_credentials",
-               side_effect=lambda _name, _type, c: c), \
          patch("dinobase.fetch.connector.is_local_connector", return_value=False):
         engine.sync(
             "freshdesk",
@@ -214,8 +212,6 @@ def test_engine_sync_no_overrides_passes_none():
     with patch.object(SyncEngine, "_run_pipeline", fake_run_pipeline), \
          patch("dinobase.sync.sources.extract_metadata", return_value={}), \
          patch("dinobase.semantic_agent.spawn_semantic_agent"), \
-         patch("dinobase.auth.ensure_fresh_credentials",
-               side_effect=lambda _name, _type, c: c), \
          patch("dinobase.fetch.connector.is_local_connector", return_value=False):
         engine.sync(
             "stripe",

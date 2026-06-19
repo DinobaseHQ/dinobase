@@ -128,7 +128,6 @@ def perform_update() -> tuple[bool, str]:
     """Run the update command. Returns (success, message)."""
     method = detect_install_method()
     cmd = get_update_command(method)
-    from_version = __version__
     try:
         result = subprocess.run(
             cmd.split(),
@@ -137,11 +136,6 @@ def perform_update() -> tuple[bool, str]:
             timeout=120,
         )
         if result.returncode == 0:
-            from dinobase import telemetry
-            telemetry.capture("cli_updated", {
-                "from_version": from_version,
-                "method": method,
-            })
             return True, f"Updated successfully via {method}."
         return False, f"Update failed:\n{result.stderr}"
     except Exception as e:

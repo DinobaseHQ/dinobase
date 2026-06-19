@@ -145,11 +145,6 @@ class SyncEngine:
         self._log(f"=== SYNC START: {source_name} ({source_type}) ===")
         self._log(f"log: {log_path}")
 
-        # Refresh OAuth tokens if expired
-        from dinobase.auth import ensure_fresh_credentials
-        credentials = ensure_fresh_credentials(source_name, source_type, credentials)
-        self._log("ensure_fresh_credentials done")
-
         cloud = None
         sync_id = None
 
@@ -249,15 +244,6 @@ class SyncEngine:
             )
             self._log("log_sync_end done")
 
-            from dinobase import telemetry
-            telemetry.capture("sync_completed", {
-                "source_name": source_name,
-                "source_type": source_type,
-                "tables_synced": result.tables_synced,
-                "rows_synced": result.rows_synced,
-                "duration_seconds": round(time.monotonic() - self._sync_t0, 2),
-                "storage_mode": "cloud" if self.db.is_cloud else "local",
-            })
             from dinobase.semantic_agent import spawn_semantic_agent
             spawn_semantic_agent(source_name)
             self._log(f"=== SYNC COMPLETE: total {time.monotonic() - self._sync_t0:.1f}s ===")
@@ -267,14 +253,6 @@ class SyncEngine:
             self._log(f"=== SYNC ERROR: {type(e).__name__}: {error_msg} ===")
             if sync_id is not None:
                 self.db.log_sync_end(sync_id, status="error", error_message=error_msg)
-            from dinobase import telemetry
-            telemetry.capture("sync_failed", {
-                "source_name": source_name,
-                "source_type": source_type,
-                "duration_seconds": round(time.monotonic() - self._sync_t0, 2),
-                "storage_mode": "cloud" if self.db.is_cloud else "local",
-                "error_type": type(e).__name__,
-            })
             return SyncResult(
                 connector_name=source_name,
                 connector_type=source_type,

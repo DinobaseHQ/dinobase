@@ -15,15 +15,6 @@ SAMPLE_DATA_DIR = Path(__file__).parent.parent / "sample_data"
 
 
 @pytest.fixture(scope="session", autouse=True)
-def isolate_cloud_credentials(tmp_path_factory):
-    """Prevent tests from reading real cloud credentials from ~/.dinobase."""
-    creds_dir = tmp_path_factory.mktemp("credentials")
-    os.environ["DINOBASE_CREDENTIALS_DIR"] = str(creds_dir)
-    yield
-    os.environ.pop("DINOBASE_CREDENTIALS_DIR", None)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def generate_sample_data():
     """Generate sample parquet files if they don't exist."""
     stripe_files = [

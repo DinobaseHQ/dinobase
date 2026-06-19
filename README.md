@@ -12,7 +12,7 @@ Dinobase syncs 100+ sources — APIs, databases, files, MCP servers — annotate
 [![License](https://img.shields.io/badge/license-MIT%20Expat-blue.svg)](LICENSE)
 [![Slack](https://img.shields.io/badge/slack-join%20community-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA)
 
-[Docs](https://dinobase.ai) · [Getting Started](https://dinobase.ai/docs/getting-started/) · [Connectors](https://dinobase.ai/docs/connectors/overview/) · [Slack Community](https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA)
+[Docs](docs/) · [Getting Started](docs/getting-started.md) · [Connectors](docs/connectors/overview.md) · [Slack Community](https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA)
 
 </div>
 
@@ -31,10 +31,7 @@ Dinobase is the data platform that fills it. Plug in every source: each connecto
 ## Quick start
 
 ```bash
-# recommended — installs everything automatically
-curl -fsSL https://dinobase.ai/install.sh | bash
-
-# or with uv
+# recommended — with uv
 uv tool install dinobase
 
 # or with pip
@@ -67,16 +64,7 @@ dinobase query "SELECT * FROM posthog_mcp.list_projects LIMIT 10"
 
 ### 2. Pick your agent interface
 
-**One-liner** — installs Dinobase and configures your agent in one step:
-
-```bash
-curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-code
-curl -fsSL https://dinobase.ai/install.sh | bash -s -- claude-desktop
-curl -fsSL https://dinobase.ai/install.sh | bash -s -- cursor
-curl -fsSL https://dinobase.ai/install.sh | bash -s -- codex
-```
-
-**Already have Dinobase?** Run the install subcommand directly:
+**Configure your agent** — point your installed Dinobase at your agent in one step:
 
 <table>
 <tr>
@@ -172,7 +160,7 @@ for flag in flags:
 result = {"reactivated": len([f for f in flags if not f["active"]])}
 ```
 
-`exec_code` has full access to `dinobase.mcp` (call, search, servers, tools, instructions) and `dinobase.db` for direct database access. Assign your return value to `result`. See [exec_code docs](https://dinobase.ai/docs/guides/exec-code/).
+`exec_code` has full access to `dinobase.mcp` (call, search, servers, tools, instructions) and `dinobase.db` for direct database access. Assign your return value to `result`. See [exec_code docs](docs/guides/exec-code.md).
 
 ### 6. (Optional) Enable the semantic layer
 
@@ -194,7 +182,7 @@ dinobase describe stripe.subscriptions --pretty
 #   stripe.customers  (customer_id → id, many_to_one)
 ```
 
-Set `DINOBASE_AUTO_ANNOTATE=false` to disable. See [Semantic Layer docs](https://dinobase.ai/docs/guides/annotations/).
+Set `DINOBASE_AUTO_ANNOTATE=false` to disable. See [Semantic Layer docs](docs/guides/annotations.md).
 
 ---
 
@@ -277,28 +265,28 @@ dinobase init --storage s3://my-bucket/dinobase/
 export DINOBASE_STORAGE_URL=s3://my-bucket/dinobase/
 ```
 
-Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible services (MinIO, R2). See [Cloud Storage docs](https://dinobase.ai/docs/guides/cloud-storage-backend/).
+Supports Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compatible services (MinIO, R2). See [Cloud Storage docs](docs/guides/cloud-storage-backend.md).
 
 ---
 
 ## Integrations
 
 Works with every major agent framework:
-[CrewAI](https://dinobase.ai/docs/integrations/crewai/) · [LangChain / LangGraph](https://dinobase.ai/docs/integrations/langchain/) · [LlamaIndex](https://dinobase.ai/docs/integrations/llamaindex/) · [Pydantic AI](https://dinobase.ai/docs/integrations/pydantic-ai/) · [Vercel AI SDK](https://dinobase.ai/docs/integrations/vercel-ai/) · [Mastra](https://dinobase.ai/docs/integrations/mastra/) · [OpenClaw](https://dinobase.ai/docs/integrations/openclaw/)
+[CrewAI](docs/integrations/crewai.md) · [LangChain / LangGraph](docs/integrations/langchain.md) · [LlamaIndex](docs/integrations/llamaindex.md) · [Pydantic AI](docs/integrations/pydantic-ai.md) · [Vercel AI SDK](docs/integrations/vercel-ai.md) · [Mastra](docs/integrations/mastra.md) · [OpenClaw](docs/integrations/openclaw.md)
 
 ---
 
 ## Documentation
 
-- **[Getting Started](https://dinobase.ai/docs/getting-started/)** — Install, connect, and query in 5 minutes
-- **[Connectors](https://dinobase.ai/docs/guides/connecting-sources/)** — Credentials, naming, sync intervals
-- **[Querying Data](https://dinobase.ai/docs/guides/querying/)** — Cross-connector joins, aggregations, DuckDB SQL
-- **[Reverse ETL (Mutations)](https://dinobase.ai/docs/guides/mutations/)** — Write data back to upstream APIs
-- **[MCP Integration](https://dinobase.ai/docs/guides/mcp/)** — Agent setup for Claude Desktop, Cursor
-- **[Cloud Storage Backend](https://dinobase.ai/docs/guides/cloud-storage-backend/)** — Store data in S3, GCS, or Azure
-- **[Schema Annotations](https://dinobase.ai/docs/guides/annotations/)** — How agents understand the data
-- **[CLI Reference](https://dinobase.ai/docs/reference/cli/)** — All commands and flags
-- **[Architecture](https://dinobase.ai/docs/project/architecture/)** — DuckDB, dlt, MCP, module structure
+- **[Getting Started](docs/getting-started.md)** — Install, connect, and query in 5 minutes
+- **[Connectors](docs/guides/connecting-sources.md)** — Credentials, naming, sync intervals
+- **[Querying Data](docs/guides/querying.md)** — Cross-connector joins, aggregations, DuckDB SQL
+- **[Reverse ETL (Mutations)](docs/guides/mutations.md)** — Write data back to upstream APIs
+- **[MCP Integration](docs/integrations/mcp.md)** — Agent setup for Claude Desktop, Cursor
+- **[Cloud Storage Backend](docs/guides/cloud-storage-backend.md)** — Store data in S3, GCS, or Azure
+- **[Schema Annotations](docs/guides/annotations.md)** — How agents understand the data
+- **[CLI Reference](docs/reference/cli.md)** — All commands and flags
+- **[Architecture](docs/project/architecture.md)** — DuckDB, dlt, MCP, module structure
 
 ---
 
