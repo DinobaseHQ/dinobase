@@ -10,7 +10,6 @@ Dinobase syncs 100+ sources — APIs, databases, files, MCP servers — annotate
 
 [![PyPI - Version](https://img.shields.io/pypi/v/dinobase.svg)](https://pypi.org/project/dinobase)
 [![License](https://img.shields.io/badge/license-MIT%20Expat-blue.svg)](LICENSE)
-[![Slack](https://img.shields.io/badge/slack-join%20community-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA)
 
 [Docs](docs/) · [Getting Started](docs/getting-started.md) · [Connectors](docs/connectors/overview.md) · [Slack Community](https://join.slack.com/t/dinobasecommunity/shared_invite/zt-3vd5zvlle-Ys24UiLvbGSg9sxbGMltJA)
 
